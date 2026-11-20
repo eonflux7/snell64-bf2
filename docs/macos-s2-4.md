@@ -101,7 +101,13 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
 - **Focus.** `hasFocus()` is "game window is key and the application is active". Changes
   arrive through the window and application delegates and are reported to listeners as
   `onAppActivationChanged` then `onFocusChanged`, the Win32 order of `WM_ACTIVATEAPP` and
-  `WM_ACTIVATE`.
+  `WM_ACTIVATE`. [CHOSEN] Every pump re-reads AppKit as well, so a state the callbacks left
+  stale is corrected on the next frame, and an active application's game window that is on
+  screen but not key is made key unless another window of the process is due the key status
+  or the window gave it to a panel of another process (Spotlight). A press inside the window
+  that finds the gate closed while the application is active repairs it first and is then
+  delivered. Input the gate drops is reported on stderr as `[host] input dropped: ...`, once a
+  second at most. None of this requests activation.
 - **Cursor.** `showCursor` reproduces Win32 `ShowCursor`'s display counter (visible while
   >= 0). `setCursorHiddenInView` is `SetCursor(0)` over the client area. Relative mouse mode
   (an exclusively acquired DirectInput mouse) hides the cursor, parks it in the view's centre

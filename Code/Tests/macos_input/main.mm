@@ -4,7 +4,8 @@
 // drives NativeInputDeviceManager with InputManager::update's protocol (update(-1) polls, then one
 // positive pass per input tick, 10.0 on the last) and checks what the engine-facing device
 // interfaces report against the DirectInput semantics of the recovered DX8 devices
-// (KeyboardDevice.cpp, MouseDevice.cpp). [RETIRE-WHEN: macos-client-window]
+// (KeyboardDevice.cpp, MouseDevice.cpp). The host's focus repair runs against a simulated AppKit
+// state (CocoaHostTestHooks::setSystemFocusForTest). [RETIRE-WHEN: macos-client-window]
 
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
@@ -185,6 +186,18 @@ struct MouseLog final : host::IHostEventListener
     double rawX = 0.0, rawY = 0.0;
     void onRawMouseMove(const host::HostRawMouseEvent& e) override { rawX += e.dx; rawY += e.dy; }
     void reset() { *this = MouseLog(); }
+};
+
+// Records the focus notifications every host listener sees, and whether a button event arrived
+// after the notification that opened the focus gate.
+struct FocusLog final : host::IHostEventListener
+{
+    int activations = 0, deactivations = 0, focusChanges = 0, buttons = 0, buttonsWithFocus = 0;
+    bool key = false, active = false;
+    void onAppActivationChanged(bool appActive) override { ++(appActive ? activations : deactivations); }
+    void onFocusChanged(bool windowKey, bool appActive) override { ++focusChanges; key = windowKey; active = appActive; }
+    void onMouseButton(const host::HostMouseButtonEvent&) override { ++buttons; buttonsWithFocus += key && active; }
+    void reset() { activations = deactivations = focusChanges = buttons = buttonsWithFocus = 0; }
 };
 
 // --- tests -----------------------------------------------------------------------------------
@@ -584,8 +597,6 @@ void testRawMouseThreads(MouseLog& log)
     settle();
 }
 
-} // namespace
-
 static void testAsyncEnter()
 {
     begin("asynchronous Enter held/consuming press bits");
@@ -644,6 +655,183 @@ void testHostBoundary()
     settle();
 }
 
+// The focus gate reads a cache of AppKit's state. With the state AppKit and the system would
+// report simulated (CocoaHostTestHooks::setSystemFocusForTest), a stale cache is brought in line
+// by the next pump, an active application's window that is not key is made key, a press into the
+// window repairs before it is routed, and what the gate drops is counted and reported.
+void testFocusRepair()
+{
+    begin("focus follows AppKit; a press repairs a closed gate");
+    ClientHost& host = ClientHost::instance();
+    typedef CocoaHostTestHooks Hooks;
+    FocusLog focus;
+    host.addListener(&focus);
+    const int self = static_cast<int>(getpid()), otherApp = 1;
+    Hooks::SystemFocus sys = {};
+    sys.appActive = sys.windowKey = sys.windowOnScreen = sys.makeKeyWorks = true;
+    sys.frontPid = self;
+    sys.now = 1000.0;
+    const auto stats = [&]() { return Hooks::focusRepairStatsForTest(host); };
+    // Hands the simulated state to the host `seconds` later; the window's key status is the host's.
+    const auto apply = [&](double seconds) { sys.now += seconds; Hooks::setSystemFocusForTest(host, &sys); };
+    const auto pump = [&]() { Hooks::pumpFocusForTest(host); sys.windowKey = stats().windowKey; };
+    const auto click = [&]() { button(0, true); button(0, false); sys.windowKey = stats().windowKey; };
+
+    // A callback that never came: the cache says inactive and not key, AppKit says active and key.
+    Hooks::overrideFocusForTest(host, false, false);
+    apply(0.0);
+    focus.reset();
+    check(!host.hasFocus(), "stale cache: the gate is closed");
+    pump();
+    check(host.hasFocus() && host.isAppActive(), "a pump brings the cache in line with AppKit");
+    check(focus.activations == 1 && focus.focusChanges == 1 && focus.key && focus.active,
+          "the listeners hear the activation and the focus once");
+    pump(); pump();
+    check(focus.activations == 1 && focus.focusChanges == 1 && focus.deactivations == 0,
+          "unchanged state notifies nobody");
+    check(stats().makeKeyCalls == 0, "a window that is key is left alone");
+
+    // Application active, window on screen but never made key, cache still "key".
+    sys.windowKey = false;
+    apply(1.0);
+    focus.reset();
+    pump();
+    check(stats().makeKeyCalls == 1 && stats().windowKey, "a pump makes the game window key");
+    check(host.hasFocus() && focus.focusChanges == 0, "the gate stays open, nobody is notified twice");
+    pump();
+    check(stats().makeKeyCalls == 1, "once it is key nothing more is done");
+
+    // Making it key fails: the cache follows AppKit, the attempt repeats every half second.
+    sys.windowKey = false;
+    sys.makeKeyWorks = false;
+    apply(1.0);
+    focus.reset();
+    pump();
+    check(stats().makeKeyCalls == 2, "another attempt for a window that lost the key status unnoticed");
+    check(!host.hasFocus() && host.isAppActive() && focus.focusChanges == 1 && !focus.key && focus.active
+              && focus.deactivations == 0,
+          "the cache follows AppKit: not key, application still active");
+    pump(); pump();
+    check(stats().makeKeyCalls == 2, "not on every pump");
+    apply(0.6);
+    pump();
+    check(stats().makeKeyCalls == 3, "again after half a second");
+
+    // Another window of this process is due the key status: it keeps it.
+    sys.makeKeyWorks = true;
+    sys.otherKeyWindow = true;
+    apply(1.0);
+    pump();
+    check(stats().makeKeyCalls == 3 && !host.hasFocus(), "an alert of this process keeps the key status");
+    sys.otherKeyWindow = false;
+    apply(1.0);
+    focus.reset();
+    pump();
+    check(stats().makeKeyCalls == 4 && host.hasFocus() && focus.focusChanges == 1 && focus.key,
+          "without it the window is made key and the gate opens");
+    pump();
+
+    // The window gives the key status away while the application stays active (Spotlight): pumps
+    // leave it there, a press into the window takes it back and is delivered.
+    sys.windowKey = false;
+    apply(1.0);
+    Hooks::focusCallbackForTest(host, Hooks::WindowResignedKey);
+    check(!host.hasFocus() && host.isAppActive(), "resigned key: the gate closes");
+    for (int i = 0; i < 3; ++i) { apply(1.0); pump(); }
+    check(stats().makeKeyCalls == 4 && !host.hasFocus(),
+          "a pump does not take the keyboard back from a panel of another process");
+    focus.reset();
+    button(0, true);
+    sys.windowKey = stats().windowKey;
+    check(stats().makeKeyCalls == 5 && host.hasFocus(), "a press into the game window makes it key");
+    check(focus.buttons == 1 && focus.buttonsWithFocus == 1 && focus.focusChanges == 1,
+          "and is delivered, after the focus change");
+    button(0, false);
+    check(focus.buttons == 2, "its release pairs up");
+
+    // A modal window of this process: the press is not the game's. It is dropped and reported,
+    // one report a second at most.
+    sys.windowKey = false;
+    sys.modalWindow = true;
+    apply(2.0);
+    Hooks::focusCallbackForTest(host, Hooks::WindowResignedKey);
+    const Hooks::FocusRepairStats before = stats();
+    focus.reset();
+    click();
+    check(focus.buttons == 0 && !host.hasFocus() && stats().makeKeyCalls == before.makeKeyCalls,
+          "a press behind a modal window is not delivered and takes nothing");
+    check(stats().droppedInputs == before.droppedInputs + 1 && stats().dropReports == before.dropReports + 1,
+          "the dropped press is counted and reported");
+    for (int i = 0; i < 4; ++i) click();
+    key(kVK_ANSI_W, true);
+    key(kVK_ANSI_W, false);
+    move(1, 1);
+    check(stats().droppedInputs == before.droppedInputs + 7 && stats().dropReports == before.dropReports + 1,
+          "presses, key presses and moves are counted; one report a second at most");
+    apply(1.5);
+    click();
+    check(stats().dropReports == before.dropReports + 2, "the next second reports again");
+    sys.modalWindow = false;
+
+    // The application resigns active and no callback says so: the next pump notices.
+    sys.windowKey = true;
+    apply(2.0);
+    Hooks::focusCallbackForTest(host, Hooks::WindowBecameKey);
+    check(host.hasFocus(), "key again");
+    sys.appActive = false;
+    sys.windowKey = false;
+    sys.frontPid = otherApp;
+    apply(1.0);
+    focus.reset();
+    pump();
+    check(!host.hasFocus() && !host.isAppActive() && focus.deactivations == 1 && focus.focusChanges == 1,
+          "a deactivation nobody reported is noticed by the next pump, once");
+    click();
+    check(focus.buttons == 0 && !stats().systemActive && stats().makeKeyCalls == before.makeKeyCalls,
+          "the click that brings the application forward from another one is not game input");
+
+    // The system calls this process frontmost, AppKit never activates it: a press uses the
+    // system's state once that has lasted a quarter of a second.
+    sys.frontPid = self;
+    apply(1.0);
+    pump();
+    focus.reset();
+    click();
+    check(focus.buttons == 0 && !stats().systemActive, "not at once: the application may just be coming forward");
+    apply(0.3);
+    pump();
+    button(0, true);
+    check(stats().systemActive && host.hasFocus() && host.isAppActive(), "then the press uses the system's state");
+    check(focus.buttons == 1 && focus.buttonsWithFocus == 1 && focus.activations == 1 && focus.focusChanges == 1,
+          "and is delivered, after the activation and the focus change");
+    button(0, false);
+    sys.frontPid = 0;
+    apply(1.0);
+    pump();
+    check(stats().systemActive && host.hasFocus(), "a moment without a frontmost application is not the user leaving");
+    sys.frontPid = otherApp;
+    apply(1.0);
+    focus.reset();
+    pump();
+    check(!stats().systemActive && !host.hasFocus() && focus.deactivations == 1,
+          "another application in front ends that at the next pump");
+
+    // Focus set by a test stands, as before: no simulated system, no repair.
+    Hooks::setSystemFocusForTest(host, 0);
+    Hooks::overrideFocusForTest(host, false, false);
+    focus.reset();
+    Hooks::pumpFocusForTest(host);
+    button(0, true);
+    button(0, false);
+    check(!host.hasFocus() && focus.focusChanges == 0 && focus.buttons == 0,
+          "overrideFocusForTest alone: pumps and presses leave the forced focus alone");
+    host.removeListener(&focus);
+    setFocus(true);
+    settle();
+}
+
+} // namespace
+
 int main(int argc, char** argv)
 {
     std::setvbuf(stdout, 0, _IONBF, 0);
@@ -689,6 +877,7 @@ int main(int argc, char** argv)
         testAsyncEnter();
 
         testHostBoundary();
+        testFocusRepair();
 
         host.removeListener(&log);
         g_manager->release();

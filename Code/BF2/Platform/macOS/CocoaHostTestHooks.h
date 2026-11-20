@@ -17,8 +17,39 @@ public:
     static void* metalLayer(host::ClientHost& host);
     static bool isISOKeyboard(const host::ClientHost& host);
 
-    // Simulates focus when AppKit activation is unavailable in the test session.
+    // Simulates focus when AppKit activation is unavailable in the test session. The focus set
+    // here stands: the host stops following AppKit unless setSystemFocusForTest simulates it.
     static void overrideFocusForTest(host::ClientHost& host, bool windowKey, bool appActive);
+
+    // What AppKit and the system would report about the application and the game window.
+    struct SystemFocus
+    {
+        bool   appActive;       // [NSApp isActive]
+        bool   windowKey;       // the game window is the key window
+        bool   windowOnScreen;  // visible and not miniaturized
+        bool   modalWindow;     // a modal window of this process, or a sheet on the game window
+        bool   otherKeyWindow;  // another key, or visible and key-capable, window of this process
+        bool   makeKeyWorks;    // making the game window key succeeds
+        int    frontPid;        // the system's frontmost application; 0: none
+        double now;             // the clock of the focus repair, in seconds
+    };
+    // Simulates that state for the host's focus repair (the per-pump reconciliation and the
+    // repair on a press), which then runs without an application or a window; null ends it.
+    static void setSystemFocusForTest(host::ClientHost& host, const SystemFocus* state);
+    // The delegate callbacks, after the simulated state was changed to match.
+    enum FocusCallback { WindowBecameKey, WindowResignedKey, AppBecameActive, AppResignedActive };
+    static void focusCallbackForTest(host::ClientHost& host, FocusCallback callback);
+    // The focus part of pumpEvents.
+    static void pumpFocusForTest(host::ClientHost& host);
+    struct FocusRepairStats
+    {
+        bool     windowKey;     // the simulated window's key status now
+        bool     systemActive;  // the system-state fallback is in use
+        int      makeKeyCalls;  // attempts to make the simulated window key
+        unsigned droppedInputs; // input events the focus gate dropped
+        unsigned dropReports;   // "[host] input dropped" lines written
+    };
+    static FocusRepairStats focusRepairStatsForTest(const host::ClientHost& host);
     // Routes injected NSEvents without creating a window or touching the hardware cursor.
     static void enableHeadlessForTest(host::ClientHost& host);
     static void injectEventForTest(host::ClientHost& host, void* nsEvent);

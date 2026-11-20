@@ -135,7 +135,6 @@ void refreshViewMagnification();
 @end
 
 @interface OpenBF2HostDelegate : NSObject <NSWindowDelegate, NSApplicationDelegate>
-- (void)syncFocus;
 @end
 
 namespace dice {
@@ -223,13 +222,59 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // first resets that state, then this process asks again (the workaround SDL uses for
     // Terminal launches). Once per activation, only while the user has not gone to another app.
     double dockResetAt = 0.0;        // systemUptime of the Dock activation, 0 when not done
+    // [CHOSEN, not recovered] Focus self-repair. windowKey and appActive cache AppKit's state as
+    // the delegate callbacks report it, and the engine's input gate (hasFocus) reads only the
+    // cache. A callback that never came, or a game window left without key status, would close
+    // the gate for good: every key and click dropped while the game is visibly in front. So each
+    // pump re-reads AppKit and brings the cache in line (reconcileFocus), an active application's
+    // game window is made key again when nothing else is due the key status (repairKeyWindow), a
+    // press into the window repairs before it is routed (repairFocusForPress), and what the gate
+    // still drops is reported (inputDropped). None of this asks for activation: taking the front
+    // stays with the launch requests above and the user's own click (clickedWhileInactive).
+    //
+    // keyLostWhileActive: the game window resigned key while the application stayed active.
+    // Something else took the keyboard, usually a panel of another process (Spotlight,
+    // Notification Centre) that returns it when it closes. Taking it back from a pump would close
+    // that panel, so only a press into the window does.
+    bool   keyLostWhileActive = false;
+    bool   keyRepairing = false;     // a pump-time key repair is under way (logged once)
+    double keyRepairAt = 0.0;        // focusNow() of its last attempt
+    // Since when the system has called this process frontmost while NSApp is inactive (0: it does
+    // not). A press repairs through the system-state fallback only once that has lasted, so the
+    // click that brings the application forward from another one is still not game input.
+    double systemFrontSince = 0.0;
+    bool   dropReported = false;     // inputDropped: one report a second at most
+    double dropReportAt = 0.0;
+    unsigned int dropsSinceReport = 0;
+    unsigned int droppedInputs = 0;  // totals (CocoaHostTestHooks::focusRepairStatsForTest)
+    unsigned int dropReports = 0;
     float scriptX = 0.0f, scriptY = 0.0f;
     bool scriptPointerSet = false;
 
+    // [TEMP] setSystemFocusForTest: the answers AppKit and the system would give, so the focus
+    // repair can be checked without an application or a window.
+    struct TestSystem
+    {
+        bool   set = false;
+        bool   appActive = false;       // [NSApp isActive]
+        bool   windowKey = false;       // window.isKeyWindow
+        bool   windowOnScreen = false;  // window.isVisible, not miniaturized
+        bool   modalWindow = false;     // a modal window of this process, or a sheet on the window
+        bool   otherKeyWindow = false;  // another key or key-capable visible window of this process
+        bool   makeKeyWorks = true;     // making the game window key succeeds
+        pid_t  frontPid = 0;            // the system's frontmost application; 0: none
+        double now = 0.0;               // focusNow()
+        int    makeKeyCalls = 0;
+    };
 #if defined(OPENBF2_HOST_TEST_SEAMS)
     bool testHeadless = false;      // enableHeadlessForTest: no window, no real cursor changes
+    bool testFocusOverride = false; // overrideFocusForTest was used: the focus it set stands
+    mutable TestSystem testSystem;
+    TestSystem* testSystemState() const { return testSystem.set ? &testSystem : nullptr; }
 #else
     static constexpr bool testHeadless = false;
+    static constexpr bool testFocusOverride = false;
+    static constexpr TestSystem* testSystemState() { return nullptr; }
 #endif
 
     std::vector<IHostEventListener*> snapshot() const { return listeners; }
@@ -237,6 +282,69 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     bool hasFocus() const { return (window != nil || testHeadless) && windowKey && appActive; }
 
     static double uptime() { return [[NSProcessInfo processInfo] systemUptime]; }
+
+    // What AppKit and the system report right now; a headless test supplies the answers.
+    double focusNow() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->now;
+        return uptime();
+    }
+    bool nsAppActive() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->appActive;
+        return [NSApp isActive] ? true : false;
+    }
+    bool windowIsKey() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->windowKey;
+        return window != nil && window.isKeyWindow;
+    }
+    // On screen: ordered in, not hidden with the application, not miniaturized.
+    bool windowOnScreen() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->windowOnScreen;
+        return window != nil && window.isVisible && !window.isMiniaturized;
+    }
+    // The pid of the application the system calls frontmost; 0 when it names none.
+    pid_t systemFrontPid() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->frontPid;
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        return front ? front.processIdentifier : 0;
+    }
+    // The system reports this process active and frontmost, whatever NSApp says.
+    bool systemFrontmost() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->frontPid == getpid();
+        return [NSRunningApplication currentApplication].active && systemFrontPid() == getpid();
+    }
+    // Another window of this process holds the key status or is due it: a modal window or a sheet
+    // on the game window; for a repair nobody asked for (unprompted) also the current key window
+    // and any other visible window that can become key, such as an alert. A press into the game
+    // window takes the key status from an ordinary window, as AppKit does itself.
+    bool keyStatusTaken(bool unprompted) const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->modalWindow || (unprompted && t->otherKeyWindow);
+        NSWindow* modal = [NSApp modalWindow];
+        if ((modal && modal != window) || window.attachedSheet)
+            return true;
+        if (!unprompted)
+            return false;
+        NSWindow* key = [NSApp keyWindow];
+        if (key && key != window)
+            return true;
+        for (NSWindow* other in [NSApp windows])
+            if (other != window && other.isVisible && other.canBecomeKeyWindow)
+                return true;
+        return false;
+    }
 
     // -[NSApplication activate] from macOS 14 on; activateIgnoringOtherApps: before (its
     // "ignoring" flag is ignored since macOS 14 and the selector deprecated).
@@ -327,12 +435,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         {
             NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
             if (f && f.processIdentifier == getpid())
-            {
-                systemActive = true;
-                std::fprintf(stderr, "[host] system reports the application active; NSApp does not - using the system's state\n");
-                becameActive();
-                [delegate syncFocus];
-            }
+                enterSystemFallback();
         }
         // Retry while the first request's frontmost application, the launcher, nobody, or this
         // process itself is frontmost. A child started by a launcher can already be reported
@@ -393,6 +496,174 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             [window makeFirstResponder:view];
         }
         updateActivation();
+    }
+
+    // Enters the system-state fallback (systemActive): the system's answer counts from here on.
+    void enterSystemFallback()
+    {
+        systemActive = true;
+        std::fprintf(stderr, "[host] system reports the application active; NSApp does not - using the system's state\n");
+        becameActive();
+        syncFocus();
+    }
+
+    // Brings windowKey and appActive in line with AppKit and the system-state fallback; the
+    // listeners hear of a change once (setFocusState). The delegate callbacks end here, and so
+    // does every pump (reconcileFocus). A pump leaves the fallback only for an application the
+    // system names: a moment without any frontmost application is not the user leaving.
+    void syncFocus(bool fromPump = false)
+    {
+        if (systemActive)
+        {
+            // Leave the fallback once AppKit has caught up, or once another application is in front.
+            const pid_t front = systemFrontPid();
+            if (nsAppActive() || (front != getpid() && (front != 0 || !fromPump)))
+                systemActive = false;
+        }
+        const bool active = nsAppActive() || systemActive;
+        const bool key = (window != nil || testHeadless) &&
+                         (windowIsKey() || (systemActive && windowOnScreen()));
+        setFocusState(key, active);
+    }
+
+    // windowDidBecomeKey / windowDidResignKey.
+    void windowKeyChanged(bool key)
+    {
+        keyLostWhileActive = !key && nsAppActive();
+        syncFocus();
+    }
+
+    // applicationDidBecomeActive / applicationDidResignActive.
+    void applicationActiveChanged(bool active)
+    {
+        keyLostWhileActive = false;              // the key status went or returns with the application
+        if (active)
+            becameActive();
+        syncFocus();
+    }
+
+    // Makes the game window key and its view the first responder.
+    void makeWindowKey()
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->makeKeyCalls;
+            if (t->makeKeyWorks && !t->windowKey)
+            {
+                t->windowKey = true;
+                windowKeyChanged(true);          // as AppKit's windowDidBecomeKey
+            }
+            return;
+        }
+        [window makeKeyAndOrderFront:nil];
+        [window makeFirstResponder:view];
+    }
+
+    // Whether the focus state follows AppKit. Forced focus stays as it was set: scripted runs
+    // ([TEMP] scriptedFocus) and tests that use overrideFocusForTest without a simulated system.
+    bool focusFollowsSystem() const
+    {
+        if (scriptedFocus)
+            return false;
+        return testSystemState() || (!testHeadless && !testFocusOverride);
+    }
+
+    // [CHOSEN, not recovered] Every pump: the application is active and the game window is on
+    // screen, yet the window is not key and nothing else of this process is due the key status.
+    // Make it key and first responder, as becameActive does at activation; again every half
+    // second while that state lasts. Not after the window gave the key status away while the
+    // application stayed active (keyLostWhileActive).
+    void repairKeyWindow(double now)
+    {
+        if (!nsAppActive() || windowIsKey() || !windowOnScreen())
+        {
+            keyRepairing = false;
+            return;
+        }
+        if (keyLostWhileActive || keyStatusTaken(true))
+            return;
+        if (keyRepairing && now - keyRepairAt < 0.5)
+            return;
+        if (!keyRepairing)
+            std::fprintf(stderr, "[host] game window not key in the active application - making it key\n");
+        keyRepairing = true;
+        keyRepairAt = now;
+        makeWindowKey();
+    }
+
+    // [CHOSEN, not recovered] Called on every pump: re-reads AppKit and passes through the
+    // transitions the delegate callbacks would have made, so a cache they left stale lasts one
+    // frame instead of until the next application switch. Unchanged state notifies nobody. While
+    // an activation request is pending updateActivation owns the state (its Dock reset puts the
+    // Dock in front for a moment).
+    void reconcileFocus()
+    {
+        if (!focusFollowsSystem())
+            return;
+        const double now = focusNow();
+        const bool active = nsAppActive();
+        if (!active && systemFrontmost())
+        {
+            if (systemFrontSince == 0.0)
+                systemFrontSince = now;
+        }
+        else
+            systemFrontSince = 0.0;
+        if (activationPending)
+            return;
+        if (active && !appActive)
+            becameActive();                      // an activation the delegate never reported
+        repairKeyWindow(now);
+        syncFocus(true);
+    }
+
+    // [CHOSEN, not recovered] A press inside the game window found the focus gate closed. When
+    // this application is active for AppKit, or the system has called it frontmost for a quarter
+    // of a second while AppKit never activated it, the press is meant for the game: bring the key
+    // status and the cache in line first, so the listeners get the focus change, the pointer
+    // position (reportPointer) and then the press. A press that brings the application forward
+    // from another one stays window management and is not delivered.
+    void repairFocusForPress()
+    {
+        if (!focusFollowsSystem())
+            return;
+        if (nsAppActive())
+        {
+            if (!appActive)
+                becameActive();
+            if (!windowIsKey() && windowOnScreen() && !keyStatusTaken(false))
+                makeWindowKey();
+        }
+        else if (!systemActive && systemFrontSince != 0.0 && focusNow() - systemFrontSince >= 0.25 &&
+                 systemFrontmost())
+            enterSystemFallback();
+        syncFocus();
+    }
+
+    // [CHOSEN, not recovered] The focus gate dropped an input event (a key press, a press or move
+    // inside the game window, the wheel). One line a second at most says so, with the cache and
+    // what AppKit and the system report, so a log shows whether "the game ignores my clicks" was
+    // the gate and which side was wrong.
+    void inputDropped(const char* what)
+    {
+        ++droppedInputs;
+        ++dropsSinceReport;
+        const double now = focusNow();
+        if (dropReported && now - dropReportAt < 1.0)
+            return;
+        dropReported = true;
+        dropReportAt = now;
+        ++dropReports;
+        NSRunningApplication* front = testSystemState() ? nil : [[NSWorkspace sharedWorkspace] frontmostApplication];
+        std::fprintf(stderr, "[host] input dropped: %s (%u event(s) since the last report); appActive=%d "
+                     "windowKey=%d [NSApp isActive]=%d window.isKeyWindow=%d window.isVisible=%d "
+                     "systemActive=%d frontmost pid=%d (%s), own pid=%d\n",
+                     what, dropsSinceReport, appActive ? 1 : 0, windowKey ? 1 : 0, nsAppActive() ? 1 : 0,
+                     windowIsKey() ? 1 : 0,
+                     testSystemState() ? (windowOnScreen() ? 1 : 0) : (window != nil && window.isVisible ? 1 : 0),
+                     systemActive ? 1 : 0, static_cast<int>(systemFrontPid()),
+                     front.localizedName.UTF8String ?: "?", static_cast<int>(getpid()));
+        dropsSinceReport = 0;
     }
 
     // [CHOSEN, not recovered] Win32 sends WM_SETCURSOR and WM_MOUSEMOVE when a window under the
@@ -978,11 +1249,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return;
         if (scripted)
             return;                              // [TEMP] scripted runs ignore the real devices
-        const bool focus = hasFocus();
+        bool focus = hasFocus();
         switch (event.type)
         {
         case NSEventTypeKeyDown:
             if (focus) handleKey(event, true);
+            else inputDropped("key down");
             break;
         case NSEventTypeKeyUp:
             if (focus) handleKey(event, false);
@@ -996,14 +1268,24 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         case NSEventTypeRightMouseDragged:
         case NSEventTypeOtherMouseDragged:
             if (focus) handleMouseMove(event);
+            else if (insideGameView(event)) inputDropped("mouse move");
             break;
         case NSEventTypeLeftMouseDown:
         case NSEventTypeRightMouseDown:
         case NSEventTypeOtherMouseDown:
-            if (![NSApp isActive] && event.window == window)
+        {
+            if (!nsAppActive() && event.window == window)
                 clickedWhileInactive();          // also in the system-active fallback (focus held)
+            const bool inside = !focus && insideGameView(event);
+            if (inside)
+            {
+                repairFocusForPress();
+                focus = hasFocus();
+            }
             if (focus) handleMouseButton(event, true);
+            else if (inside) inputDropped("mouse down");
             break;
+        }
         case NSEventTypeLeftMouseUp:
         case NSEventTypeRightMouseUp:
         case NSEventTypeOtherMouseUp:
@@ -1011,10 +1293,20 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             break;
         case NSEventTypeScrollWheel:
             if (focus) handleWheel(event);
+            else if (event.window == window) inputDropped("scroll wheel");
             break;
         default:
             break;
         }
+    }
+
+    // Whether a mouse event lies inside the game view; the title bar is window management.
+    bool insideGameView(NSEvent* event) const
+    {
+        float x = 0.0f, y = 0.0f;
+        bool inside = false;
+        locate(event, x, y, inside);
+        return inside;
     }
 
     // Hands the GCMouse samples published since the last pump to the listeners, on this (the
@@ -1064,6 +1356,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             }
             [NSApp updateWindows];
             updateActivation();
+            reconcileFocus();
             updateCursorImage();
         }
         drainRawMouse();
@@ -1240,40 +1533,26 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
 @public
     dice::hfe::host::ClientHost::Impl* impl;
 }
-- (void)syncFocus
-{
-    NSWindow* window = impl ? (NSWindow*)impl->window : nil;
-    if (!impl)
-        return;
-    if (impl->systemActive)
-    {
-        // Leave the fallback once AppKit has caught up, or once another application is in front.
-        NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if ([NSApp isActive] || !f || f.processIdentifier != getpid())
-            impl->systemActive = false;
-    }
-    const bool active = [NSApp isActive] || impl->systemActive;
-    const bool key = window != nil && (window.isKeyWindow || (impl->systemActive && window.isVisible));
-    impl->setFocusState(key, active);
-}
 - (BOOL)windowShouldClose:(NSWindow*)sender
 {
     (void)sender;
     ClientHost::instance().requestQuit();
     return NO;                                   // the engine tears the window down itself
 }
-- (void)windowDidBecomeKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
-- (void)windowDidResignKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
+- (void)windowDidBecomeKey:(NSNotification*)note     { (void)note; if (impl) impl->windowKeyChanged(true); }
+- (void)windowDidResignKey:(NSNotification*)note     { (void)note; if (impl) impl->windowKeyChanged(false); }
 - (void)windowDidMiniaturize:(NSNotification*)note   { (void)note; if (impl) { impl->minimized = true;  impl->notifyResize(); } }
-- (void)windowDidDeminiaturize:(NSNotification*)note { (void)note; if (impl) { impl->minimized = false; impl->notifyResize(); } }
-- (void)applicationDidBecomeActive:(NSNotification*)note
+- (void)windowDidDeminiaturize:(NSNotification*)note
 {
     (void)note;
-    if (impl)
-        impl->becameActive();
-    [self syncFocus];
+    if (!impl)
+        return;
+    impl->minimized = false;
+    impl->keyLostWhileActive = false;            // the key status went with the miniaturized window
+    impl->notifyResize();
 }
-- (void)applicationDidResignActive:(NSNotification*)note { (void)note; [self syncFocus]; }
+- (void)applicationDidBecomeActive:(NSNotification*)note { (void)note; if (impl) impl->applicationActiveChanged(true); }
+- (void)applicationDidResignActive:(NSNotification*)note { (void)note; if (impl) impl->applicationActiveChanged(false); }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
     (void)sender;
@@ -1442,7 +1721,7 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
         [window makeFirstResponder:view];
     }
     pumpEvents();                                // deliver the activation before returning
-    [m_impl->delegate syncFocus];
+    m_impl->syncFocus();
     return true;
 }
 
@@ -1467,6 +1746,8 @@ void ClientHost::destroyWindow()
     m_impl->fullscreen = false;
     m_impl->visible = false;
     m_impl->windowKey = false;
+    m_impl->keyLostWhileActive = false;
+    m_impl->keyRepairing = false;
     m_impl->buttonsDown = 0;
     m_impl->applyCursor();                       // window gone: unhide and re-associate
 }
@@ -1907,7 +2188,51 @@ bool CocoaHostTestHooks::isISOKeyboard(const host::ClientHost&)
 
 void CocoaHostTestHooks::overrideFocusForTest(host::ClientHost& host, bool windowKey, bool appActive)
 {
+    host.m_impl->testFocusOverride = true;
     host.m_impl->setFocusState(windowKey, appActive);
+}
+
+void CocoaHostTestHooks::setSystemFocusForTest(host::ClientHost& host, const SystemFocus* state)
+{
+    host::ClientHost::Impl::TestSystem& system = host.m_impl->testSystem;
+    system.set = state != nullptr;
+    if (!state)
+        return;
+    system.appActive      = state->appActive;
+    system.windowKey      = state->windowKey;
+    system.windowOnScreen = state->windowOnScreen;
+    system.modalWindow    = state->modalWindow;
+    system.otherKeyWindow = state->otherKeyWindow;
+    system.makeKeyWorks   = state->makeKeyWorks;
+    system.frontPid       = static_cast<pid_t>(state->frontPid);
+    system.now            = state->now;
+}
+
+void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallback callback)
+{
+    switch (callback)
+    {
+    case WindowBecameKey:   host.m_impl->windowKeyChanged(true); break;
+    case WindowResignedKey: host.m_impl->windowKeyChanged(false); break;
+    case AppBecameActive:   host.m_impl->applicationActiveChanged(true); break;
+    case AppResignedActive: host.m_impl->applicationActiveChanged(false); break;
+    }
+}
+
+void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host)
+{
+    host.m_impl->reconcileFocus();
+}
+
+CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest(const host::ClientHost& host)
+{
+    FocusRepairStats stats;
+    stats.windowKey     = host.m_impl->testSystem.windowKey;
+    stats.systemActive  = host.m_impl->systemActive;
+    stats.makeKeyCalls  = host.m_impl->testSystem.makeKeyCalls;
+    stats.droppedInputs = host.m_impl->droppedInputs;
+    stats.dropReports   = host.m_impl->dropReports;
+    return stats;
 }
 
 void CocoaHostTestHooks::enableHeadlessForTest(host::ClientHost& host)
