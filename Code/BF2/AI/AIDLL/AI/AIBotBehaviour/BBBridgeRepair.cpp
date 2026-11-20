@@ -1,7 +1,7 @@
 // Bridge-repair behaviour (infantry "BridgeRepair" slot of aibehaviours.ai): an engineer (spawn kit 4)
 // picks the closest destroyed bridge segment and a valid standing point at one of its two ends.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x1FED10 (__tcf_0 0x1FED70, _GLOBAL__I 0x1FEDA0): <iostream>'s Init object only.
 #include <iostream>

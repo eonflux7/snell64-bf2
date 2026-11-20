@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Writes a test Registry.dat for the OpenBF2 Windows client (docs/registry-file.md).
+    Writes a test Registry.dat for the OpenBF2 Windows client (docs/archive/registry-file.md).
 
 .DESCRIPTION
     Development tool. The Windows installer is the production writer. The text is the

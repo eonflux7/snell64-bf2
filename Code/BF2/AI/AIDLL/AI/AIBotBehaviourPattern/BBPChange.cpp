@@ -1,6 +1,6 @@
 // Change pattern: per-bot target vehicle/seat, entry position and get-in flags.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x23DC90 (__tcf_0 0x23DCF0, _GLOBAL__I 0x23DD20): <iostream>'s Init object only.
 #include <iostream>

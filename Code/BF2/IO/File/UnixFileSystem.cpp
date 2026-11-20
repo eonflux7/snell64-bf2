@@ -186,7 +186,7 @@ void UnixFileSystem::fixUnixPath(std::string& path)
         // "default" was rejected, so every start recreated it and its save wrote an empty
         // GlobalSettings.defaultUser over Global.con, and the login list never preselected the
         // saved profile (no PREFIX field, no SELECT ACCOUNT). Content paths stay lowered.
-        // docs/macos-profile-prefix.md
+        // docs/archive/macos-profile-prefix.md
         static const char kProfiles[] = "/profiles/";
         const std::string::size_type n = sizeof(kProfiles) - 1;
         if (path.size() >= first + n)

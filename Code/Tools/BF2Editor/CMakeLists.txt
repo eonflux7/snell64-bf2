@@ -9,7 +9,7 @@
 # it is not a second compilation of the engine. Editor-only code lives in this directory and is
 # compiled with BF2_IMAGE_EDITOR=1. A shared TU that needs an editor-only region is compiled a second
 # time here with BF2_IMAGE_EDITOR=1 and filtered out of the client objects (bf2_editor_shared_sources
-# below lists them). See docs/building.md.
+# below lists them). See docs/archive/building.md.
 #
 #   bf2_editor              BF2Editor.exe, strict link
 #   bf2_editor_renddx9      the editor's OWN native RendDX9.dll, built into this build tree and staged

@@ -2,7 +2,7 @@
 // nearby vehicle and seat (calculateVehicleUrgency), then initialises the BBPChange pattern with the best
 // one. Radio requests (message types 0 and 1) and the human player calling for a pick-up weigh in.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md. Information flag bits (InformationType, AIDLL_r enum switch
+// docs/archive/macos-ai-behaviour-plan.md. Information flag bits (InformationType, AIDLL_r enum switch
 // 0x100D3010): 0x10 ITAir (the air-vehicle tests: altitude, runway), 0x20 ITHelicopter, 0x40 ITGround,
 // 0x80 ITNaval, 0x8000 ITMobile, 0x200000 ITSoldier.
 

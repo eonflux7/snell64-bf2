@@ -1,5 +1,5 @@
 // EntryTriggerContinously (attested TU `EntryTriggerContinously.cpp`, split out of BAPEntries.cpp by S0). Recovered from
-// libaidll.so (Linux 1.5.3153, ia-32): the soldier entry for BAPATriggerContinously (statement type 12). Package B; see docs/macos-ai-behaviour-plan.md.
+// libaidll.so (Linux 1.5.3153, ia-32): the soldier entry for BAPATriggerContinously (statement type 12). Package B; see docs/archive/macos-ai-behaviour-plan.md.
 // execute's flags follow the BotScript convention: `ok` (the step ran) and `done` (finished; with
 // ok == false the statement failed).
 

@@ -2,7 +2,7 @@
 //
 // Retail BF2.exe loads RendDX9.dll, SwiffPlayer.dll and BF2Audio.dll at run time and resolves their
 // exports by name. Retail-DLL swapping is retired (https://github.com/B2BF/OpenBF2/issues/7), so the
-// macOS client links the three images into the executable instead (docs/macos-port.md). This table
+// macOS client links the three images into the executable instead (docs/archive/macos-port.md). This table
 // lets the engine's existing LoadLibrary/GetProcAddress call sites find them unchanged: the POSIX
 // loader wrappers in Core/PluginDll.cpp consult it before dlopen. Only images built with
 // BF2_STATIC_PLUGINS use it.

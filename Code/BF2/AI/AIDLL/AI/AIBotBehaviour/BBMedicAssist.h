@@ -1,7 +1,7 @@
 // Medic/support assist behaviour (infantry): a medic (kit 5) or engineer (kit 4) picks the most
 // urgent friendly unit near it to heal or repair; a support soldier (kit 3) instead looks for a
 // friendly unit that needs ammunition (calculateGiveAmmoUrgency). Recovered from libaidll.so
-// (Linux 1.5.3153, ia-32); F-urgency package, see docs/macos-ai-behaviour-plan.md.
+// (Linux 1.5.3153, ia-32); F-urgency package, see docs/archive/macos-ai-behaviour-plan.md.
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOUR_BBMEDICASSIST_H
 #define AI_AIDLL_AI_AIBOTBEHAVIOUR_BBMEDICASSIST_H

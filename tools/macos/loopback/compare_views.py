@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -I
 """[TEMP] [CHOSEN, not recovered] Compare the view-*.png captures of two scenario runs (or a run and a
-saved baseline) against the scenario's per-view limits (docs/macos-c-input-script.md, "Standard
+saved baseline) against the scenario's per-view limits (docs/archive/macos-c-input-script.md, "Standard
 scenarios").
 
   compare_views.py REFERENCE CANDIDATE [--scenario NAME] [--out DIR] [--pixel-threshold N] [--all-pngs]

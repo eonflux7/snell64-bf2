@@ -1,7 +1,7 @@
 // Defuse-mines behaviour (infantry "DefuseMines" slot of aibehaviours.ai): an engineer (spawn kit 4)
 // without a mine target looks for the closest hostile mine whose pathfinding position is reachable
 // within 35 m. Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x207370 (__tcf_0 0x2073D0, _GLOBAL__I 0x207400): <iostream>'s Init object only.
 #include <iostream>

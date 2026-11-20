@@ -48,7 +48,7 @@ namespace memory { void memory_update_modules(const char*) { } }
 #  endif
 #elif defined(__APPLE__) && !DEDICATED
 // [CHOSEN, not recovered] macOS client: the Cocoa host stands in for the Win32 message pump and
-// entry chain (docs/macos-s2-4.md). The headers mirror the Win32 client list above.
+// entry chain (docs/archive/macos-s2-4.md). The headers mirror the Win32 client list above.
 #  include <cstdlib>                                 // exit(0) on a posted quit
 #  include "../../IO/Input/Input.h"                  // IInputManager::setHasFocus
 #  include "../Utility/Vars.h"                       // Vars::enableProfiling around the main loop
@@ -309,7 +309,7 @@ void BF2::handleInGameWinMessages()
 #if defined(__APPLE__) && !DEDICATED
 
 // [CHOSEN, not recovered] macOS client: the desktop-state and window-message pieces of the
-// Win32 chain below, on the Cocoa host. There was no retail macOS image; see docs/macos-s2-4.md.
+// Win32 chain below, on the Cocoa host. There was no retail macOS image; see docs/archive/macos-s2-4.md.
 
 namespace dice {
 namespace hfe {

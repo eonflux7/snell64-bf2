@@ -1,7 +1,7 @@
 # Build tools
 
 These are maintained build scripts and diagnostic harnesses. Start with the
-[build guide](../../docs/building.md) for the CMake server, client and editor targets.
+[build guide](../../docs/archive/building.md) for the CMake server, client and editor targets.
 Regression fixtures live in [Code/Tests](../Tests).
 
 | Entry point | Purpose |

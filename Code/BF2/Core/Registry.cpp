@@ -104,7 +104,7 @@ bool readRegistryString(RegKeyCategory category, const std::string& name,
 Registry* registry = &rinstance;
 
 #if !DEDICATED
-// [CHOSEN, not recovered] File syntax and owner decisions: docs/registry-file.md.
+// [CHOSEN, not recovered] File syntax and owner decisions: docs/archive/registry-file.md.
 namespace registryFile {
 namespace {
 std::string trim(const std::string& text)

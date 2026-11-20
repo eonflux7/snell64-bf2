@@ -1,6 +1,6 @@
 // InfanteryControl: the soldier input helpers of the infantry plan-interpreter entries
 // (attested TU `AI/AIDLL/AI/AIPlanInterpreter/InfanteryControl.cpp`). Package B
-// (docs/macos-ai-behaviour-plan.md). Signatures from the mangled ELF names; return types checked
+// (docs/archive/macos-ai-behaviour-plan.md). Signatures from the mangled ELF names; return types checked
 // against the bodies and their callers.
 
 #ifndef AI_AIDLL_AI_AIPLANINTERPRETER_INFANTERYCONTROL_H

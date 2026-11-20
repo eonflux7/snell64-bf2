@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Client test tool: the platform-independent script engine
-// (InputScript.h, docs/macos-c-input-script.md). The hosts and their key tables live in
+// (InputScript.h, docs/archive/macos-c-input-script.md). The hosts and their key tables live in
 // Platform/macOS (CocoaHost.mm, MacInputScript.mm) and Platform/Windows (WinInputScript.cpp).
 // [RETIRE-WHEN: client-test-automation-replaced]
 #include "InputScript.h"

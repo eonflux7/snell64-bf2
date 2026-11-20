@@ -1,5 +1,5 @@
 {
- "note": "[CHOSEN, not recovered] Dev-route (Wine + d3dx9_25) limit: these generated RaShaderSM permutations fail every attempted profile with E_OUTOFMEMORY from ID3DXEffectCompiler::CompileEffect, even with a large-address-aware host. They occur at lighting high (RAPATH 0) for every texture-filter quality. The native route (c-native-fx) must compile them; see docs/macos-c-fx-permutations.md gap 3.",
+ "note": "[CHOSEN, not recovered] Dev-route (Wine + d3dx9_25) limit: these generated RaShaderSM permutations fail every attempted profile with E_OUTOFMEMORY from ID3DXEffectCompiler::CompileEffect, even with a large-address-aware host. They occur at lighting high (RAPATH 0) for every texture-filter quality. The native route (c-native-fx) must compile them; see docs/archive/macos-c-fx-permutations.md gap 3.",
  "condition": "lighting quality 3 (RaDefines RAPATH 0), any filter quality; dynamic-shadow setting irrelevant (no hasshadow)",
  "profiles_failed": [
   "vs_1_1/ps_1_3 .. vs_2_0/ps_2_0 (all ten, measured for L3S1F3T3); attempts 0-3 for the other two filter qualities"

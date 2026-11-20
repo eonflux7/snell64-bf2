@@ -7,7 +7,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 #else
-// [CHOSEN, not recovered] macOS: the DPAPI counterpart (docs/macos-port.md, "Protected profile
+// [CHOSEN, not recovered] macOS: the DPAPI counterpart (docs/archive/macos-port.md, "Protected profile
 // data (DPAPI)"). The flow below is the shipped one; only the three API calls differ.
 #include "../Platform/macOS/ProtectedData.h"
 #endif

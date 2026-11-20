@@ -3,7 +3,7 @@
 // urgent one to its BBPAvoidCollision pattern; a vehicle about to be bailed from is fled at urgency
 // 100 per object, and a grenade warning or gas forces urgency 1000.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x1FD0B0 (__tcf_0 0x1FD110, _GLOBAL__I 0x1FD140): <iostream>'s Init object only.
 #include <iostream>

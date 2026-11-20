@@ -388,7 +388,7 @@ class ReleasePackageTests(unittest.TestCase):
             "x64\\", "x86\\", "server\\", "editor\\", "licenses\\", "build-info.json",
             "Microsoft Visual C++ runtime", "x64 for x64\\", "x86 for x86\\, server\\ and editor\\",
             "not code-signed", "PunkBuster works only with the x86 client",
-            "64-bit d3dx9_25.dll", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/registry-file.md",
+            "64-bit d3dx9_25.dll", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/archive/registry-file.md",
             "other than 16567", "do not establish loading, joining or gameplay",
             'cd /d "C:\\Games\\Battlefield 2"', 'cd /d "C:\\Games\\Battlefield 2 Server"',
             'x64 client:\n      "C:\\OpenBF2\\openbf2-windows\\x64\\BF2.exe" +modPath mods/bf2 +fullscreen 0',

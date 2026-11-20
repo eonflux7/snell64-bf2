@@ -7,7 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-// [CHOSEN, not recovered] Native POSIX arm (macOS port; docs/macos-port.md, S2.5/S2.8): a pthread
+// [CHOSEN, not recovered] Native POSIX arm (macOS port; docs/archive/macos-port.md, S2.5/S2.8): a pthread
 // mutex for the critical section, stderr for the debugger channel, gettimeofday/localtime_r for
 // the prefix clock and the Mach thread id for GetCurrentThreadId. Output text is unchanged.
 #include <pthread.h>
@@ -207,7 +207,7 @@ void logOpen()
     {
         // The game runs with the game directory as its working directory, so a relative name lands
         // beside BF2.exe where a tester will look for it. The macOS client is started in the
-        // installed game folder and writes the log there too (docs/macos-write-paths.md).
+        // installed game folder and writes the log there too (docs/archive/macos-write-paths.md).
 #if defined(_WIN32)
         if (::fopen_s(&s_log, RD9ABI_LOG_FILENAME, "w") != 0)
             s_log = 0;

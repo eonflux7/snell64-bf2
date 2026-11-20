@@ -1,6 +1,6 @@
 // EntryInfanteryMoveToObject (attested TU `EntryInfanteryMoveToObject.cpp`, split out of
 // BAPEntries.cpp by S0). Recovered from libaidll.so (Linux 1.5.3153, ia-32): the full-LOD soldier
-// entry for BAPAMoveToObject (statement type 9). Package B; see docs/macos-ai-behaviour-plan.md.
+// entry for BAPAMoveToObject (statement type 9). Package B; see docs/archive/macos-ai-behaviour-plan.md.
 // Flags as in EntryInfanteryMoveTo: `ok` (the step ran), `done` (finished; failed when !ok).
 
 // static init: ELF 0x2B8550 (__tcf_0 0x2B85B0, _GLOBAL__I 0x2B85E0): <iostream>'s Init object only.

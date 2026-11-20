@@ -1,4 +1,4 @@
-# [TEMP] demo-controls: the battlerecorder playback controls (loopback --play-demo; docs/tracks/game/demo.md).
+# [TEMP] demo-controls: the battlerecorder playback controls (loopback --play-demo; docs/archive/tracks/game/demo.md).
 # Bindings are the shipped Controls.con ones: right mouse = PIAltFire (free <-> follow camera),
 # Space = PIAction (next player, Shift = previous), 1..9 = PIWeaponSelect1..9 (simulation rates
 # 0,100,5,25,50,75,150,300,1000), Q = GIRadioComm (Playback Control rose, HUD mode 31),

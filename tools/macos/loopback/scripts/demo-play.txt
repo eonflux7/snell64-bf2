@@ -1,4 +1,4 @@
-# [TEMP] demo-play: watch a recorded demo (loopback --play-demo; demo_cycle.py; docs/tracks/game/demo.md).
+# [TEMP] demo-play: watch a recorded demo (loopback --play-demo; demo_cycle.py; docs/archive/tracks/game/demo.md).
 # The level loads from the demo's own data blocks; the loaded-map screen waits for JOIN GAME as on a
 # live join. Then the spectator camera is driven with the shipped keys (demo.md, "Keys"): right mouse
 # = follow camera, Space = next player, Shift+Space = previous player, 1..9 = simulation rates

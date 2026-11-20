@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Win32 client test tool: the scripted input host and its DIK_ key
-// table (WinInputScript.h, Platform/InputScript.h, docs/macos-c-input-script.md).
+// table (WinInputScript.h, Platform/InputScript.h, docs/archive/macos-c-input-script.md).
 // [RETIRE-WHEN: client-test-automation-replaced]
 #include "WinInputScript.h"
 #if !DEDICATED && defined(_WIN32)

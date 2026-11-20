@@ -3801,7 +3801,7 @@ void setRotationYDegrees(Mat4& matrix, float degrees)
     matrix.m[8] = sine;
     matrix.m[10] = cosine;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;
@@ -3853,7 +3853,7 @@ void setRotationXDegrees(Mat4& matrix, float degrees)
     matrix.m[9] = -sine;
     matrix.m[10] = cosine;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;

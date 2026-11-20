@@ -1043,7 +1043,7 @@ float armorAbilityRatio(float hitPoints, float maximum, float previous, bool ble
     return static_cast<float>(ratio);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     const float half = 0.5f;
     float result;
     // [CHOSEN, not recovered] Preserve x87 retained division and optional blend.
@@ -1076,7 +1076,7 @@ float ammoAbilityRatio(int status, float previous, bool blend)
     return static_cast<float>(ratio);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     const float scale = 0.06666667014360428f; // PE934BB0, bits3D888889
     const float half = 0.5f;
     float result;

@@ -25,7 +25,7 @@ else()
     set(BF2_FRONTIER_DEFAULT_ENV "${CMAKE_COMMAND}" -E env BF2_FRONTIER_DEFAULT_CONTINUE=OFF)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    # [CHOSEN, not recovered] The macOS client's Cocoa host is Objective-C++ (docs/macos-s2-4.md).
+    # [CHOSEN, not recovered] The macOS client's Cocoa host is Objective-C++ (docs/archive/macos-s2-4.md).
     enable_language(OBJCXX)
 endif()
 
@@ -37,7 +37,7 @@ endif()
 #     x86-64                port's pointer-bearing layouts compiled by the platform family the ELF
 #                           oracle was built for.
 #   * AppleClang, macOS   - the native macOS dedicated port: `bf2` + `libdice_py.dylib`, the Linux
-#                           port's sources and layouts built for Darwin (docs/macos-port.md).
+#                           port's sources and layouts built for Darwin (docs/archive/macos-port.md).
 # Linux and macOS form the POSIX family (BF2_BUILD_POSIX); what they share sits under that switch,
 # and only what genuinely differs sits under BF2_BUILD_LINUX or BF2_BUILD_MACOS. The MSVC
 # configurations are untouched by any of them. Both POSIX builds are native ports
@@ -76,17 +76,17 @@ elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(BF2_NATIVE_ARCH "linux-x64")
         message(STATUS
             "Configuring the native Linux x86-64 dedicated-server port (bf2 + libdice_py.so). "
-            "See docs/building.md for toolchain and runtime setup.")
+            "See docs/archive/building.md for toolchain and runtime setup.")
     elseif(BF2_BUILD_MACOS)
         set(BF2_NATIVE_ARCH "macos-${CMAKE_SYSTEM_PROCESSOR}")
         message(STATUS
             "Configuring the native macOS ${CMAKE_SYSTEM_PROCESSOR} dedicated-server port "
-            "(bf2 + libdice_py.dylib). See docs/building.md and docs/macos-port.md.")
+            "(bf2 + libdice_py.dylib). See docs/archive/building.md and docs/archive/macos-port.md.")
     else()
         set(BF2_NATIVE_ARCH "x64")
         message(STATUS
             "Configuring the native x64 dedicated-server port with strict linking (no /FORCE). "
-            "See docs/building.md for toolchain and runtime setup.")
+            "See docs/archive/building.md for toolchain and runtime setup.")
     endif()
 else()
     message(FATAL_ERROR
@@ -677,7 +677,7 @@ list(REMOVE_DUPLICATES bf2_client_sources)
 list(SORT bf2_client_sources)
 if(BF2_BUILD_MACOS)
     # [CHOSEN, not recovered] The macOS client replaces the DirectInput 8 devices with
-    # MacInputDeviceManager and the Mac*Device TUs (docs/macos-s2-4.md). The Linux and MSVC client
+    # MacInputDeviceManager and the Mac*Device TUs (docs/archive/macos-s2-4.md). The Linux and MSVC client
     # manifests are unchanged.
     list(REMOVE_ITEM bf2_client_sources
         "${BF2_ROOT}/IO/Input/DX8InputDeviceManager.cpp"
@@ -712,7 +712,7 @@ target_include_directories(bf2_client_objects PRIVATE
     "${BF2_EXTERNAL_ROOT}/zlib-1.2.3/contrib/minizip"
 )
 if(BF2_BUILD_MACOS)
-    # [CHOSEN, not recovered] The macOS client (docs/macos-port.md, "Client triage") compiles the
+    # [CHOSEN, not recovered] The macOS client (docs/archive/macos-port.md, "Client triage") compiles the
     # shared engine sources with the platform switches the macOS server objects use:
     # BF2_PLATFORM_POSIX selects the POSIX file system and status monitor, _MACOSX the GameSpy
     # SDK's Darwin branch, BF2_STATIC_PLUGINS the statically linked plugin images
@@ -1045,7 +1045,7 @@ elseif(BF2_BUILD_X64)
     set(BF2_DICE_PY_DEFAULT_DIR
         "${BF2_EXTERNAL_ROOT}/python-embedded/OBJ/python/x64/release")
     set(BF2_DICE_PY_BUILD_HINT
-        "Build the native x64 dice_py pair described in docs/building.md")
+        "Build the native x64 dice_py pair described in docs/archive/building.md")
 else()
     set(BF2_DEDICATED_TARGET "bf2_w32ded")
     set(BF2_DEDICATED_OUTPUT_NAME "bf2_w32ded")
@@ -1065,7 +1065,7 @@ if(BF2_BUILD_POSIX)
     else()
         message(WARNING
             "External/python-embedded/linux/CMakeLists.txt is missing: the dice_py target is not "
-            "defined and `bf2` cannot link. See docs/building.md.")
+            "defined and `bf2` cannot link. See docs/archive/building.md.")
     endif()
 else()
     set(BF2_DICE_PY_LIB "${BF2_DICE_PY_DEFAULT_DIR}/dice_py.lib" CACHE FILEPATH
@@ -1743,7 +1743,7 @@ endif() # NOT BF2_BUILD_POSIX (client and editor)
 # =================================================================================================
 # bf2_client on macOS - THE NATIVE macOS CLIENT IMAGE. [CHOSEN, not recovered]
 #
-# An owner-requested port change (macOSplan.md, package S2.0; docs/macos-port.md, "Client triage").
+# An owner-requested port change (macOSplan.md, package S2.0; docs/archive/macos-port.md, "Client triage").
 # The client objects above are compiled with DEDICATED=0 and the macOS platform switches. The client
 # plugin images are not shared libraries here: retail-DLL swapping is retired
 # (https://github.com/B2BF/OpenBF2/issues/7), so RendDX9, SwiffPlayer and BF2Audio are static
@@ -1758,7 +1758,7 @@ endif() # NOT BF2_BUILD_POSIX (client and editor)
 # they can coexist in one link. TextureAtlasBuilder is embedded in the native renderer.
 #
 # The link is strict (ld64 rejects undefined symbols). It does not complete yet: the compile triage
-# in docs/macos-port.md lists the blocked translation units by blocker class.
+# in docs/archive/macos-port.md lists the blocked translation units by blocker class.
 # =================================================================================================
 if(BF2_BUILD_MACOS)
     set(BF2_RENDDX9_STATIC_SOURCES
@@ -1906,7 +1906,7 @@ if(BF2_BUILD_MACOS)
     # often with other types. The image's static library is therefore prelinked into one
     # relocatable object (ld -r) in which the symbols named in Code/StaticPlugins/
     # image-private-symbols.txt are bound to the image's own definitions and then made local;
-    # everything else keeps its linkage. See docs/macos-port.md, "Plugin globals".
+    # everything else keeps its linkage. See docs/archive/macos-port.md, "Plugin globals".
     # BF2Audio defines no host-service globals; its own null sound/template pair
     # (Sound/SoundEngine/BfSoundEngine.cpp, created by getSoundEngine) is image-private in the
     # same way and is listed in Code/StaticPlugins/bf2audio-private-symbols.txt.
@@ -2107,7 +2107,7 @@ if(BF2_BUILD_MACOS)
         "-Wl,-map,${BF2_DEDICATED_OUTPUT_DIR}/bf2_client.map")
 
     # [CHOSEN, not recovered] The Cocoa host and the GCController poller (package S2.4,
-    # docs/macos-s2-4.md): ARC Objective-C++ with the plain-C++ headers the engine includes.
+    # docs/archive/macos-s2-4.md): ARC Objective-C++ with the plain-C++ headers the engine includes.
     set(BF2_MACOS_HOST_OBJCXX_SOURCES
         "${BF2_ROOT}/Platform/macOS/CocoaHost.mm"
         "${BF2_ROOT}/Platform/macOS/MacGamepad.mm"
@@ -2143,7 +2143,7 @@ if(BF2_BUILD_MACOS)
     bf2_set_image(bf2_meme_dispatch_check 0)
     # A cross build (an arm64-only tree on an Intel Mac) cannot execute the native checks:
     # the static audit still gates the build with the target's own flags, and the linked
-    # checks ship in the M2 bundle (docs/macos-c-arm64-client.md).
+    # checks ship in the M2 bundle (docs/archive/macos-c-arm64-client.md).
     set(BF2_VTABLE_CHECK_RUNNABLE ON)
     if(CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_HOST_SYSTEM_PROCESSOR IN_LIST CMAKE_OSX_ARCHITECTURES)
         set(BF2_VTABLE_CHECK_RUNNABLE OFF)
@@ -2269,7 +2269,7 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
         bf2_swiffplayer_static bf2_plugin_kit_static)
 
     # [TEMP] [CHOSEN, not recovered] The __proto__ probe SWFs (tools/swf/proto_probe.py) in the
-    # native gameswf must show retail 1.50's squares (docs/tracks/game/swf-proto-retail-probe.md).
+    # native gameswf must show retail 1.50's squares (docs/archive/tracks/game/swf-proto-retail-probe.md).
     add_executable(bf2_swf_proto_probe_check EXCLUDE_FROM_ALL
         Code/Tests/swf_proto_probe_runtime.cpp
         Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
@@ -2346,7 +2346,7 @@ if(APPLE)
 endif()
 
 # [TEMP] Cumulative fixture for game frontier-closure sites no normal session reaches
-# (Code/Tests/game_frontier_check.cpp; docs/tracks/game/frontier-closure.md). Built on request; the
+# (Code/Tests/game_frontier_check.cpp; docs/archive/tracks/game/frontier-closure.md). Built on request; the
 # families it never calls stay unresolved, as /FORCE:UNRESOLVED leaves them in the Windows fixtures.
 if(APPLE)
     add_executable(bf2_game_frontier_check EXCLUDE_FROM_ALL
@@ -2894,7 +2894,7 @@ if(BUILD_TESTING AND MSVC)
     target_compile_options(bf2_runtime_pair PRIVATE /Gy)
     target_link_options(bf2_runtime_pair PRIVATE /OPT:REF)
 
-    # [CHOSEN, not recovered] The client's Registry.dat (docs/registry-file.md): fake CD keys
+    # [CHOSEN, not recovered] The client's Registry.dat (docs/archive/registry-file.md): fake CD keys
     # round-trip through CryptProtectData and the production reader, and through the dev script.
     # A client image (DEDICATED=0), so it is not a bf2_add_check.
     add_executable(bf2_registry_dat_check EXCLUDE_FROM_ALL

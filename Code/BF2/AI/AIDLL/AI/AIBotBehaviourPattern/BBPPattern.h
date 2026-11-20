@@ -1,5 +1,5 @@
 // Behaviour-pattern base: the per-bot "initiated" flags every pattern keeps. Recovered by package
-// A-core (docs/macos-ai-behaviour-plan.md) from libaidll.so; the virtual order is checked by
+// A-core (docs/archive/macos-ai-behaviour-plan.md) from libaidll.so; the virtual order is checked by
 // tools/macos/ai_behaviour_vtables.py.
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOURPATTERN_BBPPATTERN_H

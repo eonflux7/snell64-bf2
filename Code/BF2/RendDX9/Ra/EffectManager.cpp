@@ -2558,7 +2558,7 @@ void* EffectManager::compileEffect(const std::string& name, int unused, void** e
     // Shipped: the cache is under @HOME@ (PE 0x10035054 pushes "@HOME@/"), not the game folder.
     // Retail BF2.exe expands @HOME@ to SHGetFolderPathW(CSIDL_PERSONAL) + "\Battlefield 2" (PE
     // 0x6C5A80), so Windows writes Documents\Battlefield 2\mods\bf2\cache\. The macOS client data
-    // directory stands in for that folder (docs/macos-write-paths.md).
+    // directory stands in for that folder (docs/archive/macos-write-paths.md).
     std::string cachePath("@HOME@/");
     cachePath += modPath;
     cachePath += "/cache/";

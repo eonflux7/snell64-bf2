@@ -49,7 +49,7 @@ int floorToInt(double value)
     return _mm_cvttsd_si32(_mm_set_sd(floored));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     const double floored = std::floor(value);
     unsigned short original, truncating;
     int result;

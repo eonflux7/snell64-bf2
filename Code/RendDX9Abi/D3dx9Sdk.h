@@ -12,7 +12,7 @@
 // names from Platform/Gfx instead. Default Windows builds still use the SDK exactly as above.
 // [CHOSEN, not recovered] Without the SDK, dxsdk.cmd's D3DX fallback puts D3dxFallbackInclude on the
 // include path, and <d3dx9.h> becomes D3dx9Fallback.h: the same subset declarations on top of the
-// Windows SDK's <d3d9.h>, checked against d3dx9_25.dll (docs/building.md, "D3DX without the
+// Windows SDK's <d3d9.h>, checked against d3dx9_25.dll (docs/archive/building.md, "D3DX without the
 // DirectX SDK").
 
 #ifndef RENDDX9ABI_D3DX9SDK_H

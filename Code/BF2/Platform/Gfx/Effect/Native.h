@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] Native (Wine-free) effect compilation for the macOS client:
 // vkd3d-shader (LGPL-2.1+, LICENSE.vkd3d) compiles each shader to D3D9 bytecode, the effect
 // parser/builder (FxBuild.h) produces the Description, MojoShader translates to MSL.
-// Build setup: docs/building.md (macOS).
+// Build setup: docs/archive/building.md (macOS).
 #pragma once
 #include "Cache.h"
 #include "FxBuild.h"

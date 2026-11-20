@@ -1,6 +1,6 @@
 // DecalShadowManager, recovered from RendDX9.dll 1.50 (0x10127160..0x101274E0 and its factory
 // 0x100B0793). Attested source path: RendDX9_r's __FILE__ for
-// Geom/DecalSystem/DecalShadowManager.cpp (docs/tracks/rend/attribution.md). 0x10127490 is the
+// Geom/DecalSystem/DecalShadowManager.cpp (docs/archive/tracks/rend/attribution.md). 0x10127490 is the
 // std::vector<DecalObject*>::push_back instantiation (with its insert 0x10126F30).
 
 #ifdef BF2_IMAGE_RENDDX9

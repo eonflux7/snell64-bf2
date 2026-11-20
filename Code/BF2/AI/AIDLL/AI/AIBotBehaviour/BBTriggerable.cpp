@@ -1,7 +1,7 @@
 // Triggerable behaviour (infantry "Triggerable" slot of aibehaviours.ai): a man-down bot is the
 // only one it applies to; its urgency is always 0 here, so it is never chosen by urgency alone.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 #include "BBTriggerable.h"
 

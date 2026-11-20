@@ -10,7 +10,7 @@ analysis over direct calls, constructor calls and vtables of constructed classes
 Usage: ai_behaviour_inventory.py <libaidll.so> <workdir> <functions.csv> [classes.csv]
 <workdir> caches `objdump -t/-d/-R` output (created on first run; use out/re).
 Env: TREE=Code/BF2 adds the tree-status column; EXT=1 lists outside calls of the minimum set;
-VT=ClassA,ClassB dumps vtables slot by slot. See docs/macos-ai-behaviour-plan.md.
+VT=ClassA,ClassB dumps vtables slot by slot. See docs/archive/macos-ai-behaviour-plan.md.
 Planning tool only: no engine code depends on it.
 """
 import bisect, collections, csv, os, re, struct, subprocess, sys

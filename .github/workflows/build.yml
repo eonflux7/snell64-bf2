@@ -79,7 +79,7 @@ jobs:
       # April 2005 DirectX SDK or, on hosted runners without it, the D3DX fallback (Code/Build/dxsdk.cmd).
       # When neither is usable, other runs skip the client (and on x86 the editor) with a notice and leave
       # them out of the packages. Release runs fail here instead: the Windows release package carries
-      # both clients and the editor, and a package without them is no release (docs/ci-releases.md).
+      # both clients and the editor, and a package without them is no release (docs/archive/ci-releases.md).
       - name: Locate the D3DX headers and import library
         id: dxsdk
         run: |
@@ -88,7 +88,7 @@ jobs:
           call Code\Build\dxsdk.cmd ${{ matrix.arch }} fallback
           if errorlevel 1 (
             if "%BF2_RELEASE_RUN%"=="true" (
-              echo ::error title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the Windows release package needs the ${{ matrix.arch == 'x86' && 'x86 client and editor' || 'x64 client' }}; see docs/ci-releases.md.
+              echo ::error title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the Windows release package needs the ${{ matrix.arch == 'x86' && 'x86 client and editor' || 'x64 client' }}; see docs/archive/ci-releases.md.
               exit /b 1
             )
             echo ::notice title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the ${{ matrix.arch == 'x86' && 'x86 client and editor are' || 'x64 client is' }} not built on this runner.
@@ -108,7 +108,7 @@ jobs:
           cmake --build out/build/ci-${{ matrix.arch }} --target bf2_client
 
       # [CHOSEN, not recovered] OpenAL Soft as both clients' BF2OpenAL.dll, built from the release
-      # tarball pinned by URL and SHA-256 in Code/Build/build_openal_soft.py (docs/ci-releases.md).
+      # tarball pinned by URL and SHA-256 in Code/Build/build_openal_soft.py (docs/archive/ci-releases.md).
       # The cache key is the architecture and that script, so a new pin rebuilds.
       - name: Restore the ${{ matrix.arch }} OpenAL Soft build
         if: steps.dxsdk.outputs.found == 'true'
@@ -315,7 +315,7 @@ jobs:
   # (tools/macos/nativefx/build.sh, tools/macos/vkd3d-patches).
   # Release runs (a published release, or a v* tag) sign the binaries with the Developer ID from
   # the protected `release` environment; every other run (pull requests, branch pushes, forks)
-  # stays ad-hoc and uses no secrets (docs/ci-releases.md). The per-architecture ZIPs are CI
+  # stays ad-hoc and uses no secrets (docs/archive/ci-releases.md). The per-architecture ZIPs are CI
   # artifacts only and not notarized: releases ship the notarized disk image (macos-app).
   macos:
     name: macOS ${{ matrix.arch }}

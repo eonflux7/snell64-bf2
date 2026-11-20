@@ -1,5 +1,5 @@
 // RainManager, recovered from RendDX9.dll 1.50 (0x10157B30..0x1015A580 and its factory 0x100B0C25).
-// Attested source path: RendDX9_r's __FILE__ for Geom/Rain/RainManager.cpp (docs/tracks/rend/
+// Attested source path: RendDX9_r's __FILE__ for Geom/Rain/RainManager.cpp (docs/archive/tracks/rend/
 // rdebug-findings.md). The vector operations 0x10159F90..0x1015A389 and 0x1015A4D0 are the
 // std::vector<RainParticle> instantiation behind m_particles.resize().
 

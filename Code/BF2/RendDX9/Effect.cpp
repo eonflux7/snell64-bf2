@@ -910,7 +910,7 @@ unsigned int Effect::begin()
     // Retail crash path, not missing code. The body above and below is complete; PE
     // 0x1001D793..0x1001D796 loads the D3DX effect and calls through it without a null check, so a
     // null effect faults inside retail's Effect::begin. Under the memory-safety exception
-    // (docs/macos-port.md) that null dereference is not reproduced: no retail pass
+    // (docs/archive/macos-port.md) that null dereference is not reproduced: no retail pass
     // count exists to return, so the native build reports and stops where retail faults.
     // [CHOSEN, not recovered] the report text; it fires only when native effect compilation
     // failed and left the effect unbound.

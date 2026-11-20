@@ -2,7 +2,7 @@
 // Header placement: AIDLL_r.dll __FILE__ "Code/BF2//AI/AIDLL/AI/AIBotActionPlan/BotScript.h" (assert "0 == mpOwner").
 // Virtual functions are in ELF vtable slot order; the vtable check (tools/macos/ai_behaviour_vtables.py)
 // compares them with the image. Return types marked [INFERRED] come from the ELF bodies and call sites;
-// the owning package verifies them. Owner: see docs/macos-ai-behaviour-plan.md (package column).
+// the owning package verifies them. Owner: see docs/archive/macos-ai-behaviour-plan.md (package column).
 // [RETIRE-WHEN: ai-behaviour-<package>] the package recovers and validates every body in this file.
 
 #ifndef AI_AIDLL_AI_AIPLANINTERPRETER_BOTSCRIPT_H

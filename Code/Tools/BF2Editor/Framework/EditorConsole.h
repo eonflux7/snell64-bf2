@@ -1,6 +1,6 @@
 // Editor-only console bindings and the open level's command services.
 // Undo replays silent console scripts; interactive commands may return query output.
-// Command syntax, save behavior, and integration: docs/editor-console.md.
+// Command syntax, save behavior, and integration: docs/archive/editor-console.md.
 #ifndef BF2EDITOR_FRAMEWORK_EDITORCONSOLE_H
 #define BF2EDITOR_FRAMEWORK_EDITORCONSOLE_H
 

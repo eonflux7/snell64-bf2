@@ -1,4 +1,4 @@
-# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/macos-c-input-script.md).
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/archive/macos-c-input-script.md).
 # Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
 # space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
 # Waits: wait-log on concrete events where the client prints one; the remaining fixed waits are the

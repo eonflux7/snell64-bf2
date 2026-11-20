@@ -35,7 +35,7 @@ void* LoadLibrary(const char* name)
 #endif
     std::string file = std::string("lib") + std::string(name, dot);
 #if defined(__APPLE__)
-    // [CHOSEN, not recovered] The macOS port's shared-library suffix (docs/macos-port.md).
+    // [CHOSEN, not recovered] The macOS port's shared-library suffix (docs/archive/macos-port.md).
     file.append(".dylib");
 #else
     file.append(".so");

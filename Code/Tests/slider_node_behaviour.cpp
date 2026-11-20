@@ -1,7 +1,7 @@
 // [TEMP] Behaviour fixture for the recovered slider bodies: SliderNode (BF2.exe 0x833660..0x833DD2)
 // and BfFixedSliderNode (0x7D3D50..0x7D4B75, inherited by the HUD's Bf2FixedSliderNode). Retail HUD
 // content builds no slider (HudElementsPlayer.con keeps its four inside beginrem/endrem), so no
-// session reaches these bodies; this drives each of them (docs/tracks/game/frontier-closure.md).
+// session reaches these bodies; this drives each of them (docs/archive/tracks/game/frontier-closure.md).
 // Portable: CTest bf2_slider_node_check on macOS, slider_node_behaviour.cmd on Windows.
 #include <cmath>
 #include <cstdio>

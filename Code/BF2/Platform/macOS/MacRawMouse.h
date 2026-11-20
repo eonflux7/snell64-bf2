@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] macOS port: unaccelerated mouse motion from the GameController
 // framework's GCMouse (macOS 11), the counterpart of the device counts a DirectInput mouse reports.
 // Every connected GCMouse is observed (connect/disconnect at run time); their deltas are summed
-// into one stream, as DirectInput's system mouse merges every mouse. Design: docs/macos-s2-4.md
+// into one stream, as DirectInput's system mouse merges every mouse. Design: docs/archive/macos-s2-4.md
 // ("Raw mouse deltas").
 //
 // Threading: the GCMouse handlers run on a private serial dispatch queue (the single producer).

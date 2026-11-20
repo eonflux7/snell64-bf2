@@ -1,6 +1,6 @@
 // Plan-system enums shared by the action, condition, behaviour and interpreter classes.
 // [INFERRED] file placement and enumerator spellings where noted; values are attested.
-// S0 skeleton (docs/macos-ai-behaviour-plan.md). Owner: package A-core.
+// S0 skeleton (docs/archive/macos-ai-behaviour-plan.md). Owner: package A-core.
 
 #ifndef AI_AIDLL_AI_AIBOTACTIONPLAN_BAPTYPES_H
 #define AI_AIDLL_AI_AIBOTACTIONPLAN_BAPTYPES_H

@@ -1,6 +1,6 @@
 # [TEMP] sp-instant-play: Welcome -> PLAY SINGLEPLAYER (instant battle) -> JOIN GAME -> Assault kit,
 # Beach spawn (gulf_of_oman, US) -> DONE -> scoreboard -> ~3 min in the round. Client-hosted
-# (docs/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+# (docs/archive/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
 timeout 300
 # The runner passes +restart 1 (no intros): the menu is up once menu.bik plays.
 wait-log mods/bf2/Movies/menu.bik

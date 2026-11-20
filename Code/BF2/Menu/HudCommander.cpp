@@ -95,7 +95,7 @@ void updateCooldown(float deadline, double now, float duration, float& remaining
     fraction = static_cast<float>(left / duration);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     float* remainingValue = &remaining;
     float* fractionValue = &fraction;
     // [CHOSEN, not recovered] Preserve x87 retained remaining value for fraction.

@@ -1,6 +1,6 @@
 // Bridge-repair pattern: per-bot plan parameters that BBBridgeRepair::calculateUrgency stores through
 // init. Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x232140 (__tcf_0 0x2321A0, _GLOBAL__I 0x2321D0): <iostream>'s Init object only.
 #include <iostream>

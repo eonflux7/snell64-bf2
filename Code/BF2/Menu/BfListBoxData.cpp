@@ -51,7 +51,7 @@ int truncateListWidth(double value)
     return _mm_cvttsd_si32(_mm_set_sd(value));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncating int32 with integer indefinite.
@@ -750,7 +750,7 @@ int BfListBoxData::measureText(System* system, std::wstring text, int column, in
     *fontMode = mode;
     return index;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
     int characters[256];
     std::string narrow;
     std::wstring wide;

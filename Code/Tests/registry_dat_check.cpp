@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Windows-only check of the client's Registry.dat reader
-// (docs/registry-file.md): synthetic CD keys protected with CryptProtectData (CurrentUser, no entropy)
+// (docs/archive/registry-file.md): synthetic CD keys protected with CryptProtectData (CurrentUser, no entropy)
 // go through the production reader in Core/Registry.cpp. Fake keys only; never prints a value.
 //
 //   registry_dat_check                  self-contained round trips in %TEMP%

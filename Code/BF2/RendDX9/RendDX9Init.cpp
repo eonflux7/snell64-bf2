@@ -97,7 +97,7 @@ extern IBase* g_Renderer;
 // Reads and dereferences a host setting result across the string ABI boundary: the shape of
 // every inline retail read (PE 0x1001092D..0x10010940: `mov ecx, [0x10244A90]`, the key string
 // and the default's address pushed, `call [vtbl+0x10]`, `mov ecx, [eax]`).
-// [CHOSEN, not recovered] memory-safety exception (docs/macos-port.md): retail tests neither the settings
+// [CHOSEN, not recovered] memory-safety exception (docs/archive/macos-port.md): retail tests neither the settings
 // singleton (dword_10244A90) nor the answer; a null singleton faults at the vtable load. The native
 // hosts reach these helpers before or without a settings object (tools, the vtable audit), so the
 // null test stays and answers the caller's default. The answer is a reference and is read as-is.
@@ -186,7 +186,7 @@ inline const DeviceCaps* deviceCaps() { return static_cast<const DeviceCaps*>(g_
 }
 
 // Returns the pixel-shader major version (byte 1 of PixelShaderVersion, +0xCC). PE 0x100010D0.
-// Memory-safety exception (docs/macos-port.md): retail reads through dword_1023B980 without a null test; the
+// Memory-safety exception (docs/archive/macos-port.md): retail reads through dword_1023B980 without a null test; the
 // existing test stays, because the native ports reach callers before device creation.
 int deviceCapsPixelShaderMajor()
 {

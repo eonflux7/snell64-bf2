@@ -1,4 +1,4 @@
-# [TEMP] [CHOSEN, not recovered] Login dialog, SELECT ACCOUNT, connecting screen, main menu at 800x600 (docs/macos-profile-prefix.md).
+# [TEMP] [CHOSEN, not recovered] Login dialog, SELECT ACCOUNT, connecting screen, main menu at 800x600 (docs/archive/macos-profile-prefix.md).
 timeout 120
 wait-log mods/bf2/Movies/menu.bik
 wait-ms 3000

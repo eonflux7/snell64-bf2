@@ -986,7 +986,7 @@ bool EditSession::roadEditCommand(const std::string& method, const std::vector<s
     }
     else
     {
-        result = "EditorRoad." + method + " is not a road command (docs/editor-console.md)";
+        result = "EditorRoad." + method + " is not a road command (docs/archive/editor-console.md)";
         return false;
     }
     return recordRoadEdit(edit, label, result);

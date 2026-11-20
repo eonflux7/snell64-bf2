@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] The client's registry file, shared by every client platform: the plain
 // Registry.con on POSIX (PosixRegistry.h) and, on Windows, Registry.dat, the same text protected with
-// DPAPI. Owner decisions; the file contract is docs/registry-file.md. Bodies in Core/Registry.cpp.
+// DPAPI. Owner decisions; the file contract is docs/archive/registry-file.md. Bodies in Core/Registry.cpp.
 #ifndef CORE_REGISTRYFILE_H
 #define CORE_REGISTRYFILE_H
 

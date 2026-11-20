@@ -1,5 +1,5 @@
 # [TEMP] sp-instant: Welcome -> PLAY SINGLEPLAYER (instant battle, the mod's sp_startup_map) -> JOIN GAME
-# -> spawn screen. Client-hosted: no separate server (docs/macos-c-input-script.md). 800x600.
+# -> spawn screen. Client-hosted: no separate server (docs/archive/macos-c-input-script.md). 800x600.
 timeout 240
 # The runner passes +restart 1 (no intros): the menu is up once menu.bik plays.
 wait-log mods/bf2/Movies/menu.bik

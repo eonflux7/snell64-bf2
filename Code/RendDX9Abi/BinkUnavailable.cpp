@@ -3,7 +3,7 @@
 // frontiers first. macOS implements the entry points in BinkFFmpeg.cpp (Code/BF2/External/ffmpeg-bink/README.md). These bodies keep a
 // renderer link honest. Each one reports itself and aborts, never returning a handle or a result.
 // [RETIRE-WHEN: posix-bink-decoder] Remove when the owner chooses a Bink runtime or replacement
-// decoder for macOS (docs/macos-port.md, "Bink, Novint and VoIP capture (S2.8)").
+// decoder for macOS (docs/archive/macos-port.md, "Bink, Novint and VoIP capture (S2.8)").
 
 #include "Bink.h"
 

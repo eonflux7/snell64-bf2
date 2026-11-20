@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Native run of the self-authored __proto__ probe SWFs
-// (tools/swf/proto_probe.py; spec docs/tracks/game/swf-proto-retail-probe.md), CTest
+// (tools/swf/proto_probe.py; spec docs/archive/tracks/game/swf-proto-retail-probe.md), CTest
 // bf2_swf_proto_probe_check. Each SWF must show exactly the squares retail 1.50 showed on Boot Camp
 // (probe v2, 67788e01, evidence swf-proto-retail-20261113/v2-67788e01, kept outside the repository):
 // greens 1, 4, 6, 7, 8, 9; reds 2, 3, 5; `done` every time; no fault. No game content is used.

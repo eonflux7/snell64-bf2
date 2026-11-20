@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Client test tool: a scripted input source for unattended client
-// runs (docs/macos-c-input-script.md). Off unless BF2_INPUT_SCRIPT=<file> is set. The platform host
+// runs (docs/archive/macos-c-input-script.md). Off unless BF2_INPUT_SCRIPT=<file> is set. The platform host
 // runs one script tick per pump and turns its actions into the input its real devices produce:
 //   macOS   CocoaHost (Platform/macOS) builds HostKeyEvent, HostTextEvent, HostMouse*Event and
 //           HostRawMouseEvent values for the window-message source and the Mac input devices.

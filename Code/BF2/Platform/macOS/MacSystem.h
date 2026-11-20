@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] macOS port: process and dialog services the client's Win32 call sites
 // used (ShellExecuteA on its own executable, MessageBoxA). Plain C++; the implementation is
-// MacSystem.cpp. See docs/macos-port.md, "Win32 and CRT items (S2.5/S2.8)".
+// MacSystem.cpp. See docs/archive/macos-port.md, "Win32 and CRT items (S2.5/S2.8)".
 
 #ifndef PLATFORM_MACOS_MACSYSTEM_H
 #define PLATFORM_MACOS_MACSYSTEM_H

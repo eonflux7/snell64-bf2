@@ -1,5 +1,5 @@
 // Vehicle urgency helpers shared by the change/enter-vehicle behaviours (BBChange). Package A-core
-// (docs/macos-ai-behaviour-plan.md); TU VehicleUrgencyCalculator.cpp, libaidll.so 0x2265E0..0x228EF0.
+// (docs/archive/macos-ai-behaviour-plan.md); TU VehicleUrgencyCalculator.cpp, libaidll.so 0x2265E0..0x228EF0.
 // The image has no header symbol; the free functions are in namespace dice::hfe::ai.
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOUR_VEHICLEURGENCYCALCULATOR_H

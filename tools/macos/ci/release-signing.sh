@@ -1,6 +1,6 @@
 #!/bin/bash
 # [CHOSEN, not recovered] Release-only Developer ID signing and notarization for the macOS CI jobs
-# (.github/workflows/build.yml, docs/ci-releases.md). Ad-hoc CI runs never call this script.
+# (.github/workflows/build.yml, docs/archive/ci-releases.md). Ad-hoc CI runs never call this script.
 #
 #   release-signing.sh import             MACOS_CERT_P12 (base64 .p12), MACOS_CERT_PASSWORD
 #                                          -> temporary keychain; BF2_SIGN_IDENTITY to GITHUB_ENV

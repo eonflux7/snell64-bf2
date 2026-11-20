@@ -43,8 +43,8 @@ built.
 - The plugin targets compile with `/O2` (`BF2_PLUGIN_OPTIMIZE`, default on); the `.cmd` scripts
   build without optimisation. RendDX9's seam build (`BF2_GFX_SEAM`) still uses `renddx9.cmd`.
 
-OpenBF2's toolchain notes, [docs/building.md](docs/building.md) and
-[docs/getting-started.md](docs/getting-started.md), still describe the toolchain itself.
+OpenBF2's toolchain notes, [docs/archive/building.md](docs/archive/building.md) and
+[docs/archive/getting-started.md](docs/archive/getting-started.md), still describe the toolchain itself.
 
 ## Running
 
@@ -72,7 +72,7 @@ B2BF/OpenBF2 ─► kr4uzi/OpenBF2 ─► + realitymod/OpenBF2 PR #1 ─► open
 ```
 
 OpenBF2 reconstructs the Battlefield 2 1.50 engine from the shipped binaries; this project would not
-exist without it. It is no longer merged in. Its documentation remains under [docs/](docs/README.md)
+exist without it. It is no longer merged in. Its documentation remains under [docs/archive/](docs/archive/README.md)
 as reference; this project's own is in [docs/eon64/](docs/eon64/README.md).
 
 ## Contributing

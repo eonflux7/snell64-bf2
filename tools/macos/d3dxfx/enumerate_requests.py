@@ -6,7 +6,7 @@ content, every (root bytes, macros, include bytes, flags) request the macOS clie
 would hand to the effect cache, per video-quality configuration. Zip archives are
 read in place; nothing is written to the game folder. Outputs go below out/.
 
-The grammar and its code references are documented in docs/macos-c-fx-permutations.md.
+The grammar and its code references are documented in docs/archive/macos-c-fx-permutations.md.
 This models the Metal device's reported caps (Platform/Gfx/Metal/Device.cpp) and
 the default settings (no debug defines, GSQuickShaderPermutation and
 GSDeferredShaderPermutation false, GSRenderPath 3). It does not run the engine.

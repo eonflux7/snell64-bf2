@@ -1,4 +1,4 @@
-# [TEMP] demo-record: the demo gate's recording phase (demo_cycle.py; docs/tracks/game/demo.md).
+# [TEMP] demo-record: the demo gate's recording phase (demo_cycle.py; docs/archive/tracks/game/demo.md).
 # The joined player spawns, then moves and fires (play-combat's moves), so the recorded round has
 # motion next to a player the playback camera can follow. The bots move on their own (no
 # --ai-spawn-only in phase 1).

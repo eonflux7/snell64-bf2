@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] macOS port: the CryptProtectData/CryptUnprotectData counterpart for the
 // profile password (Game/PasswordCodec.cpp) and the CD key (Game/MatchMaking/Client/CdKeyStore.cpp).
-// Owner decision and options: docs/macos-port.md, "Protected profile data (DPAPI)".
+// Owner decision and options: docs/archive/macos-port.md, "Protected profile data (DPAPI)".
 //
 // A protected blob is "OBF2", a version byte (1), a 16-byte IV, the AES-256-CBC (PKCS#7)
 // ciphertext and an HMAC-SHA256 over everything before it. The two 256-bit keys are random and

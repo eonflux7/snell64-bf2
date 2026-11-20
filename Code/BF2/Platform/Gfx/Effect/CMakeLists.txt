@@ -80,7 +80,7 @@ if(NOT BF2_FX_NATIVE_AVAILABLE AND BF2_MACOS_LINK_RENDDX9)
         "Missing or incompatible ${CMAKE_OSX_ARCHITECTURES} vkd3d-shader/MojoShader dependencies at: ${_nd}\n"
         "Build offline with: sh tools/macos/nativefx/build.sh [x86_64|arm64|universal]\n"
         "This needs local sources in out/third_party/vkd3d and out/third_party/mojoshader; "
-        "no downloads or installs are performed. See docs/building.md (macOS).\n"
+        "no downloads or installs are performed. See docs/archive/building.md (macOS).\n"
         "Or configure with -DBF2_FX_NATIVE_DEPS=/absolute/path/to/nativefx containing "
         "vkd3d/.libs/libvkd3d-{shader,common}.a, vkd3d-src/include/vkd3d_shader.h, "
         "mojo/libmojoshader.a and mojo-src/mojoshader.h.\n"

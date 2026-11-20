@@ -2,7 +2,7 @@
 // grenade warning: once BotNavigation reports one, the behaviour wins with urgency 1000 until
 // 5 s after the grenade's time has passed.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md.
+// docs/archive/macos-ai-behaviour-plan.md.
 
 #include "BBRandom.h"
 

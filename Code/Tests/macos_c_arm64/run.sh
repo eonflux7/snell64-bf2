@@ -312,7 +312,7 @@ summarize() {   # summarize NAME HARNESS_EXIT RUN_DIR
             echo "   not in the Intel gate run: $( [ -n "$new" ] && echo "$new" | wc -l | tr -d ' ' || echo 0)"
             [ -n "$new" ] && echo "$new" | sed 's/^/     NEW /' | cut -c1-200
         fi
-        # arm64 watch list (docs/macos-c-arm64-client.md): x87 emulation, conversions, dispatch.
+        # arm64 watch list (docs/archive/macos-c-arm64-client.md): x87 emulation, conversions, dispatch.
         echo "   watch-list lines (ExtendedFloat, bf2x87, SIGFPE, pure virtual, EXC_):"
         grep -h -n -i -E 'ExtendedFloat|bf2x87|SIGFPE|floating point exception|pure virtual|EXC_(BAD|ARITH)' \
             "$run/client.log" "$run/server.pty.log" 2>/dev/null | head -10 | cut -c1-200 | sed 's/^/     /'
