@@ -154,7 +154,8 @@ Design:
     distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
     horizon, all under aerial perspective. Static meshes go on past it too, at their coarsest LODs,
     culled by their size on screen (owner, 2026-11-20: a city that dissolves while the hills behind
-    it stay looks wrong); vehicles, soldiers and vegetation end at the limit. Aircraft
+    it stay looks wrong); trees and roads too, overgrowth to its own range (owner, 2026-11-20);
+    vehicles, soldiers, particles and decals end at the limit. Aircraft
     see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
     the land's shape is visible further, targets are not.
 - **Thermals.** Thermal vision keeps its own formula and takes none of this.

@@ -181,7 +181,8 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    Owner's first look, 2026-11-20: far water a moving grid from high up, the surrounding ring
    popping as the camera turned, static meshes wrongly cut (they should go on at their coarsest
    LOD). Decided: static meshes go on past the limit, culled by their size on screen; vehicles,
-   soldiers, vegetation, roads, particles and decals still end there. Fixed 2026-11-20:
+   soldiers, vegetation, roads, particles and decals still end there (trees and roads changed
+   below). Fixed 2026-11-20:
    the haze past fog end integrated in closed form along each pixel's ray (`RaAerialHaze`,
    c199; the per-tile extrapolation had amplified the tiles into stripes); the scenery frustum
    built from the current view at each call (the cascades' cull had switched it off before the
@@ -191,9 +192,17 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    surrounding slot ends in sea, open, sunlit and opaque; static meshes queried out to 40 km and
    culled by `renderer.contributionCull`; bundled and skinned meshes past the cut not submitted.
    In game on Muttrah City (`seahigh`, a new view 600 m over the bay; `ridges`): the sea to the
-   horizon without a seam, the city to the far end of the bay. Not yet seen by the owner. Left:
-   the far ground ring (land past the ring is sky); trees past the limit (overgrowth, still cut);
-   the dither's look; jets and anti-air; device resets; the cost of statics and terrain to 40 km.
+   horizon without a seam, the city to the far end of the bay.
+   Owner, 2026-11-20: static meshes still had a flat wall (cranes gone looking straight at them,
+   back when turning); trees and roads should go on too. Fixed: static meshes' per-material test
+   used the camera's frustum, whose flat far plane sat at the view distance; it is the scenery
+   frustum now (`rendererSubmitCullFrustum`). Roads' chunks and overgrowth cells use it too, and
+   the leaf, trunk and road shaders no longer cut; overgrowth ends at its own range
+   (`Overgrowth.viewDistance`, 500 m on Muttrah). Vehicles, soldiers, particles and decals still
+   end at the limit. In game on Muttrah City (`ridges`): the city and the shore road to the far
+   end of the bay. Not yet seen by the owner. Left: the far ground ring (land past the ring is
+   sky); vegetation past overgrowth's own range (impostors, if wanted); the dither's look; jets
+   and anti-air; device resets; the cost of statics, roads and terrain to 40 km.
 6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
    `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
    acceptance if they do not pay for their cost.
