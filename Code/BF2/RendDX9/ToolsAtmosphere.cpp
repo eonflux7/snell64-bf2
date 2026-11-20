@@ -234,7 +234,7 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     }
     std::fprintf(f, "# tools.atmosphere (render milestone 11): the fit and its tables as drawn\n");
     std::fprintf(f, "[fit] %.0f ms; reference height %.1f m; fog end %.0f m\n", a.fitMs, a.refHeight, a.fogEnd);
-    std::fprintf(f, "[fit] rayleigh tint x Earth %.4f %.4f %.4f\n", a.rayleigh[0], a.rayleigh[1], a.rayleigh[2]);
+    std::fprintf(f, "[fit] rayleigh x Earth %.4f %.4f %.4f (tint x density)\n", a.rayleigh[0], a.rayleigh[1], a.rayleigh[2]);
     std::fprintf(f, "[fit] sky gain %.4f, applied %.4f (renderer.skyGainBlend %.2f)\n", a.skyGain,
                  a.skyGainApplied, rendererSkyGainBlend());
     std::fprintf(f, "[fit] sun above the atmosphere %.4f %.4f %.4f (irradiance)\n", a.sunTop[0], a.sunTop[1], a.sunTop[2]);

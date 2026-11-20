@@ -6,8 +6,8 @@
 // drives aerial perspective. At load the model is fitted to the level's authored light:
 //   1. sunlight above the atmosphere = the authored sun (Lightmanager.staticSunColor, the sunlight
 //      at the ground) over the sky's transmittance at the sun's elevation, clamped to >= 0.1;
-//   2. the sky: Earth's densities, the Rayleigh tint fitted to the dome texture's zenith colour
-//      (its clear-sky texels' chromaticity), and one sky gain scaling the scattered light so the horizon's
+//   2. the sky: the Rayleigh tint and density fitted to the dome texture's zenith colour (its
+//      clear-sky texels' chromaticity, and its luminance over the fog colour's), and one sky gain scaling the scattered light so the horizon's
 //      luminance meets the authored fog colour's, applied as gain^renderer.skyGainBlend;
 //   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
 //      (the horizon's at and below it), so terrain at fog end meets the sky without a seam.
@@ -185,6 +185,8 @@ V3 transmittanceMarch(const SkyParams& p, double r, double mu, int steps)
 // - Multiple scattering (kMultiScatterSize square): x the sun cosine (0 = -1, 1 = +1), y the
 //   altitude (0 ground, 1 top); Hillaire's L2 / (1 - fms) for unit sunlight.
 const int kFitTransW = 64, kFitTransH = 32;
+// The fitted Rayleigh density's range, x Earth's (fitSky).
+const double kFitDensityMin = 0.5, kFitDensityMax = 10.0;
 const int kFitMsSize = 16;
 
 struct CpuTables
@@ -567,6 +569,11 @@ void readTerrain(const void* terrainPtr)
 }
 
 double luminance(const V3& c) { return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z; }
+// The Rayleigh density x Earth's (the tint keeps Earth's luminance; fitSky).
+double rayleighDensity(const SkyParams& p)
+{
+    return luminance(p.rayleigh) / luminance(v3(kEarthRayleigh[0], kEarthRayleigh[1], kEarthRayleigh[2]));
+}
 
 struct FitContext
 {
@@ -607,12 +614,17 @@ void evaluate(const SkyParams& p, FitContext& f, V3& zenith, V3& horizon)
     horizon = sum * (1.0 / azimuths) * f.sunTop;
 }
 
-// 2. The sky. Earth's densities; the Rayleigh scattering's tint (per channel, its luminance kept
-// at Earth's) set so the zenith's chromaticity is the dome's. Brightness is not fitted: the
-// authored dome and fog are 1.7-2.9x brighter by day than a physical sky under the authored sun
-// (and 10x darker at night), so the sky gain carries the level instead (owner, 2026-11-20).
-// A dome too dark to have a colour (night) keeps Earth's tint.
-SkyParams fitTint(FitContext& f, const V3& zenithTarget, bool useZenith, const V3& albedo)
+// 2. The sky. The Rayleigh scattering's tint (per channel) set so the zenith's chromaticity is the
+// dome's, and its density (a scale on Earth's) so the zenith's luminance over the horizon's is the
+// dome's zenith over the fog colour: a denser atmosphere brightens the zenith much more than the
+// horizon, which is already near saturation. The physical sky's zenith under a high sun is 5-7x
+// darker than its horizon, while authored domes are nearly as bright overhead (Kashan 0.7), so
+// with Earth's density the sky read dark grey. The overall level is the sky gain's (fit, below):
+// the authored dome and fog are 1.7-2.9x brighter by day than a physical sky under the authored
+// sun (and 10x darker at night) (owner, 2026-11-20). A dome too dark to have a colour (night)
+// keeps Earth's tint and density.
+SkyParams fitSky(FitContext& f, const V3& zenithTarget, bool useZenith, const V3& horizonTarget,
+                 const V3& albedo)
 {
     SkyParams p;
     p.rayleigh = v3(kEarthRayleigh[0], kEarthRayleigh[1], kEarthRayleigh[2]);
@@ -621,8 +633,10 @@ SkyParams fitTint(FitContext& f, const V3& zenithTarget, bool useZenith, const V
     if (!useZenith || luminance(zenithTarget) < 1e-4)
         return p;
     const V3 earth = p.rayleigh;
+    const double ratioTarget = luminance(zenithTarget) / std::max(luminance(horizonTarget), 1e-9);
     V3 k = v3(1, 1, 1);
-    for (int round = 0; round < 3; ++round)
+    double density = 1.0;
+    for (int round = 0; round < 4; ++round)
     {
         buildTransmittance(p, f.tables, kFitTransW, kFitTransH);
         buildMultiScatter(p, f.tables, kFitMsSize);
@@ -636,7 +650,10 @@ SkyParams fitTint(FitContext& f, const V3& zenithTarget, bool useZenith, const V
             k = v3(std::min(std::max(k.x, 0.2), 5.0), std::min(std::max(k.y, 0.2), 5.0),
                    std::min(std::max(k.z, 0.2), 5.0));
             k = k * (luminance(earth) / luminance(earth * k));
-            p.rayleigh = earth * k;
+            const double ratio = luminance(zenith) / std::max(luminance(horizon), 1e-9);
+            density *= std::pow(ratioTarget / std::max(ratio, 1e-6), 0.8);
+            density = std::min(std::max(density, kFitDensityMin), kFitDensityMax);
+            p.rayleigh = earth * k * density;
         }
     }
     return p;
@@ -659,7 +676,7 @@ void fit()
     const V3 horizonTarget = vmax(v3(srgbToLinear(in.fog[0] / 255.0), srgbToLinear(in.fog[1] / 255.0),
                                      srgbToLinear(in.fog[2] / 255.0)), 1e-5);
 
-    g.sky = fitTint(f, g.zenith, g.haveZenith, g.groundAlbedo);
+    g.sky = fitSky(f, g.zenith, g.haveZenith, horizonTarget, g.groundAlbedo);
     buildTransmittance(g.sky, f.tables, kFitTransW, kFitTransH);
     buildMultiScatter(g.sky, f.tables, kFitMsSize);
     evaluate(g.sky, f, g.zenithModel, g.horizonModel);
@@ -684,14 +701,14 @@ void fit()
 
     std::fprintf(stderr,
         "[ATMOS] fit and tables %.0f ms: sun elevation %.1f deg, reference height %.1f m, fog end %.0f m\n"
-        "[ATMOS]   rayleigh tint x Earth %.2f %.2f %.2f; sky gain %.2f\n"
+        "[ATMOS]   rayleigh x Earth %.2f %.2f %.2f (density %.2f); sky gain %.2f\n"
         "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance)\n"
         "[ATMOS]   zenith target %.4f %.4f %.4f%s model %.4f %.4f %.4f\n"
         "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f (before the gain)\n"
         "[ATMOS]   ground albedo %.3f %.3f %.3f\n",
         g.fitMs, elevation * 180.0 / kPi, g.refHeight, in.fogEnd,
         g.sky.rayleigh.x / kEarthRayleigh[0], g.sky.rayleigh.y / kEarthRayleigh[1],
-        g.sky.rayleigh.z / kEarthRayleigh[2], g.skyGain,
+        g.sky.rayleigh.z / kEarthRayleigh[2], rayleighDensity(g.sky), g.skyGain,
         f.sunGround.x, f.sunGround.y, f.sunGround.z, g.sunTop.x, g.sunTop.y, g.sunTop.z,
         g.zenith.x, g.zenith.y, g.zenith.z, !g.haveZenith ? " (unread)" : g.zenithClear ? " (clear texels)" : " (overcast, whole band)",
         g.zenithModel.x, g.zenithModel.y, g.zenithModel.z,

@@ -100,9 +100,12 @@ Design:
   would turn the whole sky into haze, so they cannot be one.
 - **Fit at load.** (1) Sunlight above the atmosphere = authored sun / transmittance at the sun's
   elevation, the transmittance clamped to at least 0.1 per channel (low suns, night layers),
-  evaluated with the sky's own parameters at every step of (2). (2) The sky: Earth's densities;
-  the Rayleigh tint (per channel, its luminance kept at Earth's) fitted to the dome's zenith
-  chromaticity; a dome too dark to have a colour (night) keeps Earth's tint. One **sky gain** per
+  evaluated with the sky's own parameters at every step of (2). (2) The sky: the Rayleigh tint (per
+  channel) fitted to the dome's zenith chromaticity, and its density (x Earth's, 0.5-10) so the
+  zenith's luminance over the horizon's is the dome's zenith over the fog colour: the physical
+  zenith under a high sun is 5-7x darker than its horizon, authored domes nearly as bright
+  overhead, and with Earth's density Kashan's sky read dark grey (2026-11-20). A dome too dark to
+  have a colour (night) keeps Earth's tint and density. One **sky gain** per
   level scales the scattered light so the azimuth-averaged horizon at 1° meets the authored fog
   colour's luminance, applied as gain^`renderer.skyGainBlend` (0 a physical sky, 1 the authored
   level; default 0.5, settled at task 3's sky A/B). The sun (surfaces, disc) is never scaled.
