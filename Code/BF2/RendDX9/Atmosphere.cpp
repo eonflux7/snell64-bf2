@@ -73,8 +73,9 @@ const double kMieAbsorption = 4.40e-3;                               // 1/km at 
 const double kMieG = 0.8;
 const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
 
-// The haze layer: one shape for every level, set by renderer.hazeDepth, renderer.hazeFalloff and
-// renderer.hazeSteepen (tuned at the aerial-perspective A/B, task 4); the density follows fog end.
+// The haze layer: one shape for every level, set by renderer.hazeDepth and renderer.hazeFalloff
+// (tuned at the aerial-perspective A/B, task 4); the density follows fog end. It stays exponential
+// past fog end: the view distance is cut by the radial dither (renderer.viewDistance, task 5).
 
 // Sizes, as RaAtmosphere.fx defines them.
 const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
@@ -440,9 +441,9 @@ struct State
 State g = {};
 bool g_enabled = true;   // renderer.atmosphere
 float g_skyGainBlend = 0.5f;   // renderer.skyGainBlend
-float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end, before steepening
+float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end
 float g_hazeFalloff = 400.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
-float g_hazeSteepen = 0.75f;   // renderer.hazeSteepen: share of fog end where the steepening begins
+bool g_viewDistanceCut = true; // renderer.viewDistance: the radial cut at fog end (task 5 A/B)
 
 // 1/m at the reference height.
 float hazeDensity()
@@ -781,7 +782,7 @@ void fillConstants(float c[16][4])
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
         { hazeDensity(), 1.0f / g_hazeFalloff, float(g.refHeight), in.fogEnd },
-        { g_hazeSteepen, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 0.0f, 0.0f },   // unused
         { in.sun[0], in.sun[1], in.sun[2], 0.0f },
         { in.sky[0], in.sky[1], in.sky[2], 0.0f },
     };
@@ -907,9 +908,9 @@ float& rendererHazeFalloff()
     return g_hazeFalloff;
 }
 
-float& rendererHazeSteepen()
+bool& rendererViewDistanceCut()
 {
-    return g_hazeSteepen;
+    return g_viewDistanceCut;
 }
 
 void rendererAtmosphereFrame()
@@ -972,7 +973,7 @@ void rendererAtmosphereAerialConstants(float c[4])
     c[0] = 1.0f / vp[2];
     c[1] = 1.0f / vp[3];
     c[2] = 1.0f / g.inputs.fogEnd;
-    c[3] = 1.0f;
+    c[3] = g_viewDistanceCut ? 2.0f : 1.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
 }
 
 void rendererAtmosphereRelease()

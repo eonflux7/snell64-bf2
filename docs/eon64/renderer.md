@@ -107,9 +107,10 @@ Design:
   level; default 0.5, settled at task 3's sky A/B). The sun (surfaces, disc) is never scaled.
   (3) The haze layer: density from fog end, albedo from the authored fog colour, one height
   falloff for all levels, tuned at the aerial-perspective A/B.
-- **Haze curve.** Exponential in optical depth, steepened only over the last stretch before fog end
-  so it reaches full haze there. Retail's fog start is not used: the exponential curve keeps the
-  near range clear.
+- **Haze curve.** Exponential in optical depth throughout, continuing past fog end for the scenery
+  there; objects end at fog end by the radial dither, not by full haze (owner, 2026-11-20, at task 5:
+  the steepening to full haze at fog end would also hide the land drawn past the limit; task 4 had
+  steepened it). Retail's fog start is not used: the exponential curve keeps the near range clear.
 - **Tables.** Transmittance (256x64), multiple scattering (32x32) and sky view (192x108, taken at
   the terrain's mean height) built on the CPU with the fit (the sun does not move), by the same
   code the fit evaluates, into managed textures that survive device resets. Per frame only the

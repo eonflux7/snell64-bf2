@@ -1407,10 +1407,10 @@ float getHazeFalloff() { return rendererHazeFalloff(); }
 void setHazeFalloff(float value) { rendererHazeFalloff() = clampf(value, 25.0f, 5000.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeFalloff, float, true, getHazeFalloff(), setHazeFalloff, 25.0f, 5000.0f,
                                  kRendererConsoleTag)
-float getHazeSteepen() { return rendererHazeSteepen(); }
-void setHazeSteepen(float value) { rendererHazeSteepen() = clampf(value, 0.0f, 0.99f); }
-BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeSteepen, float, true, getHazeSteepen(), setHazeSteepen, 0.0f, 0.99f,
-                                 kRendererConsoleTag)
+// The radial view distance (render milestone 11 task 5 A/B; deleted at acceptance).
+bool getViewDistanceCut() { return rendererViewDistanceCut(); }
+void setViewDistanceCut(bool value) { rendererViewDistanceCut() = value; }
+BF2_CONSOLE_PROPERTY_FN(viewDistance, bool, true, getViewDistanceCut(), setViewDistanceCut, kRendererConsoleTag)
 
 } // anonymous namespace
 
@@ -1428,9 +1428,9 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
         { "atmosphere", "Atmosphere model (render milestone 11): sky and haze fitted to the level, its tables and aerial-perspective atlas" },
-        { "hazeDepth", "Haze: optical depth at fog end on a level ray, before the steepening to full haze (higher: hazier near)" },
+        { "hazeDepth", "Haze: optical depth at fog end on a level ray (higher: hazier near)" },
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
-        { "hazeSteepen", "Haze: share of fog end where it steepens to full haze at fog end" },
+        { "viewDistance", "View distance (render milestone 11 A/B): geometry dithered out over the last 15 % before fog end, by distance from the camera" },
         { "skyGainBlend", "How far the sky is brought to the level's authored brightness: 0 physical, 1 the fog colour at the horizon (log scale)" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },

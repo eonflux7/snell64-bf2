@@ -807,7 +807,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/eon64/renderer-pipeline.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 8
+#define RA_CONTRACT_VERSION 9
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -826,12 +826,12 @@ bool& rendererAtmosphereEnabled();
 // The share of the sky gain applied, in log space: 0 a physical sky, 1 the authored level
 // (renderer.skyGainBlend).
 float& rendererSkyGainBlend();
-// The haze's shape (renderer.hazeDepth, renderer.hazeFalloff, renderer.hazeSteepen): its horizontal
-// optical depth at fog end before the steepening, the height (m) over which its density falls by e,
-// and the share of fog end where the steepening to full haze begins.
+// The haze's shape (renderer.hazeDepth, renderer.hazeFalloff): its horizontal optical depth at fog
+// end and the height (m) over which its density falls by e.
 float& rendererHazeDepth();
 float& rendererHazeFalloff();
-float& rendererHazeSteepen();
+// The radial view-distance cut (renderer.viewDistance, render milestone 11 task 5): RaAerial.w 2.
+bool& rendererViewDistanceCut();
 void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
