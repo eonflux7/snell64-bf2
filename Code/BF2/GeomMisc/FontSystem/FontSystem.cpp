@@ -406,8 +406,10 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
         return;
     // [CHOSEN, not recovered] A whole-number scale other than 1 (no retail caller sets one; the
     // HiDPI console does) draws whole-pixel glyph blocks: biased texture coordinates and point
-    // magnification. A fractional scale keeps the shipped coordinates and the pass's linear
-    // filter, so the glyphs are not uneven.
+    // magnification. Only whole-number scales are supported. Any other scale has no caller and
+    // falls through to the shipped coordinates and the pass's linear filter; u1/v1 then lie on the
+    // centre of the texel after the cell, so a magnified quad blends in the next atlas cell's
+    // first column (BF1942.font has no gutter) - inset them before a fractional scale gets a caller.
     const bool scaled = (m_scaleX != 1.0f || m_scaleY != 1.0f) &&
                         m_scaleX == ::floorf(m_scaleX) && m_scaleY == ::floorf(m_scaleY);
 

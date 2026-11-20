@@ -127,14 +127,17 @@ namespace {
 // value until the player saves new settings". When the renderer runs a profile resolution it does
 // not list as the closest listed entry (VideoOptions::setDynamicOption's fallback), the applied
 // record holds that entry, so the menu shows the mode in use; Video.con keeps the stored value
-// until a resolution is set again (setResolution: Video.con, the options page, the console). One
-// record: VideoSettings is a singleton.
+// until a resolution that was set (setResolution: Video.con, the options page, the console; or
+// setDefaults for a new profile) is applied. A value picked on the options page and cancelled, or
+// set while a game is loaded, applies nothing and keeps the record. One record: VideoSettings is
+// a singleton.
 struct ResolutionSubstitute
 {
     std::string stored;        // the profile's value the renderer does not list
     std::string substitute;    // the entry the renderer selected for it
 };
 ResolutionSubstitute s_resolutionSubstitute;
+bool s_resolutionSet = false;  // a resolution was set since the last apply or revert
 
 // setDynamicOption's own match: a case-insensitive prefix ("800x600" selects "800x600@60Hz").
 bool selectsEntry(const std::string& requested, const std::string& entry)
@@ -197,6 +200,13 @@ bool VideoSettings::hasChanges() { return m_pending.differsFrom(m_current); }
 bool VideoSettings::apply()
 {
     bool result = true;
+    // [CHOSEN, not recovered] issue #4: applying a resolution that was set ends the substitute
+    // record, also when nothing else changed (a profile whose Video.con names the previous
+    // profile's substitute). Nothing is pushed while a game is loaded, so the record stays then.
+    const bool resolutionSet = s_resolutionSet;
+    s_resolutionSet = false;
+    if (resolutionSet && !game)
+        s_resolutionSubstitute = ResolutionSubstitute();
     if (!hasChanges())
         return result;
     if (needsRestart())
@@ -274,6 +284,7 @@ void selectMaxAntialiasing(IVideoOptions* options)
 // createProfile 4AAAA8); existing profiles keep their Video.con.
 void VideoSettings::setDefaults()
 {
+    s_resolutionSet = true;    // [CHOSEN] issue #4: a new profile ends the previous profile's record
     m_pending.terrainQuality = 2;
     m_pending.geometryQuality = 2;
     m_pending.lightingQuality = 2;
@@ -312,8 +323,8 @@ void VideoSettings::setDefaults()
                  m_pending.resolution.c_str(), m_pending.antialiasing.c_str());
 }
 
-// (20 B)
-void VideoSettings::revertChanges() { m_pending = m_current; }
+// (20 B) [CHOSEN, not recovered] A reverted resolution choice no longer counts as set (issue #4).
+void VideoSettings::revertChanges() { m_pending = m_current; s_resolutionSet = false; }
 
 // (278 B): nothing is pushed while a game is loaded. Otherwise the eight rows in index order,
 // the resolution (dynamic option 1), the antialiasing (dynamic option 0) only while no level is
@@ -418,11 +429,11 @@ void VideoSettings::setTextureFilteringQuality(int value) { m_pending.textureFil
 // +80..+94: the two pending strings (copied out, assigned from the by-value argument) and the scale.
 std::string VideoSettings::getResolution() { return m_pending.resolution; }
 // [CHOSEN, not recovered] A resolution set from Video.con, the options page or the console ends a
-// substitute record (issue #4, noteResolutionSubstitute).
+// substitute record once it is applied (issue #4, apply).
 void VideoSettings::setResolution(std::string value)
 {
     m_pending.resolution = value;
-    s_resolutionSubstitute = ResolutionSubstitute();
+    s_resolutionSet = true;
 }
 std::string VideoSettings::getAntialiasing() { return m_pending.antialiasing; }
 void VideoSettings::setAntialiasing(std::string value) { m_pending.antialiasing = value; }

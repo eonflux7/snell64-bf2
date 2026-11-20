@@ -3183,6 +3183,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_runtime_pair
             bf2_registry_dat_check
             bf2_hud_widescreen_check
+            bf2_display_mode_policy_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM
