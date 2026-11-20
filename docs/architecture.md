@@ -183,6 +183,21 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   at a whole-number factor (linear otherwise, so 800x600 or 1650x1050 full screen on
   a Retina panel is not jagged).
 
+## Client menu mouse queue
+
+`[CHOSEN, not recovered]`: `SwiffPlayer::update` hands the movie one queued mouse sample
+per frame, as recovered, after dropping queued samples that the next one repeats
+(`External/gameswf/SwiffPlayer/QueuedMouse.h`). The loading and end-of-round screen
+(`BetweenRoundsLogic`) queues the pointer state once per 30 Hz input tick, so below 30
+frames a second each frame queues the same state more than once. Without the rule the
+queue grows on every frame and the movie falls behind the pointer: at 17 frames a second
+a click on JOIN GAME a minute after the level loaded takes most of a minute to reach
+the button. The movie still receives every distinct pointer state and button change, in
+order and one per frame. A frame that holds one input tick at most, the normal case
+above 30 frames a second, queues nothing the rule would drop.
+`bf2_swiff_queued_mouse_check` models both rates. A press and its release that arrive
+within one frame are still not seen by that screen, as recovered.
+
 ## Client menu disconnect
 
 The stock `mainMenu.swf` disconnect page queues `dice.bf2.Logic.disconnectGame`
