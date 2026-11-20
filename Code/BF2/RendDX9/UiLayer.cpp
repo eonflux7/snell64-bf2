@@ -1,4 +1,4 @@
-// [UI] The fork's in-game UI on Dear ImGui (docs/eon64/ui.md). Not part of retail BF2.
+// [UI] The fork's in-game UI on Dear ImGui (docs/lanes/ui.md). Not part of retail BF2.
 //
 // One ImGui context, created at the first Present. The menu key (renderer.uiMenuKey, Insert by
 // default) opens and closes the menu; the panels are in UiDebug.cpp and UiConsole.cpp (UiPanels.h).

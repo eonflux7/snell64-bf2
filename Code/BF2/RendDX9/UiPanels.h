@@ -1,4 +1,4 @@
-// [UI] The panels the UI layer draws (docs/eon64/ui.md). Not part of retail BF2.
+// [UI] The panels the UI layer draws (docs/lanes/ui.md). Not part of retail BF2.
 // Internal to RendDX9: UiLayer.cpp owns the ImGui context and calls these between NewFrame and
 // Render; the hooks around Present run every frame and do nothing while nothing is shown.
 #pragma once

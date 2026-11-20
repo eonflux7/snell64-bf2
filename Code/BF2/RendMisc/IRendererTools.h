@@ -1,4 +1,4 @@
-// [TOOLS] What the view tool (docs/eon64/tools.md) asks of the renderer. Not part of retail BF2.
+// [TOOLS] What the view tool (docs/lanes/tools.md) asks of the renderer. Not part of retail BF2.
 //
 // BF2.exe asks the renderer singleton for this interface (IBase::queryInterface(IID_IRendererTools)),
 // as for IRendererUi. No export changes: the plugin ABI is untouched.
@@ -37,7 +37,7 @@ public:
     // written (size) or what failed. Valid until the next request.
     virtual int toolsShotState(const char*& message) const = 0;
 
-    // Benchmark recording (docs/eon64/tools.md#3-benchmark-path). Start clears the last
+    // Benchmark recording (docs/lanes/tools.md#3-benchmark-path). Start clears the last
     // recording and turns the GPU pass timers on; from then on each presented frame whose tag is
     // positive is recorded. Tag sets the tag for the frames presented from now on (0: not
     // recorded). Stop ends the recording and turns the timers off unless something else uses
@@ -53,14 +53,14 @@ public:
     virtual const char* toolsBenchSpanName(unsigned int span) const = 0;
     virtual float toolsBenchSpanMs(unsigned int frame, unsigned int span) const = 0;
 
-    // Survey (docs/eon64/tools.md#survey): the next frame's water area is measured, then the
+    // Survey (docs/lanes/tools.md#survey): the next frame's water area is measured, then the
     // report on the loaded level is written to path (absolute; its directory exists). Replaces a
     // request not yet served; null cancels it. State: 0 waiting, 1 written, -1 failed; the
     // message is the path written or what failed. Valid until the next request.
     virtual void toolsRequestSurvey(const char* path) = 0;
     virtual int toolsSurveyState(const char*& message) const = 0;
 
-    // Atmosphere (docs/eon64/tools.md#atmosphere): writes render milestone 11's fit and tables to
+    // Atmosphere (docs/lanes/tools.md#atmosphere): writes render milestone 11's fit and tables to
     // base.txt and base-<table>.png (base absolute, its directory exists), at once. False when
     // nothing or not everything was written; the message is the file written or what failed.
     // Valid until the next call.

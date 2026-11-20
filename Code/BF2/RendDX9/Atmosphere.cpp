@@ -1,4 +1,4 @@
-// [RENDER] Atmosphere (render milestone 11, docs/eon64/renderer.md#11-atmosphere-sky-ibl-water-reflections).
+// [RENDER] Atmosphere (render milestone 11, docs/lanes/render.md#11-atmosphere-sky-ibl-water-reflections).
 // Not part of retail BF2.
 //
 // Two layers. The sky atmosphere (Rayleigh, Mie and ozone over a planet of Earth's size, in

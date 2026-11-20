@@ -230,7 +230,7 @@ struct SingleInstanceGuard
 // Active client menu, created by activateMenu and released by deactivateMenu.
 extern IMenuLogic* menuLogic;
 #if !DEDICATED
-// [UI] True while the fork's UI (RendDX9, docs/eon64/ui.md) has the mouse and keyboard.
+// [UI] True while the fork's UI (RendDX9, docs/lanes/ui.md) has the mouse and keyboard.
 bool uiCapturesInput();
 bool uiWantsMouse();     // [UI] the menu or the console window is shown: the mouse stays released
 #endif

@@ -1,4 +1,4 @@
-// [UI] The fork's in-game UI, as the game image sees it (docs/eon64/ui.md). Not part of retail BF2.
+// [UI] The fork's in-game UI, as the game image sees it (docs/lanes/ui.md). Not part of retail BF2.
 //
 // The UI lives in RendDX9, which owns the device and Present. BF2.exe owns input, so it asks the
 // renderer singleton for this interface (IBase::queryInterface(IID_IRendererUi)) and, while the UI
@@ -13,7 +13,7 @@ namespace dx9rend {
 // Fork-owned interface id; outside the ranges retail's Ids.h uses.
 const unsigned int IID_IRendererUi = 0xE6400001u;
 
-// [TOOLS] The view tool's views as the Views tab shows them (docs/eon64/tools.md#1-views). Read
+// [TOOLS] The view tool's views as the Views tab shows them (docs/lanes/tools.md#1-views). Read
 // only: the tab changes views through view.* console lines, as typed. Strings stay valid until the
 // next uiViewsRefresh.
 struct UiView

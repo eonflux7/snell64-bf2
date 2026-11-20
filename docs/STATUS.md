@@ -6,20 +6,20 @@ an open issue added or closed. When a milestone is accepted, its section here mo
 
 | Lane | Done | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) done; task 5 (view distance) in progress | [renderer.md](renderer.md#roadmap) |
-| `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](tools.md#milestones) |
-| `ui` | Milestones 1–4 accepted | — | [ui.md](ui.md#milestones) |
-| `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](perf-load.md#state) |
-| `perf` (frame) | `/O2` plugins, `tailField` table; per-draw cost taken by render milestone 9 | Parked | [perf-frame.md](perf-frame.md#plan) |
-| `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](compat.md#missing) |
-| `fix` | G–O, Q fixed | A, C–F open (packaging, build) | [upstream-fixes.md](upstream-fixes.md) |
+| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) done; task 5 (view distance) in progress | [PLAN.md](PLAN.md#render) |
+| `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](PLAN.md#tools) |
+| `ui` | Milestones 1–4 accepted | — | [ui.md](PLAN.md#ui) |
+| `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
+| `perf` (frame) | `/O2` plugins, `tailField` table; per-draw cost taken by render milestone 9 | Parked | [perf-frame.md](lanes/perf-frame.md#state) |
+| `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
+| `fix` | G–O, Q fixed | A, C–F open (packaging, build) | [fix.md](lanes/fix.md) |
 
 ## Current: `tools` milestone 3, benchmark path (cut)
 
 Order (owner, 2026-11-19, replacing "milestones 1–3 first"): views and `view.shot` are enough for
 still images; milestone 9's frame-rate loss shows while the camera moves (streaming, LOD switches,
 culling), so a repeatable camera path with a frame-time CSV comes next, then render milestone 9.
-Plan: [tools.md](tools.md#3-benchmark-path). Left for later: milestone 1 tasks 6–8, milestone 2,
+Plan: [tools.md](lanes/tools.md#3-benchmark-path). Left for later: milestone 1 tasks 6–8, milestone 2,
 and milestone 3's history file and acceptance check (the spread between runs is still reported).
 
 Tasks (1–3 done: paths, playback, their Views tab section and `bench.run` seen in game by the
@@ -48,7 +48,7 @@ owner, 2026-11-19, Muttrah City):
 
 ## Paused: `tools` milestone 1, views
 
-Plan: [tools.md](tools.md#1-views).
+Plan: [tools.md](lanes/tools.md#1-views).
 
 Found (2026-11-19):
 - Hook: `BF2Render::render` (`Game/Main/BF2Render.cpp`), after `setFarPlane` and before the
@@ -84,7 +84,7 @@ tried on Muttrah City by an agent: a view shot before the HUD and one with `tool
 
 The goal is a visibly more realistic image; plan, design and decisions (the model's sky, clear
 until milestone 12's clouds; authored sun colour kept; fog end stays the visibility limit):
-[renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections). One A/B console variable per
+[render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections). One A/B console variable per
 part while in development (`renderer.atmosphere`, `renderer.lightShafts`, `renderer.skyIbl`,
 `renderer.waterSsr`); old paths and the variables are deleted at acceptance. Intermediate tasks:
 one map, A/B shots at the reference views, no `GPU=1` runs. The owner judges each A/B by eye in
@@ -106,7 +106,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    water, a street with sun between buildings. Baseline: milestone 10's benches and shots of those
    views.
    Done 2026-11-20: `tools.survey` (`tools(survey)` commit, in game) run on the three maps, the night layer and
-   test_bootcamp; findings in [renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections).
+   test_bootcamp; findings in [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections).
    Reference views (placed by the owner with `view.save`; baseline shots `m10-<view>` by `view.shot`):
    test_bootcamp done 2026-11-20 on `gpm_cq 16` (China vs Russia, modern vehicles): `gloss`, `gloss2`,
    `glass`. Muttrah City done 2026-11-20 (`gpm_skirmish 16`): `sun`, `antisun`, `ridges`, `valley`,
@@ -118,7 +118,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    texture fetch. Tables on the debug overlay; `renderer.atmosphere`.
    Built 2026-11-20 (`render(atmosphere)`, `ui(debug)`, `tools(atmosphere)`; shaders): the fit as
    decided with the owner (Earth's air on every level since 2026-11-20, a per-level sky gain applied
-   as gain^`renderer.skyGainBlend`, default 0.5; [renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections));
+   as gain^`renderer.skyGainBlend`, default 0.5; [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections));
    the three load-time tables on the CPU (managed textures; pixel passes came out wrong, see the
    plan), the atlas a pixel pass with its march unrolled; A16B16G16R16F passes the vertex fetch check
    (filtered too). Checked by an agent on Muttrah City with `tools.atmosphere`: the tables match the
@@ -168,7 +168,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    landscape to the horizon instead of a fogged void; nothing pops at the limit.
    Decided with the owner, 2026-11-20: the haze is no longer steepened to full at fog end
    (`renderer.hazeSteepen` deleted); it stays exponential and carries on past fog end, and
-   objects end by the dither ([renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections)).
+   objects end by the dither ([render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections)).
    Built 2026-11-20 (`render(atmosphere)`, contract 9; shaders), A/B `renderer.viewDistance`:
    the cut (`Ra_ViewDistanceClip`, a 4x4 Bayer dither over the last 15 % by distance from the
    camera, in every opaque world effect and its prepass; particles, trails, decals and blended
@@ -237,7 +237,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
 Milestone 10 (terrain in one pass) accepted by the owner, 2026-11-20 (benches on the three maps and
 a visual check in game); the old terrain passes, `renderer.terrainOnePass`, the accumulation
 target's use, the culler's detail distance and `terrainCuller.lodSwitchDistance` deleted. As built,
-with its frame-time change: [renderer-pipeline.md](renderer-pipeline.md#terrain). The deletion
+with its frame-time change: [render.md](lanes/render.md#terrain). The deletion
 loaded by an agent on all three maps, 2026-11-20: Muttrah City views `mountain` (the same image as
 task 6's one-pass shot) and `roadbug` (wind and rooftops only), Fallujah West `city1`, Saaremaa
 `runway`; `bench1`/`bench` 8.39–8.48, 15.34 and 5.22 ms, no crash, no shader error.

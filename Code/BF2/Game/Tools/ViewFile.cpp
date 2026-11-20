@@ -1,4 +1,4 @@
-// [TOOLS] A map's view file; see ViewFile.h and docs/eon64/tools.md#1-views for the format:
+// [TOOLS] A map's view file; see ViewFile.h and docs/lanes/tools.md#1-views for the format:
 //
 //   # views for muttrah_city_2
 //   view market   pos=812.4,62.0,-311.9 yaw=134.5 pitch=-8 fov=75 | rooftop alpha fences

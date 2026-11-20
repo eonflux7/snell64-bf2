@@ -85,7 +85,7 @@
 #if !DEDICATED
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
-#include "../../RendMisc/IRendererUi.h"   // [UI] docs/eon64/ui.md
+#include "../../RendMisc/IRendererUi.h"   // [UI] docs/lanes/ui.md
 #include "../HudInformationLayer.h"
 #include "../Objects/Fx/PersistentExplosionEffectManager.h"
 #endif
@@ -2797,7 +2797,7 @@ void BF2Engine::stopRecording()
 #if !DEDICATED
 namespace {
 
-// [UI] The fork's UI (RendDX9, docs/eon64/ui.md). While its menu is open it has the mouse and the
+// [UI] The fork's UI (RendDX9, docs/lanes/ui.md). While its menu is open it has the mouse and the
 // keyboard: the game gets no input, as with the console, and the DirectInput mouse is released so
 // Windows delivers the cursor and its messages. The message pump (BF2.cpp) leaves the mouse out of
 // its per-frame activation meanwhile, as for the main menu, and re-acquires it when the menu closes.

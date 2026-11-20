@@ -1,4 +1,4 @@
-// [TOOLS] The view tool (docs/eon64/tools.md#1-views): camera override and free fly, tools
+// [TOOLS] The view tool (docs/lanes/tools.md#1-views): camera override and free fly, tools
 // milestone 1. Not part of retail BF2; client image only.
 //
 // The tool takes the render camera in BF2Render::render after the game has set it and before the

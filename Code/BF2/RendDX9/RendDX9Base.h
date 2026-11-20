@@ -805,7 +805,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // [RENDER] The renderer contract version, passed as the define RA_CONTRACT to every effect the
 // engine compiles (ShaderManager's define table and the Ra profile defines), so a shader set that
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
-// whenever the engine changes what the shaders may rely on; docs/eon64/renderer-pipeline.md lists
+// whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
 #define RA_CONTRACT_VERSION 9
 #define RA_CONTRACT_TEXT_(v) #v

@@ -1,5 +1,5 @@
 // [RENDER] The frame module: the scene's pass sequence, from the post-production prepare to the
-// HUD (docs/eon64/renderer-pipeline.md, Frame). Not part of retail BF2, whose renderFrame carried
+// HUD (docs/lanes/render.md, Frame). Not part of retail BF2, whose renderFrame carried
 // the passes inline; Renderer::renderFrame (BF2Render.cpp) keeps the per-frame updates before the
 // scene, the overlays after it, and Present.
 #pragma once

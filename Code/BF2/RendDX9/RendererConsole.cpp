@@ -1319,19 +1319,19 @@ BF2_CONSOLE_PROPERTY_FN(roadSlopeScaleDepthBias, float, consoleRoadCompiledRende
 BF2_CONSOLE_PROPERTY_FN(roadLodDistMod, float, consoleRoadCompiledRenderer() != 0,
                         getRoadLodDistanceModifier(), setRoadLodDistanceModifier, kRendererConsoleTag)
 
-// [UI] The Win32 virtual-key code that opens and closes the fork's menu (docs/eon64/ui.md);
+// [UI] The Win32 virtual-key code that opens and closes the fork's menu (docs/lanes/ui.md);
 // 45 (Insert) by default.
 BF2_CONSOLE_PROPERTY_FN(uiMenuKey, int, true, uiLayerGetMenuKey(), uiLayerSetMenuKey,
                         kRendererConsoleTag)
-// [UI] The console window's share of the screen height (docs/eon64/ui.md); saved like uiOverlay.
+// [UI] The console window's share of the screen height (docs/lanes/ui.md); saved like uiOverlay.
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(uiConsoleHeight, float, true, uiLayerGetConsoleHeight(),
                                  uiLayerSetConsoleHeight, 0.2f, 0.9f, kRendererConsoleTag)
-// [UI] The performance overlay, top right (docs/eon64/ui.md); kept between sessions in the mod's
+// [UI] The performance overlay, top right (docs/lanes/ui.md); kept between sessions in the mod's
 // settings/eon64-ui.con.
 BF2_CONSOLE_PROPERTY_FN(uiOverlay, bool, true, uiLayerGetOverlay(), uiLayerSetOverlay,
                         kRendererConsoleTag)
 
-// [RENDER] Sun shadow tuning (docs/eon64/renderer.md, sun shadows). Each variable clamps to its
+// [RENDER] Sun shadow tuning (docs/lanes/render.md, sun shadows). Each variable clamps to its
 // range; the defaults are the values the cascades were accepted with.
 #define BF2_SUN_SHADOW_VARIABLE(name, T, field, minValue, maxValue)                                 \
     T get_##name() { return static_cast<T>(sunShadowSettings().field); }                            \
@@ -1376,7 +1376,7 @@ void setSunShadowResolution(int value)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(sunShadowResolution, int, true, getSunShadowResolution(),
                                  setSunShadowResolution, 512, 4096, kRendererConsoleTag)
 
-// [RENDER] Soft particles (docs/eon64/renderer.md): the depth over which a particle fades out in
+// [RENDER] Soft particles (docs/lanes/render.md): the depth over which a particle fades out in
 // front of the scene behind it, in metres.
 float getSoftParticleDistance() { return softParticleDistance(); }
 void setSoftParticleDistance(float value)
@@ -1414,7 +1414,7 @@ BF2_CONSOLE_PROPERTY_FN(viewDistance, bool, true, getViewDistanceCut(), setViewD
 
 } // anonymous namespace
 
-// The help lines of the fork's renderer variables, for the debug menu (docs/eon64/ui.md).
+// The help lines of the fork's renderer variables, for the debug menu (docs/lanes/ui.md).
 const char* rendererVariableHelp(const char* name)
 {
     static const char* const kHelp[][2] = {

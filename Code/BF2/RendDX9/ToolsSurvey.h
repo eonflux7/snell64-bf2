@@ -1,4 +1,4 @@
-// [TOOLS] tools.survey (docs/eon64/tools.md#survey), renderer side. Not part of retail BF2. While
+// [TOOLS] tools.survey (docs/lanes/tools.md#survey), renderer side. Not part of retail BF2. While
 // no survey is requested, each hook returns after one test.
 #pragma once
 

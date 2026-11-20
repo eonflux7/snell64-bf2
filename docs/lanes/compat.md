@@ -24,10 +24,10 @@ shaders and Python shims are closed and are not part of this repository.
 | rhooks' HUD event channel | Game events 9–12 with mod subtypes are logged once and dropped under `BF2_HUD_AUTOVAR` instead of asserting | `cae8b9c5` |
 | Launcher handshake | `BF2_CMDLINE_FILE` redirects the menu's command-line file, as `PRBF2.exe` does | `5d5e7d2b` |
 | Squad names over rcon | `SquadManager.listSquads` / `listSquadMembers` console rows | `8242d255` |
-| Layer-specific level init (night, skirmish, vehicles, coop) | `BF2_LEVEL_INIT_ARGS=1` runs the level `Init.con` with `v_arg1` = `host`/`client`, `v_arg7` = game mode, `v_arg8` = layer, which PR's `setLayerMode.tweak` reads; retail passes them empty. Needs the console's `var`/`const`/`return`/`->` and quoted operands (upstream-fixes O). Seen in game: The Falklands `gpm_cq` 32 loads its night layer (sun 0.07, night kits, 1P arms) | `2c5de840` |
+| Layer-specific level init (night, skirmish, vehicles, coop) | `BF2_LEVEL_INIT_ARGS=1` runs the level `Init.con` with `v_arg1` = `host`/`client`, `v_arg7` = game mode, `v_arg8` = layer, which PR's `setLayerMode.tweak` reads; retail passes them empty. Needs the console's `var`/`const`/`return`/`->` and quoted operands ([fix.md](fix.md) O). Seen in game: The Falklands `gpm_cq` 32 loads its night layer (sun 0.07, night kits, 1P arms) | `2c5de840` |
 
 Engine bugs that PR exposed are `fix` commits and are listed in
-[upstream-fixes.md](upstream-fixes.md): gameswf `string_concat` (Issue G), console quoted
+[fix.md](fix.md): gameswf `string_concat` (Issue G), console quoted
 literals (K), SquadManager console registration (M), per-mod shader cache (L), console `var`/`const` (O).
 
 ## Missing

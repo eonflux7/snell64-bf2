@@ -1,7 +1,7 @@
 # Agent instructions: openbf2-eon64
 
 The policy for every coding agent working on this repository; `CLAUDE.md` imports it.
-If guidance conflicts, the owner's current request wins, then this file, then `docs/eon64/`.
+If guidance conflicts, the owner's current request wins, then this file, then `docs/`.
 
 An x64 Battlefield 2 client that runs the Project Reality mod (PR) offline and replaces BF2's
 renderer with a modern pipeline. It began as a fork of OpenBF2 (kr4uzi/OpenBF2, downstream of
@@ -29,12 +29,12 @@ the StateManager MRT slot overflow, found in `render` work) is committed on its 
 
 ## Milestones
 
-`render`, `ui` and `tools` plan their work as numbered **milestones** in the lane's document. The
-current milestone is broken into **tasks** in `docs/eon64/status.md`. Outside the lane's own
-document, name the lane: "render milestone 9", "tools milestone 1". When the owner accepts a
-milestone, its flag and any replaced path are deleted, its description moves from the plan to the
-as-built document, and `status.md` moves on to the next. Commit messages before 2026-11-19 say
-"step" for milestone.
+`render`, `ui` and `tools` plan their work as numbered **milestones**: their order and state in
+`docs/PLAN.md`, each one's design in the lane's document. The current milestone is broken into
+**tasks** in `docs/STATUS.md`. Outside the lane's own document, name the lane: "render milestone 9",
+"tools milestone 1". When the owner accepts a milestone, its flag and any replaced path are deleted,
+its section in the lane's document is rewritten as built, its row in `PLAN.md` says accepted, and
+`STATUS.md` moves on to the next. Commit messages before 2026-11-19 say "step" for milestone.
 
 ## Repositories and what is public
 
@@ -87,6 +87,8 @@ Examples: `render(csm): blend between cascades`, `perf(effects): compile on work
 `build(plugins): Ninja targets`, `dev(console): BF2_CONSOLE_TRACE`, `ui(debug): frame-time graph`,
 `tools(view): free fly`. Changes that belong to no lane (documentation, this file, repository-wide
 renames) use `docs:` with no area.
+Before 2026-11-17, commits used `feat:`, `fix:`, `compat:`, `build:` prefixes; the realitymod
+OpenBF2 PR #1 (PR's game-logic port) arrived as one merge, `c4a3a850`.
 
 ## Source markers
 
@@ -109,7 +111,7 @@ the same comment. A marker is a pointer, not a justification.
   can change while the game runs is a console variable (`renderer.*`, `tools.*`): tuned values and
   the A/B switches of milestones in development, so the console, scripts, config files and the
   debug menu can all set them.
-- Every environment flag and build option this project adds is listed in `docs/eon64/flags.md`.
+- Every environment flag and build option this project adds is listed in `docs/lanes/dev.md`.
 - `render`: a milestone in development may keep the old path selectable, by a temporary console
   variable (an environment flag only where the switch cannot happen at run time). On acceptance the
   switch and the old path are deleted in the same change.
@@ -121,21 +123,27 @@ the same comment. A marker is a pointer, not a justification.
 
 ## Documentation
 
-`docs/eon64/` records the current state; commit messages record history. Its
-[README](docs/eon64/README.md) maps the documents.
+`docs/` records the current state; commit messages record history.
 
-- Read `docs/eon64/status.md` first, then only the sections the task needs (`grep -n '^#' FILE`
-  gives the outline). Do not read whole documents by default.
+| Document | What it records |
+|---|---|
+| `docs/STATUS.md` | Where each lane stands; the current milestone, its tasks and open issues |
+| `docs/PLAN.md` | What comes next: each lane's milestones, their state and their order |
+| `docs/lanes/<lane>.md` | One per lane (`render`, `tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
+| `docs/archive/` | OpenBF2's documentation, inherited |
+
+- Read `docs/STATUS.md` first, then only the sections the task needs (`grep -n '^#' FILE` gives
+  the outline). Do not read whole documents by default.
 - Update the relevant document in the same commit as the change it describes. Each fact lives in
   one place; elsewhere, link to it.
-- `docs/archive/` is OpenBF2's documentation, inherited: reconstruction notes and evidence
-  that source comments cite. It is reference, not policy and not current state. Do not read or search it unless a task needs that evidence; `.ignore` keeps
-  it out of ripgrep searches.
+- `docs/archive/` holds reconstruction notes and evidence that source comments cite. It is
+  reference, not policy and not current state. Do not read or search it unless a task needs that
+  evidence; `.ignore` keeps it out of ripgrep searches.
 
 ## Upstreaming
 
 A `fix`, or a `build` change that stands alone, can be offered to OpenBF2. Cherry-pick it onto
 `kr4uzi/main` on its own branch; from there OpenBF2's policy applies (`git show
 kr4uzi/main:AGENTS.md`): its evidence vocabulary, binary evidence for recovered behaviour, and a
-linked issue for intentional changes. Record in `docs/eon64/upstream-fixes.md` what was and was not
+linked issue for intentional changes. Record in `docs/lanes/fix.md` what was and was not
 checked against the retail binary. The owner submits; agents do not.

@@ -15,12 +15,7 @@ The `ui` lane: in-game UI this fork owns, built on Dear ImGui (1.92.9, vendored 
 
 ## Milestones
 
-| Milestone | Commit scope | Status |
-|---|---|---|
-| 1. ImGui layer | `ui(imgui)` | Accepted (`71545137`, `f4a7fd65`, `6604b184`) |
-| 2. Sun shadow tuning as console variables (lane `render`) | `render(csm)` | Accepted (`2e605f93`) |
-| 3. Debug menu and performance overlay | `ui(debug)` | Accepted (`ae0ee355`, `d9086de0`, `4b10dea9`; tabs and console polish `134889d5`) |
-| 4. Console frontend | `ui(console)` | Accepted (`cfc56237`); retail drawing deleted |
+Order and state: [PLAN.md](../PLAN.md#ui).
 
 ### 1. ImGui layer
 
@@ -57,7 +52,7 @@ The `ui` lane: in-game UI this fork owns, built on Dear ImGui (1.92.9, vendored 
 
 The values render milestone 5 was accepted with became console variables with the same defaults,
 tuned live from the Shadows tab. Each carries its range and a help line for the debug menu. They
-are listed in [renderer-pipeline.md](renderer-pipeline.md#sun-shadows).
+are listed in [render.md](render.md#sun-shadows).
 
 ### 3. Debug menu and performance overlay
 
@@ -105,7 +100,7 @@ left alone.
   the worst frame, with a line at 16.7 ms. CPU time is the frame without the time `Present`
   blocked; GPU time is the whole frame from the timestamp queries. The larger of the two names
   the side that bounds the frame.
-- GPU time per pass (the spans of [renderer-pipeline.md](renderer-pipeline.md#gpu-pass-timers)), smoothed. The queries
+- GPU time per pass (the spans of [render.md](render.md#gpu-pass-timers)), smoothed. The queries
   are those of `BF2_GPU_TIMERS`, issued only while the overlay is on (or the flag is set).
 - Draw calls and primitives in the last frame, and draw calls per sun cascade.
 - Process memory: private bytes and working set. VRAM is not shown: D3D9's estimate under DXVK

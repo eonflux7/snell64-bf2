@@ -1,4 +1,4 @@
-// [TOOLS] tools.atmosphere (docs/eon64/tools.md#atmosphere), renderer side. Not part of retail BF2.
+// [TOOLS] tools.atmosphere (docs/lanes/tools.md#atmosphere), renderer side. Not part of retail BF2.
 // Render milestone 11's atmosphere for an agent or a person to read without the debug menu: the fit
 // and every table's statistics and samples as text, and each table as a PNG scaled to its own
 // maximum (linear, no gamma). Runs at the console call, between frames: the managed tables are

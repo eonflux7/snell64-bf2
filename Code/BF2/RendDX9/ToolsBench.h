@@ -1,4 +1,4 @@
-// [TOOLS] The benchmark's frame recorder (docs/eon64/tools.md#3-benchmark-path), renderer side. Not
+// [TOOLS] The benchmark's frame recorder (docs/lanes/tools.md#3-benchmark-path), renderer side. Not
 // part of retail BF2. While no benchmark records, each hook returns after one test.
 #pragma once
 

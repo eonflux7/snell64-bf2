@@ -6,7 +6,7 @@ saved views, view sets, camera paths and unattended runs that write a report. Ru
 [AGENTS.md](../../AGENTS.md#lanes).
 
 - **Console first.** Everything the tool does is a console command or variable. The **Views** tab
-  of the debug menu ([ui.md](ui.md)) is one frontend; `BF2_DEVCMD_FILE` ([flags.md](flags.md)),
+  of the debug menu ([ui.md](ui.md)) is one frontend; `BF2_DEVCMD_FILE` ([dev.md](dev.md)),
   scripts and config files are the others. An agent and the owner drive the same commands.
 - **Results are files.** Screenshots, a JSON report and a short Markdown summary per run, so a run
   can be read without watching it. Diffs and contact sheets are made from those files.
@@ -16,9 +16,6 @@ saved views, view sets, camera paths and unattended runs that write a report. Ru
   tree, like `eon64-commands.txt`. Debug shading modes live with the shaders, outside this tree; the
   engine only provides the variable that selects them. Run output (`tools.outputDir`) also lies
   outside this tree: it holds screenshots of the mod's content and the shader set's commit.
-- It comes before render milestone 9 (owner, 2026-11-19): views and shots (milestone 1, tasks
-  1–5), then the benchmark path (milestone 3, cut as in [status.md](status.md)); the rest of
-  milestones 1–3 waits until after render milestone 9.
 
 **Names.** Commands are grouped by what they act on: `view.*` (views, sets, shots, runs),
 `path.*` (camera paths), `bench.*` (benchmarks and the perf map). The tool's own settings are
@@ -26,24 +23,11 @@ saved views, view sets, camera paths and unattended runs that write a report. Ru
 effects) are `renderer.*` variables, since the renderer owns them. All names below are provisional.
 
 **Flags.** `BF2_VIEWRUN` (milestone 2) is the only environment variable planned. It is permanent,
-off by default and inert when unset, and is listed in [flags.md](flags.md) when it lands.
+off by default and inert when unset, and is listed in [dev.md](dev.md) when it lands.
 
 ## Milestones
 
-| Milestone | Commit scope | Status |
-|---|---|---|
-| 1. Views | `tools(view)` | Tasks 1–5 built; 6–8 after render milestone 9 |
-| 2. Unattended runs and regression | `tools(run)` | After render milestone 9 |
-| 3. Benchmark path | `tools(bench)` | Current, cut (no history file or acceptance check yet) |
-| 4. Renderer inspection (alongside render milestone 9) | `tools(inspect)` | Planned |
-| 5. Repeatability and map coverage (after render milestone 9) | `tools(bench)` | Planned |
-| 6. Soldier mode and capture | `tools(soldier)` | Planned |
-
-Scope (owner, 2026-11-19): milestones 1–3 hold only what render milestone 9 needs: views,
-screenshots stamped with both commits, unattended runs with a diff and contact sheet, and one
-real-time benchmark path per map with a per-frame CSV. Bookmarks, bit-identical shots, the
-fixed-step clock, path editing in the Views tab, the hitch log and the perf map wait for
-milestone 5. Starting set: about 5 views and one benchmark path each on Muttrah City and Saaremaa.
+Order and state: [PLAN.md](../PLAN.md#tools).
 
 ### 1. Views
 
@@ -253,7 +237,7 @@ the given number of times (default 3). It turns vsync off and `game.lockFps` to 
 benchmark and restores both afterwards. It writes a per-frame CSV (frame, CPU frame time, GPU busy
 time, per pass, draws) and a summary: average, 1 % low (the average of the slowest 1 % of frames),
 worst frame, per-pass averages, the spread between runs, and whether the path is CPU or GPU bound.
-GPU pass spans include idle time when the CPU is the bottleneck ([flags.md](flags.md)), so the
+GPU pass spans include idle time when the CPU is the bottleneck ([dev.md](dev.md)), so the
 bound is decided per frame by comparing CPU frame time with GPU busy time (the sum of the GPU's
 work, not the span from start to end of the frame); the summary gives the share of frames that were
 GPU bound. Each labelled benchmark appends its summary to a per-map history file, so frame time and

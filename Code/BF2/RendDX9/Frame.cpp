@@ -1,7 +1,7 @@
 // [RENDER] The frame module (Frame.h): the scene's pass sequence and the render targets it
 // draws through - the HDR scene colour, the depth prepass and its linear depth, the resolve and
 // depth rebuild before the world transparents. Not part of retail BF2. The order is described in
-// docs/eon64/renderer-pipeline.md (Frame). The pass sequence keeps retail's PE annotations where
+// docs/lanes/render.md (Frame). The pass sequence keeps retail's PE annotations where
 // it still follows the shipped renderFrame (0x1002F7E0).
 #ifdef BF2_IMAGE_RENDDX9
 
@@ -641,7 +641,7 @@ void frameRoadPass(const FrameInputs& in)
     postProductionUpdateFog(underwaterDepth());
 
     stateManagerPush();
-    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/eon64/renderer-pipeline.md#reversed-z).
+    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/lanes/render.md#reversed-z).
     renderQueueFlush(0x24, 1);                                                               // RSMTRoad
     stateManagerPop();
 }
@@ -669,7 +669,7 @@ bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
     postProductionModeSelectorFrameStart(g_renderTargetSystem);
 
     // [RENDER] Retail rendered the LightManager's shadow maps here (+0x19C): the sun maps
-    // (replaced by the sun cascades) and the point/spot maps (deleted; docs/eon64/
+    // (replaced by the sun cascades) and the point/spot maps (deleted; docs/
     // renderer-pipeline.md, milestone 6). That pass ended by binding the scene's depth-stencil
     // (Renderer +0x770, reversed-Z) and colour target 0, which the frame clear and the
     // scene draw rely on; bind them here.

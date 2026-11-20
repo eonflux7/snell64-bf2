@@ -190,7 +190,7 @@ set(_cxx_defines BF2_IMAGE_RENDDX9 BF2_PLUGIN_ABI_NATIVE=1 _ITERATOR_DEBUG_LEVEL
 if(BF2_FRONTIER_DEFAULT_CONTINUE)
     list(APPEND _cxx_defines BF2_FRONTIER_DEFAULT_CONTINUE=1)
 endif()
-# [UI] ImGui's backends include imgui.h by its bare name (docs/eon64/ui.md).
+# [UI] ImGui's backends include imgui.h by its bare name (docs/lanes/ui.md).
 set(_cxx_includes ${_d3dx_includes} "${_bf2}/External/imgui")
 if(_dxsdk)
     target_link_directories(bf2_renddx9_native PRIVATE "${_dxsdk}/Lib/${_machine}")

@@ -1,4 +1,4 @@
-// [TOOLS] tools.survey (docs/eon64/tools.md#survey), renderer side. Not part of retail BF2.
+// [TOOLS] tools.survey (docs/lanes/tools.md#survey), renderer side. Not part of retail BF2.
 //
 // Writes what render milestone 11 builds on, for the loaded level, as one text file: the sky
 // dome's textures and effect, fog, sun and sky colours and the sun's elevation, the terrain's

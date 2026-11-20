@@ -1,5 +1,5 @@
 // [DEV] BF2_GPU_TIMERS=<path>: GPU time per renderer pass. Not part of retail BF2.
-// Also on while the performance overlay is shown (docs/eon64/ui.md). Off otherwise: every hook
+// Also on while the performance overlay is shown (docs/lanes/ui.md). Off otherwise: every hook
 // below is one test of gpuTimersOn().
 #pragma once
 

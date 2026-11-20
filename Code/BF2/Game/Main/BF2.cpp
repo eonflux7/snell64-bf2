@@ -246,7 +246,7 @@ void BF2::handleInGameWinMessages()
 #  if !DEDICATED
     if (menuLogic)
         deviceMask = static_cast<unsigned int>(-2);                          // every device but bit 0 while a menu is up
-    if (uiWantsMouse())                                                      // [UI] so is the fork's menu or console (docs/eon64/ui.md)
+    if (uiWantsMouse())                                                      // [UI] so is the fork's menu or console (docs/lanes/ui.md)
         deviceMask = static_cast<unsigned int>(-2);
     if (g_viewToolFlying)                                                    // [TOOLS] free fly reads the cursor
         deviceMask = static_cast<unsigned int>(-2);

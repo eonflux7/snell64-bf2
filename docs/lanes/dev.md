@@ -1,8 +1,10 @@
-# Flags
+# Developer hooks and flags
 
-Every environment variable and build option this project adds. OpenBF2's own `BF2_*` variables
-(traces, probes, test harness switches) are not listed. Tuned values are console variables, not
-flags. Rules: [AGENTS.md](../../AGENTS.md#flags).
+The `dev` lane: diagnostics and developer hooks (traces, autohost, file monitor), permanent, off by
+default and inert when unset. This document also lists every environment variable and build option
+this project adds, of every lane. OpenBF2's own `BF2_*` variables (traces, probes, test harness
+switches) are not listed. Tuned values are console variables, not flags. Rules:
+[AGENTS.md](../../AGENTS.md#flags).
 
 ## `render`: only while a milestone is developed
 
@@ -38,7 +40,7 @@ None at present. Retired, their behaviour now unconditional: `BF2_PERF_FXKEY`,
 | `BF2_LOAD_TRACE=<prefix>` | Writes timed spans of load work (phases, file opens, scripts, textures, meshes, effect compiles, Python, frames over 50 ms) to `<prefix>-bf2.tsv`, `<prefix>-renddx9.tsv` and `<prefix>-bf2audio.tsv`; `=1` uses the prefix `loadtrace`. Summarize with `Code/Tools/LoadTrace/loadtrace.py <prefix>`. See [perf-load.md](perf-load.md) |
 | `BF2_DRAW_STATS=<path>` | Counts draws per effect, technique and pass; once a second rewrites `<path>` (TSV) with session totals and the last presented frame. Shows which effects actually draw. Sun caster draws are split per cascade (technique `RaShadowDepth@c0`..`@c3`), and counter rows (`(count)`) give the captured and unbounded casters per frame, and the depth draws without alpha test (`depth opaque draws`) against the (mesh instance, effect) groups they form (`depth opaque meshes`). Moves to `tools` milestone 2 as `tools.drawStatsFile`, and the flag goes ([tools.md](tools.md#2-unattended-runs-and-regression)) |
 | `BF2_PY_ERRORS=1` | Prints a script event handler's Python exception to stderr as `[PYERR]` lines (traceback module format) before clearing it; unset, it is cleared silently as retail does |
-| `BF2_GPU_TIMERS=<path>` | GPU time per renderer pass from D3D9 timestamp queries, read a few frames late so it never waits on the GPU. Once a second rewrites `<path>` (TSV): per span, the mean and maximum over the last second and the session mean, in ms, plus `(frame)` for the whole frame. Spans run from one mark to the next, so they include GPU idle time when the CPU is the bottleneck. The performance overlay (`renderer.uiOverlay`, [ui.md](ui.md)) runs the same queries while it is shown, without the file. Spans: [renderer-pipeline.md](renderer-pipeline.md#gpu-pass-timers). Moves to `tools` milestone 2 as `tools.gpuTimersFile`, and the flag goes |
+| `BF2_GPU_TIMERS=<path>` | GPU time per renderer pass from D3D9 timestamp queries, read a few frames late so it never waits on the GPU. Once a second rewrites `<path>` (TSV): per span, the mean and maximum over the last second and the session mean, in ms, plus `(frame)` for the whole frame. Spans run from one mark to the next, so they include GPU idle time when the CPU is the bottleneck. The performance overlay (`renderer.uiOverlay`, [ui.md](ui.md)) runs the same queries while it is shown, without the file. Spans: [render.md](render.md#gpu-pass-timers). Moves to `tools` milestone 2 as `tools.gpuTimersFile`, and the flag goes |
 | `BF2_AI_WEAPON_TRACE=1` | Logs each AI weapon record released when its `WeaponObject` is destroyed |
 
 ## Build options (CMake)
@@ -54,4 +56,4 @@ None at present. Retired, their behaviour now unconditional: `BF2_PERF_FXKEY`,
 | Variable | Why |
 |---|---|
 | `DXVK_CONFIG="d3d9.useD32forD24 = True"` | DXVK refuses `D24FS8`; this gives reversed depth a float depth buffer |
-| `WINEDLLOVERRIDES=d3dx9_24,d3dx9_25=n` | Wine's builtin D3DX stubs break effect compilation ([upstream-fixes.md](upstream-fixes.md) A and C) |
+| `WINEDLLOVERRIDES=d3dx9_24,d3dx9_25=n` | Wine's builtin D3DX stubs break effect compilation ([fix.md](fix.md) A and C) |

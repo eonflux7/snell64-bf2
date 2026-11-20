@@ -93,7 +93,7 @@ if /i "%BF2_FRONTIER_DEFAULT_CONTINUE%"=="ON" set FLAGS=%FLAGS% /DBF2_FRONTIER_D
 rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
 if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 if defined BF2_D3DX_FALLBACK set FLAGS=%FLAGS% /I"%ABI%\D3dxFallbackInclude"
-rem [UI] ImGui's backends include imgui.h by its bare name (docs/eon64/ui.md).
+rem [UI] ImGui's backends include imgui.h by its bare name (docs/lanes/ui.md).
 set FLAGS=%FLAGS% /I"%BF2%\External\imgui"
 rem Effect.cpp asks for the SDK's dxerr9.lib by #pragma; the fallback compiles DxErr9StandIn.cpp instead.
 set "D3DX_LINK="

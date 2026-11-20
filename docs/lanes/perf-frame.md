@@ -12,7 +12,7 @@ seen as a whole.
 - **Who is the bottleneck.** Per-thread CPU use of the game (`top -H` on the BF2.exe process): a
   main thread at 100 % while the GPU spans leave idle time means the frame is CPU-bound. Check
   `game.lockFps` first; a frame cap looks the same.
-- **GPU per pass.** `BF2_GPU_TIMERS` ([flags.md](flags.md)). Spans run from mark to mark, so when
+- **GPU per pass.** `BF2_GPU_TIMERS` ([dev.md](dev.md)). Spans run from mark to mark, so when
   the CPU is the bottleneck the GPU's idle time lands in the span that waits (usually `hud`, which
   runs to Present).
 - **CPU per function.** Sample the main thread with Linux `perf record -t <tid>` while the game
@@ -21,7 +21,7 @@ seen as a whole.
   from the PE headers, symbols from the link maps (`BF2.map`, `RendDX9.map`). A link map lists public
   symbols only, so samples in static or inlined code are credited to the nearest public symbol
   before them: object-file totals are reliable, single function names approximate.
-- **Draws.** `BF2_DRAW_STATS` ([flags.md](flags.md)) for what each pass issues. It costs about
+- **Draws.** `BF2_DRAW_STATS` ([dev.md](dev.md)) for what each pass issues. It costs about
   9 % of the main thread itself (its lookups), so CPU samples are taken in a session without it.
 - **Sun cascades' whole cost.** `renderer.sunShadows 0` at the same view: the frame-time difference
   is the caster pass, CPU and GPU together.
@@ -187,7 +187,7 @@ Muttrah. Fallujah West, with the most draws, gains 3.6 %, near the runs' spread 
 
 Caster culling (`renderer.casterCull`): each object from the light volume's grid query is tested
 against the whole shadow range swept toward the sun before its visual update, geometry update and
-submission ([Sun shadows](renderer-pipeline.md#sun-shadows)). Caster draws per cascade are equal
+submission ([Sun shadows](render.md#sun-shadows)). Caster draws per cascade are equal
 with the variable at 1 and 0 at every view counted (`BF2_DRAW_STATS`, last frame):
 
 | View | Captured casters, 0 / 1 | Cascade draws c0–c3 |
@@ -304,7 +304,7 @@ swapped in a running game do not reload (no `.cfx` written), so the pairs are se
 | Muttrah City `bench1` | 8.82 ms, 12.11 | 8.81 ms, 12.47 |
 
 Then the grouping without a sort and the instance key read in place (`3c745649`, `67d04f51`;
-[Instancing](renderer-pipeline.md#instancing)). Main thread at Fallujah `city1`
+[Instancing](render.md#instancing)). Main thread at Fallujah `city1`
 (`runs/perf/t8e-city1`): the depth runs' sort (3.5 %) gone, `drawDepthPassSubmit` 4.6 to 3.4 %;
 the hash 3.3 to 3.0 %, so its cost is reading each entry's object and lighting blocks, not the
 sink calls it no longer makes. Shot `city1` against `t8-city1`: 8792 pixels of 2.07 M (3 % fuzz),
@@ -328,7 +328,7 @@ after render milestone 9, which takes items 1 and 3.
 2. Object culling (17 %): the object manager's grid and cull fade, the object drawer's box tests.
 3. Per-draw cost: D3DX effect calls (15 %) and Ra parameter apply. Replacing D3DX's per-draw
    parameter and pass handling with the renderer's own constant uploads is `render` work: render
-   milestone 9 ([Submission](renderer-pipeline.md#submission)), which also takes the sun caster
+   milestone 9 ([Submission](render.md#submission)), which also takes the sun caster
    culling of item 1.
 
 Open:
@@ -339,7 +339,7 @@ Open:
 
 ## Render milestone 9, task 9
 
-Contribution culling ([renderer-pipeline.md](renderer-pipeline.md#contribution-culling)), engine
+Contribution culling ([render.md](render.md#contribution-culling)), engine
 `2002788d` plus the default of 8, 1920x1080, an agent, 2026-11-19. `BF2_DRAW_STATS` at Muttrah
 `high` (threshold 3 and 8 mixed in one session): about 100 static meshes culled and 20 fading a
 frame. Benchmarks, `renderer.contributionCull` changed in one session, 2 runs each:

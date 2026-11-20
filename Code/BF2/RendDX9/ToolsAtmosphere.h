@@ -1,4 +1,4 @@
-// [TOOLS] tools.atmosphere (docs/eon64/tools.md#atmosphere), renderer side. Not part of retail BF2.
+// [TOOLS] tools.atmosphere (docs/lanes/tools.md#atmosphere), renderer side. Not part of retail BF2.
 #pragma once
 
 namespace dice {

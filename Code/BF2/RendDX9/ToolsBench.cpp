@@ -1,4 +1,4 @@
-// [TOOLS] The benchmark's frame recorder (docs/eon64/tools.md#3-benchmark-path), renderer side. Not
+// [TOOLS] The benchmark's frame recorder (docs/lanes/tools.md#3-benchmark-path), renderer side. Not
 // part of retail BF2.
 //
 // bench.run (Game/Tools/ViewTool.cpp) starts the recorder, then tags the frames it draws: 0 for the

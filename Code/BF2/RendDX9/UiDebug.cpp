@@ -1,8 +1,8 @@
-// [UI] The debug menu and the performance overlay (docs/eon64/ui.md, milestone 3). Not part of retail BF2.
+// [UI] The debug menu and the performance overlay (docs/lanes/ui.md, milestone 3). Not part of retail BF2.
 //
 // Menu (the menu key), in tabs:
 //   Commands  the mod's command file as buttons, grouped by section, with fields for arguments.
-//   Views     [TOOLS] the map's views, sets and paths (docs/eon64/tools.md#1-views), through view.*
+//   Views     [TOOLS] the map's views, sets and paths (docs/lanes/tools.md#1-views), through view.*
 //             and path.* lines.
 //   Shadows   the sun shadow variables.   Renderer  every other renderer.* variable, filtered.
 //   Settings  the overlay, the console height, the menu key, the files.
@@ -742,7 +742,7 @@ void drawRendererTab()
 }
 
 // Views ---------------------------------------------------------------------------------------
-// [TOOLS] The view tool's views (docs/eon64/tools.md#1-views), read through IUiViewTool. Every
+// [TOOLS] The view tool's views (docs/lanes/tools.md#1-views), read through IUiViewTool. Every
 // change is a view.* console line; its result shows under the buttons.
 
 std::string g_viewSelected;        // view name

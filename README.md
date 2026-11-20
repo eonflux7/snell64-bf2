@@ -5,26 +5,26 @@ renderer with a modern pipeline. It started as a fork of [OpenBF2](https://githu
 and is now developed on its own.
 
 This is a work in progress. A successful build is not a playable game; where each area stands is in
-[docs/eon64/status.md](docs/eon64/status.md).
+[docs/STATUS.md](docs/STATUS.md).
 
 ## What it does
 
 - **Runs PR 1.9 on x64.** PR's closed hook DLL (`rhooks.dll`) and its 32-bit Python extension cannot
   load into a 64-bit engine, so the engine provides what PR needs from them instead: CPython 2.7.12
   as `dice_py.dll`, PR's built-in Python modules, HUD variables, the launcher handshake. See
-  [compat.md](docs/eon64/compat.md).
+  [compat.md](docs/lanes/compat.md).
 - **Replaces the renderer.** BF2's forward, gamma-space, lightmap-lit renderer becomes a linear HDR
   pipeline. Done: reversed-Z, a depth prepass, cascaded sun shadows, linear particle lighting, 4x
   MSAA with LOD crossfades. Planned: draw submission without D3DX's per-draw overhead, single-pass
   terrain, a shared atmosphere with sky reflections, bloom with auto-exposure, GTAO. See
-  [renderer.md](docs/eon64/renderer.md).
+  [render.md](docs/lanes/render.md).
 - **Loads faster.** A PR map load, menu to spawn screen, went from about 190 s to 14 s (effect
-  caches, worker compiles, file prefetch). See [perf-load.md](docs/eon64/perf-load.md).
+  caches, worker compiles, file prefetch). See [perf-load.md](docs/lanes/perf-load.md).
 - **Has in-game tools.** An ImGui debug menu, performance overlay and console
-  ([ui.md](docs/eon64/ui.md)); a view tool for repeatable screenshots and benchmarks is under way
-  ([tools.md](docs/eon64/tools.md)).
+  ([ui.md](docs/lanes/ui.md)); a view tool for repeatable screenshots and benchmarks is under way
+  ([tools.md](docs/lanes/tools.md)).
 - **Fixes engine bugs** found along the way (crashes, x64 hazards), as standalone commits that can
-  be offered to OpenBF2. See [upstream-fixes.md](docs/eon64/upstream-fixes.md).
+  be offered to OpenBF2. See [fix.md](docs/lanes/fix.md).
 
 Work is split into lanes (`fix`, `compat`, `render`, `perf`, `build`, `dev`, `ui`, `tools`), each
 with its own rules; see [AGENTS.md](AGENTS.md).
@@ -56,7 +56,7 @@ modified. Under Proton/DXVK:
   (`WINEDLLOVERRIDES=d3dx9_24,d3dx9_25=n`); Wine's builtins cannot compile effects.
 
 Play is offline and client-hosted. `BF2_AUTOHOST=<map>:<mode>:<size>` hosts straight from the menu.
-Every flag this project adds is listed in [flags.md](docs/eon64/flags.md).
+Every flag this project adds is listed in [dev.md](docs/lanes/dev.md).
 
 ## What is not here
 
@@ -73,7 +73,7 @@ B2BF/OpenBF2 ─► kr4uzi/OpenBF2 ─► + realitymod/OpenBF2 PR #1 ─► open
 
 OpenBF2 reconstructs the Battlefield 2 1.50 engine from the shipped binaries; this project would not
 exist without it. It is no longer merged in. Its documentation remains under [docs/archive/](docs/archive/README.md)
-as reference; this project's own is in [docs/eon64/](docs/eon64/README.md).
+as reference; this project's own is in [docs/](docs/) ([STATUS.md](docs/STATUS.md), [PLAN.md](docs/PLAN.md), [lanes/](docs/lanes/)).
 
 ## Contributing
 

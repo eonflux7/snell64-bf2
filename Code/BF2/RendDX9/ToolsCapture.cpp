@@ -1,4 +1,4 @@
-// [TOOLS] The view tool's shots (docs/eon64/tools.md#1-views), renderer side. Not part of retail
+// [TOOLS] The view tool's shots (docs/lanes/tools.md#1-views), renderer side. Not part of retail
 // BF2.
 //
 // A request names two files and a capture point. At that point of the next frame the back buffer

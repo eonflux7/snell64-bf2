@@ -88,9 +88,9 @@
 #include "GpuTimers.h"                    // [DEV] BF2_GPU_TIMERS
 #include "Submit.h"                       // [RENDER] submitInstancesRelease
 #include "Frame.h"                        // [RENDER] the scene's pass sequence
-#include "UiLayer.h"                      // [UI] docs/eon64/ui.md
+#include "UiLayer.h"                      // [UI] docs/lanes/ui.md
 #include "../RendMisc/IRendererUi.h"     // [UI]
-#include "ToolsCapture.h"                 // [TOOLS] docs/eon64/tools.md
+#include "ToolsCapture.h"                 // [TOOLS] docs/lanes/tools.md
 #include "../RendMisc/IRendererTools.h"  // [TOOLS]
 
 #include <cstdlib>
@@ -1472,10 +1472,10 @@ void* Renderer::queryInterface(unsigned int iid) const
 {
     if (iid == RD9_IID_IBASE || iid == IID_IRenderer)
         return const_cast<Renderer*>(this);
-    // [UI] The fork's UI (docs/eon64/ui.md): a separate object, so Renderer's retail layout stays.
+    // [UI] The fork's UI (docs/lanes/ui.md): a separate object, so Renderer's retail layout stays.
     if (iid == dx9rend::IID_IRendererUi)
         return dx9rend::uiLayerInterface();
-    // [TOOLS] The view tool's shots (docs/eon64/tools.md), likewise a separate object.
+    // [TOOLS] The view tool's shots (docs/lanes/tools.md), likewise a separate object.
     if (iid == dx9rend::IID_IRendererTools)
         return dx9rend::toolsInterface();
     return 0;
@@ -2619,7 +2619,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 drawStateStatisticsOverlay();
 
             // [UI] Retail drew the open console here (slot_0x58); the fork's console window
-            // (UiConsole.cpp) draws it at Present (docs/eon64/ui.md milestone 4).
+            // (UiConsole.cpp) draws it at Present (docs/lanes/ui.md milestone 4).
 
             if (isMultisampleActive())                                             // 0x10030AE7
                 static_cast<RendDX9Base*>(g_rendererBase)->device->SetDepthStencilSurface(
@@ -4901,7 +4901,7 @@ void Renderer::roadScenePass()
     postProductionUpdateFog(underwaterDepth());                                   // sub_1004FDA0
 
     stateManagerPush();
-    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/eon64/renderer-pipeline.md#reversed-z).
+    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/lanes/render.md#reversed-z).
     renderQueueFlush(0x24, 1);                                                    // RSMTRoad
     stateManagerPop();
 }
@@ -5531,7 +5531,7 @@ unsigned int Renderer::getFrameOrdinal()
 
 
 // PE 0x1002E2D0 drew the open console: the last 20 lines over a full-width background.
-// [UI] Deleted: the fork's console window (UiConsole.cpp, docs/eon64/ui.md milestone 4) draws the
+// [UI] Deleted: the fork's console window (UiConsole.cpp, docs/lanes/ui.md milestone 4) draws the
 // console. The slot stays for the retail vtable layout; nothing calls it.
 void Renderer::slot_0x58()
 {

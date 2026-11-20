@@ -1,4 +1,4 @@
-// [TOOLS] The view tool's shots (docs/eon64/tools.md#1-views), renderer side. Not part of retail
+// [TOOLS] The view tool's shots (docs/lanes/tools.md#1-views), renderer side. Not part of retail
 // BF2. While no shot is requested, each capture point returns after one test.
 #pragma once
 

@@ -37,7 +37,7 @@ BF2/RendDX9/ToolsCapture.cpp
 BF2/RendDX9/ToolsBench.cpp
 BF2/RendDX9/ToolsSurvey.cpp
 BF2/RendDX9/ToolsAtmosphere.cpp
-# [UI] Dear ImGui for the fork's in-game UI (docs/eon64/ui.md)
+# [UI] Dear ImGui for the fork's in-game UI (docs/lanes/ui.md)
 BF2/External/imgui/imgui.cpp
 BF2/External/imgui/imgui_draw.cpp
 BF2/External/imgui/imgui_tables.cpp

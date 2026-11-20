@@ -1,4 +1,4 @@
-// [TOOLS] The view tool (docs/eon64/tools.md): a client-side camera override and free fly. Not part
+// [TOOLS] The view tool (docs/lanes/tools.md): a client-side camera override and free fly. Not part
 // of retail BF2. While no view or shot is active, the game pays two tests per hook.
 #pragma once
 

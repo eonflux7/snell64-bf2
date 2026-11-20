@@ -1,4 +1,4 @@
-// [UI] The fork's in-game UI on Dear ImGui (docs/eon64/ui.md). Not part of retail BF2.
+// [UI] The fork's in-game UI on Dear ImGui (docs/lanes/ui.md). Not part of retail BF2.
 // While nothing is shown, every hook below returns after one test.
 #pragma once
 

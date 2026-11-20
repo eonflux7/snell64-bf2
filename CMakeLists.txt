@@ -231,7 +231,7 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/Game/Main/BF2FrameInterpolator.cpp"    # attested client-only TU; ctor recovered 2026-09-03
     "${BF2_ROOT}/Game/Main/BF2Render.cpp"    # attested client-only renderer host; bootstrap recovered 2026-09-04
     "${BF2_ROOT}/Game/Main/BF2RenderConsole.cpp"    # [CHOSEN] file: BF2.exe's two renderer.* console bindings (2026-09-27)
-    "${BF2_ROOT}/Game/Tools/ViewTool.cpp"    # [TOOLS] the view tool (docs/eon64/tools.md)
+    "${BF2_ROOT}/Game/Tools/ViewTool.cpp"    # [TOOLS] the view tool (docs/lanes/tools.md)
     "${BF2_ROOT}/Game/Tools/ViewFile.cpp"    # [TOOLS] the view tool's view files
     "${BF2_ROOT}/Game/SettingsConsole.cpp"    # [CHOSEN] file: the five profile-file console objects (2026-09-27)
     "${BF2_ROOT}/Menu/BetweenRoundsLogic.cpp" # attested client-only loading-screen menu logic

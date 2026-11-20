@@ -12,9 +12,9 @@
 #include "RendDX9Base.h"
 #include "DrawStats.h"   // [DEV] BF2_DRAW_STATS
 #include "GpuTimers.h"   // [DEV] BF2_GPU_TIMERS
-#include "UiLayer.h"     // [UI] docs/eon64/ui.md
-#include "ToolsCapture.h" // [TOOLS] docs/eon64/tools.md
-#include "ToolsBench.h"   // [TOOLS] docs/eon64/tools.md
+#include "UiLayer.h"     // [UI] docs/lanes/ui.md
+#include "ToolsCapture.h" // [TOOLS] docs/lanes/tools.md
+#include "ToolsBench.h"   // [TOOLS] docs/lanes/tools.md
 #include "ToolsSurvey.h"  // [TOOLS] tools.survey
 #include "../RendMisc/IRenderer.h"
 #include "../GeomMisc/Debug.h"

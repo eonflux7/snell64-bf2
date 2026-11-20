@@ -6,7 +6,7 @@ running game is in [perf-frame.md](perf-frame.md).
 
 ## Measuring
 
-`BF2_LOAD_TRACE=<prefix>` ([flags.md](flags.md)) records timed spans on the main thread (and later
+`BF2_LOAD_TRACE=<prefix>` ([dev.md](dev.md)) records timed spans on the main thread (and later
 on worker threads). Each image (BF2.exe, RendDX9, BF2Audio) writes its own file, and all share one clock:
 
 | Category | Site | What it covers |

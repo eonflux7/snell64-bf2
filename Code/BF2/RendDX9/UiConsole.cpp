@@ -1,4 +1,4 @@
-// [UI] The console window (docs/eon64/ui.md, milestone 4). Not part of retail BF2.
+// [UI] The console window (docs/lanes/ui.md, milestone 4). Not part of retail BF2.
 //
 // Replaces the retail drop-down console's drawing and typing over the same backend (BF2.exe's
 // io::Console and the console object registry). Shown while the console is active (the game's
