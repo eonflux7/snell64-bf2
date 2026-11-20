@@ -30,12 +30,17 @@ inline bool betterRefresh(unsigned a, unsigned b, unsigned desktopRefresh)
 
 // Index of the mode a new profile and a fullscreen start whose requested size the display does not
 // list take, or -1 when `count` is 0, the desktop is unknown (0x0) or no mode is at least `minWidth`
-// wide (the resolution list's own 800-pixel floor):
-//   1. the largest mode that fits the desktop (Windows, Linux, and Intel Macs, whose lists repeat the
-//      point sizes as low-resolution modes);
-//   2. when none fits, the smallest mode that is a whole multiple (2x, 3x) of the desktop: the Retina
-//      backing store, the size the window server composites a fullscreen window at, so the drawable
-//      reaches it without rescaling (Apple-silicon panels list only backing sizes);
+// wide (the resolution list's own 800-pixel floor). The same rule on every platform (owner decision
+// 2026-11-20, no performance cap):
+//   1. the largest mode that fits the desktop. On Windows and Linux the desktop is reported in
+//      pixels, so this is the desktop mode itself. Intel Macs list their point sizes as
+//      low-resolution modes too, so this is the point size (1440x900 on a 2880x1800 backing),
+//      shown at an exact 2x;
+//   2. when none fits, the smallest mode that is a whole multiple (2x, 3x) of the desktop: the pixel
+//      size of the image the system composites for this screen (the Retina backing store, 2940x1912
+//      for a 1470x956-point desktop on the M2), so the drawable reaches it without rescaling.
+//      Apple-silicon panels list only these backing sizes. Wherever the desktop scale is a whole
+//      number, this size equals the native panel mode or the desktop mode;
 //   3. otherwise the smallest mode larger than the desktop.
 // Ties on size take the desktop's refresh rate, then the highest.
 inline int preferredMode(const Mode* modes, std::size_t count, const Mode& desktop, unsigned minWidth)
