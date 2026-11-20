@@ -162,6 +162,9 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   presets' 800x600 and 1024x768, the empty profile's 800x600@60Hz), take the same
   mode when the display does not list them. Windowed starts and explicit
   `+szx/+szy` keep their size.
+- Any other profile resolution the display does not list runs as the closest listed
+  mode ([issue #4](https://github.com/kr4uzi/OpenBF2/issues/4)); `Video.con` keeps
+  the stored value until a resolution is set again.
 
 ## Client menu disconnect
 

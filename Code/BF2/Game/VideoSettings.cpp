@@ -121,10 +121,70 @@ void* VideoSettings::queryInterface(unsigned int iid) const
 
 std::string VideoSettings::getFileName() { return std::string("Video.con"); }
 
-// (77 B): the current record is written, not the pending one.
+namespace {
+
+// [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/4: "the profile keeps its stored
+// value until the player saves new settings". When the renderer runs a profile resolution it does
+// not list as the closest listed entry (VideoOptions::setDynamicOption's fallback), the applied
+// record holds that entry, so the menu shows the mode in use; Video.con keeps the stored value
+// until a resolution is set again (setResolution: Video.con, the options page, the console). One
+// record: VideoSettings is a singleton.
+struct ResolutionSubstitute
+{
+    std::string stored;        // the profile's value the renderer does not list
+    std::string substitute;    // the entry the renderer selected for it
+};
+ResolutionSubstitute s_resolutionSubstitute;
+
+// setDynamicOption's own match: a case-insensitive prefix ("800x600" selects "800x600@60Hz").
+bool selectsEntry(const std::string& requested, const std::string& entry)
+{
+    if (requested.empty() || requested.size() > entry.size())
+        return false;
+    for (std::size_t i = 0; i < requested.size(); ++i) {
+        char a = requested[i], b = entry[i];
+        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
+// Records the outcome of one resolution push: a stored value replaced by a listed entry, or (an
+// exact or prefix match) no substitute. Applying other settings pushes the substitute itself again,
+// which keeps the record.
+void noteResolutionSubstitute(const std::string& requested, const std::string& selected)
+{
+    if (!s_resolutionSubstitute.stored.empty() && requested == s_resolutionSubstitute.substitute &&
+        selected == requested)
+        return;                // the substitute pushed again (other settings applied) keeps it
+    if (requested.empty() || selectsEntry(requested, selected)) {
+        s_resolutionSubstitute = ResolutionSubstitute();
+        return;
+    }
+    s_resolutionSubstitute.stored = requested;
+    s_resolutionSubstitute.substitute = selected;
+    std::fprintf(stderr, "[CHOSEN, not recovered] VideoSettings: profile resolution %s runs as %s; "
+                         "Video.con keeps %s until a resolution is set (issue #4)\n",
+                 requested.c_str(), selected.c_str(), requested.c_str());
+}
+
+} // namespace
+
+// (77 B): the current record is written, not the pending one. [CHOSEN, not recovered] A resolution
+// substitute (noteResolutionSubstitute) is written as the profile's stored value.
 std::string VideoSettings::getSettingsScript()
 {
     std::stringstream stream;
+    if (!s_resolutionSubstitute.stored.empty() &&
+        m_current.resolution == s_resolutionSubstitute.substitute) {
+        VideoSettingsData record;
+        record = m_current;
+        record.resolution = s_resolutionSubstitute.stored;
+        record.write(stream);
+        return stream.str();
+    }
     m_current.write(stream);
     return stream.str();
 }
@@ -147,9 +207,12 @@ bool VideoSettings::apply()
         applyToRenderer(m_current);
         return result;
     }
+    const std::string requested = m_pending.resolution;     // [CHOSEN] issue #4, see above
     applyToOptions(options);
     options->apply();
     readOptions(options);
+    if (!game)                 // applyToOptions pushes nothing while a game is loaded
+        noteResolutionSubstitute(requested, m_pending.resolution);
     m_current = m_pending;
     return true;
 }
@@ -354,7 +417,13 @@ int VideoSettings::getTextureFilteringQuality() { return m_pending.textureFilter
 void VideoSettings::setTextureFilteringQuality(int value) { m_pending.textureFilteringQuality = value; }
 // +80..+94: the two pending strings (copied out, assigned from the by-value argument) and the scale.
 std::string VideoSettings::getResolution() { return m_pending.resolution; }
-void VideoSettings::setResolution(std::string value) { m_pending.resolution = value; }
+// [CHOSEN, not recovered] A resolution set from Video.con, the options page or the console ends a
+// substitute record (issue #4, noteResolutionSubstitute).
+void VideoSettings::setResolution(std::string value)
+{
+    m_pending.resolution = value;
+    s_resolutionSubstitute = ResolutionSubstitute();
+}
 std::string VideoSettings::getAntialiasing() { return m_pending.antialiasing; }
 void VideoSettings::setAntialiasing(std::string value) { m_pending.antialiasing = value; }
 float VideoSettings::getViewDistanceScale() { return m_pending.viewDistanceScale; }
