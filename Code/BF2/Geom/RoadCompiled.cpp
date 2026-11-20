@@ -575,7 +575,11 @@ void RoadCompiled::addToRenderQueue()
     if (!rendererDrawRoads())
         return;
 
-    const Frustum* const frustum = dx9rend::rendererGetRenderView()->getFrustumPtr();
+    // [RENDER] Out to the scenery distance while the view-distance cut is on (render milestone 11
+    // task 5): roads go on past the view distance, as the terrain under them does.
+    const Frustum* frustum = terrainSceneryFrustum();
+    if (!frustum)
+        frustum = dx9rend::rendererGetRenderView()->getFrustumPtr();
     typedef void (__thiscall* VisibilityFn)(void*, const Frustum*);
     reinterpret_cast<VisibilityFn>(m_roadVptr[0x14 / 4])(this, frustum);
 

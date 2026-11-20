@@ -792,6 +792,18 @@ void OverGrowth::update(IRenderView* view)
             / m_heightFadeDistance,
         m_minimumHeightFade, 1.0f);
 
+    // [RENDER] For the world view while the view-distance cut is on (render milestone 11 task 5),
+    // the frustum out to the scenery distance: retail's far plane (the view distance) cut the cells
+    // by view depth. Overgrowth then ends at its own range (Overgrowth.viewDistance).
+    const Frustum* cellFrustum = view->getFrustumPtr();                           // vslot +0x74
+    float cellFarPlane = view->getFarPlane();                                     // vslot +0x3C
+    if (view == dx9rend::rendererGetRenderView())
+        if (const Frustum* const scenery = terrainSceneryFrustum())
+        {
+            cellFrustum = scenery;
+            cellFarPlane = scenery->getFarDist();
+        }
+
     for (int z = 0; z < m_gridSize; ++z)
     {
         for (int x = 0; x < m_gridSize; ++x)
@@ -804,13 +816,12 @@ void OverGrowth::update(IRenderView* view)
                 const Mat4* const again = view->getViewMatrixPtr();               // vslot +0x64, again
                 const float distance =
                     cellDistanceToPoint(cell, reinterpret_cast<const Vec3*>(&again->m[12]));
-                if (view->getFarPlane() < distance)                               // vslot +0x3C
+                if (cellFarPlane < distance)
                     continue;
             }
             if (g_overGrowthCellFrustumCull)
             {
-                if (!terrainFrustumIntersectsBox(view->getFrustumPtr(),           // vslot +0x74
-                                                 &cell->bounds.min.x))
+                if (!terrainFrustumIntersectsBox(cellFrustum, &cell->bounds.min.x))
                     continue;
             }
             if (objectDrawerOccludes(cell->bounds))
