@@ -913,6 +913,11 @@ bool& rendererViewDistanceCut()
     return g_viewDistanceCut;
 }
 
+float rendererSceneryDistance()
+{
+    return g_viewDistanceCut ? 40000.0f : 0.0f;
+}
+
 void rendererAtmosphereFrame()
 {
     g.atlasLive = false;

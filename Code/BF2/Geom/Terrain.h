@@ -843,6 +843,8 @@ void terrainViewClipPlane(float* out, const float* planes, int index);
 // sub_101C7980 - true unless one of the six frustum planes has the box entirely in front of it
 // (the plane's outcode picks the box corner to test).
 bool terrainFrustumIntersectsBox(const Frustum* frustum, const float* minMax);
+// [RENDER] This frame's terrain frustum out to the scenery distance, or 0 (QuadPatch.cpp).
+const Frustum* terrainSceneryFrustum();
 // The sky light's direction and colour - primary slots +0x17C and +0x198 of the world::LightSource
 // LightManager::getSkyLight() answers. Shape instruction-proven (no arguments, three floats at the
 // answer); slot identity [UNRESOLVED] - see SkyDome.cpp's skyLightGetDirection.

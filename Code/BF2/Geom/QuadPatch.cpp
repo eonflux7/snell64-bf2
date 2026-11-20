@@ -1238,14 +1238,36 @@ void TerrainAabb::refresh()
 
 // TerrainCuller - the per-frame walk.
 
+namespace {
+Frustum g_sceneryFrustum;   // [RENDER] the world view's frustum out to the scenery distance
+bool g_sceneryFrustumLive = false;
+}
+
+// [RENDER] This frame's terrain frustum out to the scenery distance (built by TerrainCuller::update
+// while the view-distance cut is on), or 0.
+const Frustum* terrainSceneryFrustum()
+{
+    return g_sceneryFrustumLive ? &g_sceneryFrustum : 0;
+}
+
 // clear the visible list, take the view's frustum and camera, the detail distance from
 // the zoom (floored at param14), the root walk. [RENDER] No LOD choice and no crack fixup: every
-// visible leaf draws at full detail (see QuadPatch.h).
+// visible leaf draws at full detail (see QuadPatch.h). [RENDER] With the view-distance cut (render
+// milestone 11 task 5) the frustum reaches out to the scenery distance: the land goes on past the
+// view distance, under the haze, while objects end there.
 void TerrainCuller::update()
 {
     visible.clear();                                                              // sub_100E7520(0, 0)
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();                   // base +0x48
     frustum = view->getFrustumPtr();                                              // +0x74
+    const float scenery = dx9rend::rendererSceneryDistance();
+    g_sceneryFrustumLive = scenery > 0.0f && view->getProjectionMode() != 1;
+    if (g_sceneryFrustumLive)
+    {
+        rendmath::frustumSetPerspective(g_sceneryFrustum, view->getFov(), view->getAspect(),
+                                        view->getNearPlane(), scenery, *view->getViewMatrixPtr());
+        frustum = &g_sceneryFrustum;
+    }
     cameraPosition = view->getViewMatrixPtr()->m + 12;                            // +0x64, row 3
     walkRoot(nodes);
 }

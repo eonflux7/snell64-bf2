@@ -661,6 +661,23 @@ Mat4* RenderView::getProjectionMatrixPtr()
     return &m_matrix[4];
 }
 
+// [RENDER] The world view whose projection has no far plane (render milestone 11 task 5): land is
+// drawn past the view distance, to the horizon. Its far plane still bounds the frustum, and so
+// culling; reversed float depth keeps the precision. Set once on the renderer's own view.
+namespace {
+const IBase* g_unboundedView = 0;
+}
+
+void renderViewSetUnbounded(IBase* view)
+{
+    g_unboundedView = view;
+    if (view)
+    {
+        RenderView* const v = static_cast<RenderView*>(view);
+        v->setFarPlane(v->getFarPlane());   // marks the projection dirty
+    }
+}
+
 // Rebuilds projection when dirty. Far distance is measured from near, and aspect is height/width.
 // Viewport-only changes do not dirty projection.
 // PE 0x101C28D0
@@ -685,8 +702,9 @@ void RenderView::rebuildProjection()
         const float  q       = bf2x87::store(bf2x87::div(
             bf2x87::add(bf2x87::wide(m_nearPlane), bf2x87::wide(m_farPlane)), bf2x87::wide(m_farPlane)));
 #else
-        const float  q       = static_cast<float>(
-            (static_cast<double>(m_nearPlane) + m_farPlane) / m_farPlane);
+        // [RENDER] The unbounded world view: q's limit as far goes to infinity.
+        const float  q       = static_cast<const IBase*>(this) == g_unboundedView ? 1.0f
+                             : static_cast<float>((static_cast<double>(m_nearPlane) + m_farPlane) / m_farPlane);
 #endif
 
         float* m = m_matrix[4].m;

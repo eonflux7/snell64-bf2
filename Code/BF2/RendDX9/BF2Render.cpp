@@ -195,6 +195,7 @@ class RenderView;
 extern const unsigned int IID_IRenderView;
 extern const unsigned int CID_RenderView;
 IBase* createRenderViewDirect();
+void   renderViewSetUnbounded(IBase* view);   // [RENDER] milestone 11: the world view's projection has no far plane
 void   renderViewSetViewMatrix(RenderView* view, const float* m16);
 void   renderViewSetAspect(RenderView* view, float a);
 void   renderViewSetViewport(RenderView* view, float x, float y, float w, float h);
@@ -1405,6 +1406,7 @@ Renderer::Renderer()
     registerDeviceLostResetListener(static_cast<void*>(&m_deviceLostVptr), 1);
     registerRenderPathListener(&m_renderPathVptr);
     reinterpret_cast<RendDX9Base*>(this)->renderView = Rend::createRenderViewDirect();
+    Rend::renderViewSetUnbounded(reinterpret_cast<RendDX9Base*>(this)->renderView);   // [RENDER] milestone 11 task 5
 
     // The tail matches PE 0x1002D4C5..0x1002DA25: every immediate and register store was checked
     // against the members above (the rest are the zeros and 0.0 doubles the ranges clear), and both

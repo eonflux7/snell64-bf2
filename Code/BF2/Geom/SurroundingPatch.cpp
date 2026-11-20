@@ -509,14 +509,19 @@ float SurroundingPatch::getCameraDistance()
 bool SurroundingPatch::isVisible(int)
 {
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();                    // base +0x48
-    const Frustum* const frustum = view->getFrustumPtr();                          // +0x74
+    const Frustum* frustum = view->getFrustumPtr();                                // +0x74
     const float* const m = view->getViewMatrixPtr()->m;                            // +0x64
     const float camX = m[12];
     const float camZ = m[14];
     if (static_cast<double>(originX) <= camX && static_cast<double>(endX) >= camX
         && static_cast<double>(originZ) <= camZ && static_cast<double>(endZ) >= camZ)
         return true;
-    const float farPlane = view->getFarPlane();                                         // +0x3C
+    // [RENDER] With the view-distance cut the ring reaches out to the scenery distance (render
+    // milestone 11 task 5): the terrain culler's frustum taken out that far.
+    const Frustum* const scenery = terrainSceneryFrustum();
+    if (scenery)
+        frustum = scenery;
+    const float farPlane = scenery ? scenery->getFarDist() : view->getFarPlane();        // +0x3C
     const float x0 = static_cast<float>(originX);
     if (x0 - farPlane > camX) return false;
     const float x1 = static_cast<float>(endX);

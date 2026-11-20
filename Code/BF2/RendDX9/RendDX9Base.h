@@ -832,6 +832,9 @@ float& rendererHazeDepth();
 float& rendererHazeFalloff();
 // The radial view-distance cut (renderer.viewDistance, render milestone 11 task 5): RaAerial.w 2.
 bool& rendererViewDistanceCut();
+// How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
+// against the world view's frustum taken out to here. 0 while the cut is off (the frustum's own far).
+float rendererSceneryDistance();
 void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
