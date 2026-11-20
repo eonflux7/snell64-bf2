@@ -17,6 +17,7 @@
 #include "MacRawMouse.h"
 #include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
 #include "../Host/CursorFile.h"
+#include "../../Menu/MenuViewport.h"     // [CHOSEN] the HiDPI cursor factor (uiScale)
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -409,8 +410,10 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
     // the 32x32 cursor at one back-buffer pixel per cursor pixel (a full-screen mode change on
     // Windows), so its size follows the game image: points per back-buffer pixel, times the frame
-    // size. Pixels are enlarged nearest-neighbour to the next whole multiple and, when the
-    // Retina target is not a whole multiple, reduced to it with high-quality filtering.
+    // size - and, on high-resolution back buffers, times MenuViewport::uiScale, the whole factor
+    // the console uses (customCursor). Pixels are enlarged nearest-neighbour to the next whole
+    // multiple and, when the Retina target is not a whole multiple, reduced to it with
+    // high-quality filtering.
     static NSCursor* buildCursorFrame(const CursorFrame& f, CGFloat scale, CGFloat backing)
     {
         const NSSize points = NSMakeSize(f.width * scale, f.height * scale);
@@ -475,7 +478,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const NSRect b = view.bounds;
         if (b.size.height <= 0)
             return nil;
-        const CGFloat scale = std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight));
+        // [CHOSEN, not recovered] The menu's .ani cursors grow with the HUD on high-resolution back
+        // buffers (2560x1664: 3 back-buffer pixels per cursor pixel) instead of shrinking with it.
+        const CGFloat hidpi = static_cast<CGFloat>(ui::MenuViewport::uiScale(
+            static_cast<unsigned>(std::max(backWidth, 0)), static_cast<unsigned>(backHeight)));
+        const CGFloat scale =
+            std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight)) * hidpi;
         const CGFloat backing = window && window.backingScaleFactor > 0 ? window.backingScaleFactor : 1.0;
         if (!c->cursors || std::fabs(c->builtScale - scale) > 0.001 || c->builtBacking != backing)
         {
@@ -493,6 +501,31 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             c->cursors = built;
             c->builtScale = scale;
             c->builtBacking = backing;
+            // [TEMP] [CHOSEN, not recovered] BF2_HOST_TRACE=1: the size each cursor build shows.
+            // [RETIRE-WHEN: macos-options-validated]
+            static const bool trace = [] { const char* e = std::getenv("BF2_HOST_TRACE"); return e && e[0] == '1'; }();
+            if (trace && !c->anim.frames.empty())
+            {
+                const CursorFrame& f = c->anim.frames[0];
+                std::fprintf(stderr, "[TEMP] [HOST] cursor %zu frame(s) %dx%d at %.3f pt per cursor pixel "
+                             "(uiScale %.0f, back=%dx%d, backing %.1f): %.1fx%.1f pt\n",
+                             c->anim.frames.size(), f.width, f.height, scale, hidpi, backWidth, backHeight,
+                             backing, f.width * scale, f.height * scale);
+                std::fflush(stderr);
+                // BF2_HOST_CURSOR_DUMP=DIR also writes the first frame's bitmap as built, since
+                // back-buffer captures do not contain the system cursor.
+                const char* dump = std::getenv("BF2_HOST_CURSOR_DUMP");
+                NSImage* image = built.count ? built[0].image : nil;
+                NSBitmapImageRep* rep = image.representations.count
+                    ? (NSBitmapImageRep*)image.representations[0] : nil;
+                if (dump && dump[0] && [rep isKindOfClass:[NSBitmapImageRep class]])
+                {
+                    NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+                    NSString* path = [NSString stringWithFormat:@"%s/cursor_%dx%d_scale%.3f.png", dump,
+                                      backWidth, backHeight, scale];
+                    [png writeToFile:path atomically:YES];
+                }
+            }
         }
         if (c->cursors.count == 0 || c->anim.steps.empty())
             return nil;
@@ -1185,6 +1218,7 @@ NSCursor* currentViewCursor()
 {
     return s_hostImpl ? s_hostImpl->rectCursor : nil;
 }
+
 } // namespace
 
 namespace dice {
