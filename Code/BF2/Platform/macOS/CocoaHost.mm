@@ -213,6 +213,16 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
     double activationStarted = 0.0;  // systemUptime of the first request
     double activationLastTry = 0.0;
+    // [CHOSEN, not recovered] The application frontmost at the first request (Terminal, a launcher
+    // script's terminal, Finder, the OpenBF2 app): retries continue while it stays in front, not
+    // only while the direct parent (a shell under Terminal is never frontmost) is.
+    pid_t  activationFrontPid = 0;
+    // [CHOSEN, not recovered] An unbundled executable started from Terminal can be left frontmost
+    // for the window server while AppKit never completes its activation: NSApp stays inactive,
+    // GCMouse delivers nothing, and only switching applications recovers. Activating the Dock
+    // first resets that state, then this process asks again (the workaround SDL uses for
+    // Terminal launches). Once per activation, only while the user has not gone to another app.
+    double dockResetAt = 0.0;        // systemUptime of the Dock activation, 0 when not done
     float scriptX = 0.0f, scriptY = 0.0f;
     bool scriptPointerSet = false;
 
@@ -259,7 +269,42 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                      static_cast<int>(getppid()));
         activationPending = true;
         activationStarted = activationLastTry = uptime();
+        activationFrontPid = front && front.processIdentifier != getpid() ? front.processIdentifier : 0;
+        dockResetAt = 0.0;
         requestActivation();
+    }
+
+    // Asks for activation the strongest way available while this process may take the front.
+    void requestActivationNow()
+    {
+        [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
+        requestActivation();
+        if (window && visible && !minimized && !window.isKeyWindow)
+        {
+            [window makeKeyAndOrderFront:nil];
+            [window makeFirstResponder:view];
+        }
+    }
+
+    // [CHOSEN, not recovered] A click into the game window while AppKit still reports the
+    // application inactive is the user choosing the game: ask for activation again (a request
+    // made in response to the user's own input is not refused) and keep retrying from here, so
+    // the menu reacts without switching applications.
+    void clickedWhileInactive()
+    {
+        if (scriptedFocus || testHeadless || [NSApp isActive])
+            return;
+        std::fprintf(stderr, "[host] click into the inactive game window - requesting activation\n");
+        if (!activationPending)
+        {
+            activationPending = true;
+            activationStarted = uptime();
+            NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+            activationFrontPid = front && front.processIdentifier != getpid() ? front.processIdentifier : 0;
+            dockResetAt = 0.0;
+        }
+        activationLastTry = uptime();
+        requestActivationNow();
     }
 
     // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and
@@ -289,33 +334,47 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                 [delegate syncFocus];
             }
         }
+        // Retry while the first request's frontmost application, the launcher, nobody, or this
+        // process itself is frontmost. A child started by a launcher can already be reported
+        // frontmost (its window ordered front) while NSApp is still inactive; that state needs the
+        // retry most, and the window must be made key again with it.
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        const pid_t frontPid = front ? front.processIdentifier : 0;
+        const bool mayTakeFront = !front || frontPid == getppid() || frontPid == getpid() ||
+                                  (activationFrontPid && frontPid == activationFrontPid);
+        const bool dockInFront = dockResetAt > 0.0 && front &&
+                                 [front.bundleIdentifier isEqualToString:@"com.apple.dock"];
+        if (!mayTakeFront && !dockInFront)
+        {
+            activationPending = false;
+            std::fprintf(stderr, "[host] another application (%s) was activated; activation left to the user\n",
+                         front.localizedName.UTF8String ?: "?");
+            return;
+        }
         if (now - activationStarted > 10.0)
         {
             activationPending = false;
             std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
             return;
         }
-        if (now - activationLastTry < 0.5)
+        if (dockResetAt == 0.0 && now - activationStarted > 1.0 && mayTakeFront)
+        {
+            NSArray<NSRunningApplication*>* docks =
+                [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.dock"];
+            if (docks.count)
+            {
+                dockResetAt = now;
+                std::fprintf(stderr, "[host] activation still pending; resetting it through the Dock\n");
+                [docks.firstObject activateWithOptions:0];
+                activationLastTry = now;     // ask again once the Dock has taken the front
+                return;
+            }
+            dockResetAt = -1.0;              // no Dock process: retries only
+        }
+        if (now - activationLastTry < (dockResetAt > 0.0 && now - dockResetAt < 0.5 ? 0.3 : 0.5))
             return;
         activationLastTry = now;
-        // Retry while the launcher, nobody, or this process itself is frontmost. A child started
-        // by the launcher can already be reported frontmost (its window ordered front) while
-        // NSApp is still inactive; that state needs the retry most, and the window must be made
-        // key again with it.
-        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        const pid_t frontPid = front ? front.processIdentifier : 0;
-        if (front && frontPid != getppid() && frontPid != getpid())
-            return;
-        if (frontPid == getpid())
-        {
-            [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
-            if (window && visible && !minimized && !window.isKeyWindow)
-            {
-                [window makeKeyAndOrderFront:nil];
-                [window makeFirstResponder:view];
-            }
-        }
-        requestActivation();
+        requestActivationNow();
     }
 
     // The application became active: the game window takes key status if it lost it (a window
@@ -941,6 +1000,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         case NSEventTypeLeftMouseDown:
         case NSEventTypeRightMouseDown:
         case NSEventTypeOtherMouseDown:
+            if (![NSApp isActive] && event.window == window)
+                clickedWhileInactive();          // also in the system-active fallback (focus held)
             if (focus) handleMouseButton(event, true);
             break;
         case NSEventTypeLeftMouseUp:
