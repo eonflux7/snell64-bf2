@@ -345,7 +345,7 @@ public:
     float                 unused24[4];          // +0x024  [RENDER] were the morph and LOD 2 factors
     std::vector<TerrainCullerNode*> visible;    // +0x034  the visible node list the draws walk
     std::vector<TerrainCullerNode*> gathered;   // +0x044  the sphere gathers' node list
-    Frustum*              frustum;              // +0x054  update: the render view's frustum
+    const Frustum*        frustum;              // +0x054  update: the render view's frustum
     const float*          cameraPosition;       // +0x058  update: row 3 of the render view's +0x64 matrix
     const float*          gatherCentre;         // +0x05C  gatherSphere's centre
     float                 gatherRadius;         // +0x060

@@ -1239,15 +1239,22 @@ void TerrainAabb::refresh()
 // TerrainCuller - the per-frame walk.
 
 namespace {
-Frustum g_sceneryFrustum;   // [RENDER] the world view's frustum out to the scenery distance
-bool g_sceneryFrustumLive = false;
+Frustum g_sceneryFrustum;   // [RENDER] the last answer of terrainSceneryFrustum
 }
 
-// [RENDER] This frame's terrain frustum out to the scenery distance (built by TerrainCuller::update
-// while the view-distance cut is on), or 0.
+// [RENDER] The current render view's frustum out to the scenery distance while the view-distance
+// cut is on (a perspective view), else 0. Built from the view at each call, so the terrain culler,
+// the water and the surrounding ring agree whatever other views (the sun's cascades) were culled in
+// between.
 const Frustum* terrainSceneryFrustum()
 {
-    return g_sceneryFrustumLive ? &g_sceneryFrustum : 0;
+    dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();
+    const float scenery = dx9rend::rendererSceneryDistance();
+    if (scenery <= 0.0f || view->getProjectionMode() == 1)
+        return 0;
+    rendmath::frustumSetPerspective(g_sceneryFrustum, view->getFov(), view->getAspect(),
+                                    view->getNearPlane(), scenery, *view->getViewMatrixPtr());
+    return &g_sceneryFrustum;
 }
 
 // clear the visible list, take the view's frustum and camera, the detail distance from
@@ -1259,15 +1266,8 @@ void TerrainCuller::update()
 {
     visible.clear();                                                              // sub_100E7520(0, 0)
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();                   // base +0x48
-    frustum = view->getFrustumPtr();                                              // +0x74
-    const float scenery = dx9rend::rendererSceneryDistance();
-    g_sceneryFrustumLive = scenery > 0.0f && view->getProjectionMode() != 1;
-    if (g_sceneryFrustumLive)
-    {
-        rendmath::frustumSetPerspective(g_sceneryFrustum, view->getFov(), view->getAspect(),
-                                        view->getNearPlane(), scenery, *view->getViewMatrixPtr());
-        frustum = &g_sceneryFrustum;
-    }
+    const Frustum* const scenery = terrainSceneryFrustum();
+    frustum = scenery ? scenery : view->getFrustumPtr();                          // +0x74
     cameraPosition = view->getViewMatrixPtr()->m + 12;                            // +0x64, row 3
     walkRoot(nodes);
 }
