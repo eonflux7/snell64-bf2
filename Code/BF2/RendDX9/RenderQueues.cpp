@@ -2613,10 +2613,8 @@ void createRenderQueues()
     t->slots[31] = makeQueue("RSMTGlow");
     if (t->slots[31]) queueSortMode(t->slots[31]) = 2;
     t->slots[11] = makeQueue("RSMTZOnly");
-    t->slots[14] = makeQueue("RSMTFogPass");
-    if (t->slots[14]) queueSortMode(t->slots[14]) = 1;
-    t->slots[15] = makeQueue("RSMTFogTransparentPass");
-    if (t->slots[15]) queueSortMode(t->slots[15]) = 1;
+    // [RENDER] milestone 11: slots 14 and 15 (retail's RSMTFogPass and RSMTFogTransparentPass) are
+    // not made: nothing adds to them, and every effect fogs in its own shader (aerial perspective).
     if (t->slots[3]) queueSortMode(t->slots[3]) = 2;
     if (t->slots[1]) queueSortMode(t->slots[1]) = 2;
     if (t->slots[7]) queueSortMode(t->slots[7]) = 2;

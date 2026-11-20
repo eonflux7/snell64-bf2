@@ -871,7 +871,6 @@ bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
     }
 
     gpuTimerMark("world transparent");               // [DEV] BF2_GPU_TIMERS
-    renderQueueFlush(0x3C, 1);                       // RSMTFogPass
 
     if (in.world && cameraIsUnderWater())
     {
@@ -961,7 +960,6 @@ bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
     {
         geom::asParticleSystemManager(geom::g_ParticleSystemManager)->onPathDraw(false, false);
     }
-    renderQueueFlush(0x40, 1);                       // RSMTFogTransparentPass
     if (in.weatherManager && in.particles)
         geom::asWeatherManager(in.weatherManager)->render();                      // +0x1C
     if (in.rainManager && in.particles)

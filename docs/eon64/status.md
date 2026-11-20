@@ -151,8 +151,11 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    it meets the sky; the haze's shape is `renderer.hazeDepth`, `hazeFalloff`, `hazeSteepen`. In
    game on Muttrah City (`ridges`, A/B): no compile failures (load trace), frame rate normal;
    depth 2 greyed the near ridge, so 1 by default; steepening from 0.75 left a hazy wall
-   at 500–700 m, from 0.35 the ridges separate into layers. Defaults to settle with the owner; the
-   fog queues not yet looked at.
+   at 500–700 m, from 0.35 the ridges separate into layers. Defaults to settle with the owner. The
+   fog queues deleted (2026-11-20): nothing adds to slots 14 and 15 (the enqueue router fills 0–7,
+   direct adds 8–11, 16–27 and 31, each shader its own queue), so their flushes drew nothing.
+   Below the horizon the sky fills the horizon row, flat: from the air a bright horizon band over
+   flat grey; task 5's geometry past the limit fills it (owner, 2026-11-20).
 5. View distance, as in the plan: geometry cut off at the radial distance (the far plane pushed
    past it), the last 10–15 % faded by alpha-to-coverage dither; objects faded to the radiance
    behind them; the low-detail surround terrain and a far ground ring (or sea) drawn past the
