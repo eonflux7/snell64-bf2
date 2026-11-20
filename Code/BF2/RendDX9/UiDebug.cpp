@@ -704,6 +704,7 @@ void drawAtmosphereTab()
     }
     drawVariableTable("##atmosvars", "", "atmosphere", false);   // full names: no prefix
     drawVariableTable("##skygain", "", "skyGainBlend", false);
+    drawVariableTable("##haze", "", "haze", false);
     const AtmosphereInfo a = rendererAtmosphereInfo();
     if (!a.fitted)
         ImGui::TextDisabled("No fit yet: it runs once a level with a sky dome and fog has drawn.");

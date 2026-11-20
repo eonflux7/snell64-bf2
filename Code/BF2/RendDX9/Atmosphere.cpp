@@ -73,11 +73,8 @@ const double kMieAbsorption = 4.40e-3;                               // 1/km at 
 const double kMieG = 0.8;
 const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
 
-// The haze layer. The falloff is one value for every level, tuned at the aerial-perspective A/B
-// (task 4); the optical depth at fog end sets the density.
-const double kHazeFalloff = 400.0;          // m: density falls by e over this height
-const double kHazeDepthAtFogEnd = 2.0;      // horizontal optical depth at fog end, before steepening
-const double kHazeSteepenStart = 0.75;      // share of fog end where the steepening begins
+// The haze layer: one shape for every level, set by renderer.hazeDepth, renderer.hazeFalloff and
+// renderer.hazeSteepen (tuned at the aerial-perspective A/B, task 4); the density follows fog end.
 
 // Sizes, as RaAtmosphere.fx defines them.
 const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
@@ -428,7 +425,6 @@ struct State
     double skyGain;          // horizon luminance: authored over the model's
     CpuTables tables;        // full size, for the textures
     float appliedBlend;      // renderer.skyGainBlend the sky view was built with
-    double hazeDensity;      // 1/m at the reference height
     double fitMs;
     // GPU.
     IDirect3DTexture9* trans;
@@ -448,6 +444,15 @@ struct State
 State g = {};
 bool g_enabled = true;   // renderer.atmosphere
 float g_skyGainBlend = 0.5f;   // renderer.skyGainBlend
+float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end, before steepening
+float g_hazeFalloff = 400.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
+float g_hazeSteepen = 0.75f;   // renderer.hazeSteepen: share of fog end where the steepening begins
+
+// 1/m at the reference height.
+float hazeDensity()
+{
+    return g.inputs.fogEnd > 0.0f ? g_hazeDepth / g.inputs.fogEnd : 0.0f;
+}
 
 IDirect3DDevice9* device()
 {
@@ -646,8 +651,8 @@ void fit()
     // (renderer.skyGainBlend): t = 0 physical, 1 the authored level.
     g.skyGain = luminance(horizonTarget) / std::max(luminance(g.horizonModel), 1e-9);
 
-    // 3. The haze: its density; its light is the sky's (RaAtmosphere.fx).
-    g.hazeDensity = kHazeDepthAtFogEnd / in.fogEnd;
+    // 3. The haze: its density follows fog end each frame (hazeDensity); its light is the sky's
+    //    (RaAtmosphere.fx).
 
     // The frame's tables at full size (the sky view follows in rendererAtmosphereFrame).
     buildTransmittance(g.sky, g.tables, kTransmittanceW, kTransmittanceH);
@@ -665,7 +670,7 @@ void fit()
         "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance)\n"
         "[ATMOS]   zenith target %.4f %.4f %.4f%s model %.4f %.4f %.4f\n"
         "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f (before the gain)\n"
-        "[ATMOS]   ground albedo %.3f %.3f %.3f; haze density %.3e /m\n",
+        "[ATMOS]   ground albedo %.3f %.3f %.3f\n",
         g.fitMs, elevation * 180.0 / kPi, g.refHeight, in.fogEnd,
         g.sky.rayleigh.x / kEarthRayleigh[0], g.sky.rayleigh.y / kEarthRayleigh[1],
         g.sky.rayleigh.z / kEarthRayleigh[2], g.skyGain,
@@ -674,7 +679,7 @@ void fit()
         g.zenithModel.x, g.zenithModel.y, g.zenithModel.z,
         horizonTarget.x, horizonTarget.y, horizonTarget.z,
         g.horizonModel.x, g.horizonModel.y, g.horizonModel.z,
-        g.groundAlbedo.x, g.groundAlbedo.y, g.groundAlbedo.z, g.hazeDensity);
+        g.groundAlbedo.x, g.groundAlbedo.y, g.groundAlbedo.z);
 }
 
 // ---- GPU ----
@@ -829,8 +834,8 @@ void fillConstants(float c[16][4])
           float(std::pow(g.skyGain, static_cast<double>(g_skyGainBlend))) },
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
-        { float(g.hazeDensity), float(1.0 / kHazeFalloff), float(g.refHeight), in.fogEnd },
-        { float(kHazeSteepenStart), 0.0f, 0.0f, 0.0f },
+        { hazeDensity(), 1.0f / g_hazeFalloff, float(g.refHeight), in.fogEnd },
+        { g_hazeSteepen, 0.0f, 0.0f, 0.0f },
         { in.sun[0], in.sun[1], in.sun[2], 0.0f },
         { in.sky[0], in.sky[1], in.sky[2], 0.0f },
     };
@@ -946,6 +951,21 @@ float& rendererSkyGainBlend()
     return g_skyGainBlend;
 }
 
+float& rendererHazeDepth()
+{
+    return g_hazeDepth;
+}
+
+float& rendererHazeFalloff()
+{
+    return g_hazeFalloff;
+}
+
+float& rendererHazeSteepen()
+{
+    return g_hazeSteepen;
+}
+
 void rendererAtmosphereFrame()
 {
     g.atlasLive = false;
@@ -1033,7 +1053,7 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.fogEnd = g.inputs.fogEnd;
     i.skyGain = static_cast<float>(g.skyGain);
     i.skyGainApplied = static_cast<float>(std::pow(g.skyGain, static_cast<double>(g_skyGainBlend)));
-    i.hazeDensity = static_cast<float>(g.hazeDensity);
+    i.hazeDensity = hazeDensity();
     for (int k = 0; k < 3; ++k)
     {
         i.rayleigh[k] = static_cast<float>(at(g.sky.rayleigh, k) / kEarthRayleigh[k]);

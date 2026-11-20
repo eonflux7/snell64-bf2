@@ -826,6 +826,12 @@ bool& rendererAtmosphereEnabled();
 // The share of the sky gain applied, in log space: 0 a physical sky, 1 the authored level
 // (renderer.skyGainBlend).
 float& rendererSkyGainBlend();
+// The haze's shape (renderer.hazeDepth, renderer.hazeFalloff, renderer.hazeSteepen): its horizontal
+// optical depth at fog end before the steepening, the height (m) over which its density falls by e,
+// and the share of fog end where the steepening to full haze begins.
+float& rendererHazeDepth();
+float& rendererHazeFalloff();
+float& rendererHazeSteepen();
 void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
