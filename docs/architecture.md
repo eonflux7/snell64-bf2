@@ -171,7 +171,10 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   viewport's height over the 600 authored lines, to the nearest whole number (1 up
   to 900 lines, 2 at 1080, 3 at 1600 to 1912). The font then samples its texture
   with point filtering so each font pixel stays a uniform block.
-- macOS: the menu's `.ani` cursors grow by the same factor.
+- macOS: the menu's `.ani` cursors grow by the same factor, and Core Animation
+  enlarges the drawable with nearest-neighbour filtering only at a whole-number
+  factor (linear otherwise, so 800x600 or 1650x1050 full screen on a Retina panel
+  is not jagged).
 
 ## Client menu disconnect
 

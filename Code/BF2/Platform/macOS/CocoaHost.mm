@@ -65,6 +65,8 @@ struct HostCursor
 
 // The view's cursor rect asks the host for the cursor it shows (defined after ClientHost::Impl).
 NSCursor* currentViewCursor();
+// The view asks the host to re-choose the layer's magnification filter (defined with it).
+void refreshViewMagnification();
 } // namespace
 
 @interface OpenBF2HostWindow : NSWindow
@@ -98,8 +100,9 @@ NSCursor* currentViewCursor();
     layer.contentsScale = 1.0;
     layer.contentsGravity = kCAGravityResize;
     // [CHOSEN, not recovered] The internal-resolution drawable is enlarged by Core Animation
-    // on Retina. Preserve its pixel-snapped bitmap text instead of applying a second linear
-    // filter after the D3D font sampler. Keep linear minification for windows scaled to fit.
+    // on Retina. A whole-number enlargement keeps its pixel-snapped bitmap text with nearest-
+    // neighbour magnification; other factors use linear (ClientHost::Impl::updateMagnification).
+    // Keep linear minification for windows scaled to fit.
     layer.magnificationFilter = kCAFilterNearest;
     CGColorRef black = CGColorCreateGenericGray(0.0, 1.0);
     layer.backgroundColor = black;
@@ -127,6 +130,7 @@ NSCursor* currentViewCursor();
 {
     [super viewDidChangeBackingProperties];
     self.layer.contentsScale = 1.0;
+    refreshViewMagnification();
 }
 @end
 
@@ -404,7 +408,24 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         [CATransaction setDisableActions:YES];
         layer.contentsScale = 1.0;
         layer.drawableSize = CGSizeMake(backWidth, backHeight);
+        updateMagnification();
         [CATransaction commit];
+    }
+
+    // [CHOSEN, not recovered] Core Animation enlarges the drawable to the view's backing pixels.
+    // Nearest-neighbour keeps a whole-number enlargement (1440x900 on a 2880x1800 backing) pixel-
+    // exact. At any other factor (800x600 or 2048x1330 full screen on a Retina panel) it repeats
+    // some rows and columns and the image looks jagged ("oversharp"), so those use linear.
+    void updateMagnification()
+    {
+        if (!layer || !view || backWidth <= 0 || backHeight <= 0)
+            return;
+        const NSRect pixels = [view convertRectToBacking:view.bounds];
+        const double fx = NSWidth(pixels) / backWidth, fy = NSHeight(pixels) / backHeight;
+        const auto whole = [](double f) { return f >= 1.0 && std::fabs(f - std::round(f)) < 0.01; };
+        NSString* const filter = whole(fx) && whole(fy) ? kCAFilterNearest : kCAFilterLinear;
+        if (![layer.magnificationFilter isEqualToString:filter])
+            layer.magnificationFilter = filter;
     }
 
     // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
@@ -691,6 +712,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
 
     void notifyResize()
     {
+        updateMagnification();                   // the view's frame may have changed with the size
         // [TEMP] [CHOSEN, not recovered] BF2_HOST_TRACE=1: window geometry after each resize or
         // full-screen switch, for unattended option runs. [RETIRE-WHEN: macos-options-validated]
         static const bool trace = [] { const char* e = std::getenv("BF2_HOST_TRACE"); return e && e[0] == '1'; }();
@@ -1218,7 +1240,11 @@ NSCursor* currentViewCursor()
 {
     return s_hostImpl ? s_hostImpl->rectCursor : nil;
 }
-
+void refreshViewMagnification()
+{
+    if (s_hostImpl)
+        s_hostImpl->updateMagnification();
+}
 } // namespace
 
 namespace dice {
