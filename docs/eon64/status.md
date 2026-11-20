@@ -200,7 +200,8 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    the leaf, trunk and road shaders no longer cut; overgrowth ends at its own range
    (`Overgrowth.viewDistance`, 500 m on Muttrah). Vehicles, soldiers, particles and decals still
    end at the limit. In game on Muttrah City (`ridges`): the city and the shore road to the far
-   end of the bay. Not yet seen by the owner. Left: the far ground ring (land past the ring is
+   end of the bay. Owner's look, 2026-11-20 (Saaremaa, Kashan Desert, Burning Sands, The
+   Falklands AAS 64): looks good. Left: the far ground ring (land past the ring is
    sky); vegetation past overgrowth's own range (impostors, if wanted); the dither's look; jets
    and anti-air; device resets; the cost of statics, roads and terrain to 40 km.
 6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
