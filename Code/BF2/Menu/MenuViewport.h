@@ -23,20 +23,11 @@ struct MenuViewport
 
     // [CHOSEN, not recovered] The whole-number factor for UI drawn from bitmaps with no vector
     // source - the console's bitmap font, the menu's .ani cursors - on high-resolution outputs: the
-    // fitted viewport's height over the 600 lines the HUD and menus are authored for, to the
-    // nearest whole number (a half rounds down), at least 1. 1 up to 900 lines, 2 at 1080, 3 at
-    // 1600-1912, 4 at 2160. Whole numbers keep each bitmap pixel a uniform block.
-    static unsigned uiScale(unsigned outputWidth, unsigned outputHeight)
-    {
-        const unsigned h = fit(outputWidth, outputHeight).height;
-        const unsigned k = (h + 299) / 600;
-        return k ? k : 1;
-    }
-
-    // [CHOSEN, not recovered] The whole-number factor for the menu's .ani cursors: the same ratio
-    // rounded down, so a cursor never looks larger against the UI than retail's 32 pixels on 600
-    // lines (1 below 1200 lines, 2 at 1200-1799, 3 at 1800-2399).
-    static unsigned cursorScale(unsigned outputWidth, unsigned outputHeight)
+    // fitted viewport's height over the 600 lines the HUD and menus are authored for, rounded down,
+    // at least 1 (1 below 1200 lines, 2 at 1200-1799, 3 at 1800-2399). Rounding down keeps them
+    // no larger against the UI than in the 800x600 menu (owner check 2026-11-20); whole numbers
+    // keep each bitmap pixel a uniform block.
+    static unsigned bitmapScale(unsigned outputWidth, unsigned outputHeight)
     {
         const unsigned k = fit(outputWidth, outputHeight).height / 600;
         return k ? k : 1;

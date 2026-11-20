@@ -167,16 +167,14 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   the stored value until a resolution is set again.
 - Every successful device reset logs the back-buffer size, mode, refresh rate,
   fullscreen, vsync and multisampling.
-- The console's bitmap font is enlarged by `MenuViewport::uiScale`: the 4:3 menu
-  viewport's height over the 600 authored lines, to the nearest whole number (1 up
-  to 900 lines, 2 at 1080, 3 at 1600 to 1912). The font then samples its texture
-  with point filtering so each font pixel stays a uniform block.
-- macOS: the menu's `.ani` cursors grow by `MenuViewport::cursorScale`, the same
-  ratio rounded down (never larger against the UI than retail's 32 pixels on 600
-  lines: 2 at 1600 lines, 3 at 1912), and Core Animation
-  enlarges the drawable with nearest-neighbour filtering only at a whole-number
-  factor (linear otherwise, so 800x600 or 1650x1050 full screen on a Retina panel
-  is not jagged).
+- The console's bitmap font and, on macOS, the menu's `.ani` cursors are enlarged by
+  `MenuViewport::bitmapScale`: the 4:3 menu viewport's height over the 600 authored
+  lines, rounded down (1 below 1200 lines, 2 at 1600 and 1664, 3 at 1912), so neither
+  looks larger against the UI than in the 800x600 menu. The console font samples its
+  texture with point filtering so each font pixel stays a uniform block.
+- macOS: Core Animation enlarges the drawable with nearest-neighbour filtering only
+  at a whole-number factor (linear otherwise, so 800x600 or 1650x1050 full screen on
+  a Retina panel is not jagged).
 
 ## Client menu disconnect
 

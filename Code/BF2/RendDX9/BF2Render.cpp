@@ -5937,9 +5937,9 @@ namespace dx9rend {
 // [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
 // [CHOSEN, not recovered] HiDPI console: retail draws at one back-buffer pixel per font pixel, which
 // leaves 11-pixel lines on a 1664-line panel. Every console length (background, line step, margins,
-// glyphs) is multiplied by MenuViewport::uiScale - the HUD's own 600-line scale, whole - and the
-// font draws its glyphs as uniform blocks at that factor (FontPorted::setScale's unused retail
-// slot). 1 up to 900 lines: the shipped arithmetic, unchanged.
+// glyphs) is multiplied by MenuViewport::bitmapScale - the HUD's 600-line scale rounded down, as for
+// the menu cursors - and the font draws its glyphs as uniform blocks at that factor
+// (FontPorted::setScale's unused retail slot). Below 1200 lines: the shipped arithmetic, unchanged.
 void Renderer::slot_0x58()
 {
     const unsigned char statsWere = statsSwapEnabled(0);
@@ -5952,9 +5952,9 @@ void Renderer::slot_0x58()
     IBase* const overlay = static_cast<IBase*>(m_consoleOverlay);               // +0x5C8
 
     const float* const viewport = getRenderView()->getViewport();
-    const unsigned int uiScale = ui::MenuViewport::uiScale(
+    const unsigned int bitmapScale = ui::MenuViewport::bitmapScale(
         static_cast<unsigned int>(viewport[2]), static_cast<unsigned int>(viewport[3]));
-    const float k = static_cast<float>(uiScale);
+    const float k = static_cast<float>(bitmapScale);
 
     const int fontHeight = geom::fontPortedGetHeight(font);
     const float consoleHeight =
@@ -5969,15 +5969,15 @@ void Renderer::slot_0x58()
     // [CHOSEN] diagnostic, NOT in retail: proves on a live run that the console draw ran, and
     // names the scale whenever it changes.
     static unsigned int s_loggedScale = 0;
-    if (s_loggedScale != uiScale)
+    if (s_loggedScale != bitmapScale)
     {
-        s_loggedScale = uiScale;
+        s_loggedScale = bitmapScale;
         ::renddx9abi::logf("Renderer::slot_0x58 (console draw): %u console lines, line height %d, "
-                           "scale %u, background %.1f px", lineCount, fontHeight, uiScale,
+                           "scale %u, background %.1f px", lineCount, fontHeight, bitmapScale,
                            static_cast<double>(consoleHeight));
     }
 
-    if (uiScale != 1)
+    if (bitmapScale != 1)
         geom::fontPortedSetScale(font, k, k);
     int line = 0;
     for (std::vector<std::string>::const_iterator it = lines.begin(); it != lines.end();
@@ -5987,7 +5987,7 @@ void Renderer::slot_0x58()
         const int height = geom::fontPortedGetHeight(font);                    // re-read per line
         geom::fontPortedDrawText(font, 2.0f * k, static_cast<float>((height + 1) * line + 2) * k, text);
     }
-    if (uiScale != 1)
+    if (bitmapScale != 1)
         geom::fontPortedSetScale(font, 1.0f, 1.0f);    // the font's other users draw at 1
 
     statsSwapEnabled(statsWere);

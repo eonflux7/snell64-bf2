@@ -67,30 +67,22 @@ int main()
     check(pick(m2, {0, 0, 0}) < 0, "unknown desktop");
     check(pick(std::vector<dm::Mode>(), {1440, 900, 60}) < 0, "empty list");
 
-    // The HiDPI UI factor (console, cursor): the menu viewport height over 600, nearest whole.
+    // The HiDPI bitmap factor (console font, menu cursors): the menu viewport height over 600,
+    // rounded down, so neither looks larger against the UI than in the 800x600 menu.
     using dice::hfe::ui::MenuViewport;
-    check(MenuViewport::uiScale(800, 600) == 1, "800x600: 1");
-    check(MenuViewport::uiScale(1024, 768) == 1, "1024x768: 1");
-    check(MenuViewport::uiScale(1280, 800) == 1, "1280x800: 1");
-    check(MenuViewport::uiScale(1440, 900) == 1, "1440x900: 1 (1.5 rounds down)");
-    check(MenuViewport::uiScale(1920, 1080) == 2, "1920x1080: 2");
-    check(MenuViewport::uiScale(2560, 1600) == 3, "2560x1600: 3");
-    check(MenuViewport::uiScale(2560, 1664) == 3, "2560x1664: 3");
-    check(MenuViewport::uiScale(2940, 1912) == 3, "2940x1912: 3");
-    check(MenuViewport::uiScale(3840, 2160) == 4, "3840x2160: 4");
-    check(MenuViewport::uiScale(1600, 900) == 1, "16:9 1600x900: 1");
-    check(MenuViewport::uiScale(2560, 1080) == 2, "21:9 2560x1080: height decides, 2");
-    check(MenuViewport::uiScale(1200, 1600) == 1, "portrait 1200x1600: 4:3 width-limited (900), 1");
-    check(MenuViewport::uiScale(0, 0) == 1, "degenerate: 1");
-    // The cursor factor rounds down: never larger against the UI than 32 pixels on 600 lines.
-    check(MenuViewport::cursorScale(1440, 900) == 1, "cursor 1440x900: 1");
-    check(MenuViewport::cursorScale(1920, 1080) == 1, "cursor 1920x1080: 1");
-    check(MenuViewport::cursorScale(1920, 1200) == 2, "cursor 1920x1200: 2");
-    check(MenuViewport::cursorScale(2560, 1600) == 2, "cursor 2560x1600: 2");
-    check(MenuViewport::cursorScale(2560, 1664) == 2, "cursor 2560x1664: 2");
-    check(MenuViewport::cursorScale(2940, 1912) == 3, "cursor 2940x1912: 3");
-    check(MenuViewport::cursorScale(3840, 2160) == 3, "cursor 3840x2160: 3");
-    check(MenuViewport::cursorScale(0, 0) == 1, "cursor degenerate: 1");
+    check(MenuViewport::bitmapScale(800, 600) == 1, "800x600: 1");
+    check(MenuViewport::bitmapScale(1024, 768) == 1, "1024x768: 1");
+    check(MenuViewport::bitmapScale(1440, 900) == 1, "1440x900: 1");
+    check(MenuViewport::bitmapScale(1650, 1050) == 1, "1650x1050: 1 (retail size)");
+    check(MenuViewport::bitmapScale(1920, 1080) == 1, "1920x1080: 1");
+    check(MenuViewport::bitmapScale(1920, 1200) == 2, "1920x1200: 2");
+    check(MenuViewport::bitmapScale(2560, 1600) == 2, "2560x1600: 2");
+    check(MenuViewport::bitmapScale(2560, 1664) == 2, "2560x1664: 2");
+    check(MenuViewport::bitmapScale(2940, 1912) == 3, "2940x1912: 3");
+    check(MenuViewport::bitmapScale(3840, 2160) == 3, "3840x2160: 3");
+    check(MenuViewport::bitmapScale(2560, 1080) == 1, "21:9 2560x1080: height decides, 1");
+    check(MenuViewport::bitmapScale(1200, 1600) == 1, "portrait 1200x1600: 4:3 width-limited (900), 1");
+    check(MenuViewport::bitmapScale(0, 0) == 1, "degenerate: 1");
 
     std::printf("display_mode_policy: %u/%u passed\n", checks - failures, checks);
     return failures ? 1 : 0;
