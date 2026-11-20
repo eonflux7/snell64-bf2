@@ -33,6 +33,10 @@ const unsigned int kWaterObjectRingHeader =
     sizeof(void*) > sizeof(int) ? static_cast<unsigned int>(sizeof(void*))
                                 : static_cast<unsigned int>(sizeof(int));
 
+// [RENDER] The ring's entries: retail's 256, raised for the sea past the view distance (render
+// milestone 11 task 5), where the grid water covers the whole map and the rings beyond it.
+const int kWaterObjectRingSize = 4096;
+
 class QuadPatch;
 class QuadPatchEditable;
 class SurroundingPatch;

@@ -1204,6 +1204,7 @@ void Terrain::drawWaterRa(float seaLevel)
             const float box[6] = { b.min.x, bottom, b.min.z, b.max.x, top, b.max.z };
             return cull < node->patch->minHeight || !terrainFrustumIntersectsBox(scenery, box);
         }), list->end());
+        m_waterObjectRingCursor = 0;
         drawWaterBeyond(seaLevel, scenery);
     }
     TerrainCullerNode** it = list->data();
@@ -1238,7 +1239,6 @@ void Terrain::drawWaterBeyond(float seaLevel, const Frustum* frustum)
 {
     if (!m_waterSurroundingTechnique || !m_surroundingBuilt)
         return;
-    m_waterObjectRingCursor = 0;
     void*& technique = raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters));   // +0x14C
     const float top = seaLevel + 0.1f, bottom = seaLevel - 0.1f;
     float span = 0.0f;
@@ -1295,23 +1295,37 @@ void Terrain::drawWaterGrid(float seaLevel)
         const float* const m = view->getViewMatrixPtr()->m;
         camera[0] = m[12]; camera[1] = m[13]; camera[2] = m[14];
     }
-    const Frustum* const frustum = view->getFrustumPtr();
+    // [RENDER] With the view-distance cut (render milestone 11 task 5) the sea reaches the horizon:
+    // the cells of the map in the frustum out to the scenery distance, then the sea past the map
+    // (drawWaterBeyond). Retail's cells covered the view frustum's bounds, ending at the view
+    // distance in a sawtooth of cells, with the seabed under the haze past it.
+    const Frustum* const scenery = terrainSceneryFrustum();
+    const Frustum* const frustum = scenery ? scenery : view->getFrustumPtr();
     const float* const fb = reinterpret_cast<const float*>(frustum);      // [72..77]: m_boundingBox min/max
     m_waterObjectRingCursor = 0;
-    if (fb[76] - fb[73] > 100000.0)
-        return;
-    if (fb[77] - fb[74] > 100000.0)
+    if (scenery)
+        drawWaterBeyond(seaLevel, scenery);
+    else if (fb[76] - fb[73] > 100000.0 || fb[77] - fb[74] > 100000.0)
         return;
     const float invW = static_cast<float>(1.0 / w);
-    const int colStart = static_cast<int>(invW * fb[72]) - 1;
-    const int colEnd   = static_cast<int>(invW * fb[75]);
+    int colStart = static_cast<int>(invW * fb[72]) - 1;
+    int colEnd   = static_cast<int>(invW * fb[75]);
     const float invD = static_cast<float>(1.0 / d);
-    const int rowEnd   = static_cast<int>(invD * fb[77]);
+    int rowEnd   = static_cast<int>(invD * fb[77]);
     const double rowF  = fb[74] / d;
-    const int rowStart = static_cast<int>(rowF) - 1;
+    int rowStart = static_cast<int>(rowF) - 1;
+    if (scenery)
+    {
+        // The map's cells only; the frustum's bounds reach tens of kilometres past it.
+        const int half = m_patchCount / 2;
+        colStart = (std::max)(colStart, -half);
+        rowStart = (std::max)(rowStart, -half);
+        colEnd = (std::min)(colEnd, m_patchCount - half - 1);
+        rowEnd = (std::min)(rowEnd, m_patchCount - half - 1);
+    }
     if (rowStart > rowEnd)
         return;
-    int rowNext = static_cast<int>(rowF);
+    int rowNext = rowStart + 1;
     for (int row = rowStart; row <= rowEnd; ++row, ++rowNext)
     {
         if (colStart > colEnd)
@@ -1376,19 +1390,19 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
     namespace Ra = dx9rend::Ra;
     // [CHOSEN, not recovered] Skip excess cells instead of overrunning the ring
     // (issue #33), following marekzajac97/BF2-HUD-fix. Those cells remain undrawn.
-    if (m_waterObjectRingCursor >= 256)
+    if (m_waterObjectRingCursor >= kWaterObjectRingSize)
         return;
     if (!m_waterGridGeometry)
     {
         // sub_1005F340(140292): a count word, then 256 RaObjectParameters (retail 548 bytes each).
         unsigned char* const ring = static_cast<unsigned char*>(::renddx9abi::engineAlloc(
-            static_cast<unsigned int>(kWaterObjectRingHeader + 256 * sizeof(Ra::RaObjectParameters))));
+            static_cast<unsigned int>(kWaterObjectRingHeader + kWaterObjectRingSize * sizeof(Ra::RaObjectParameters))));
         unsigned char* objects = 0;
         if (ring)
         {
-            *reinterpret_cast<int*>(ring) = 256;
+            *reinterpret_cast<int*>(ring) = kWaterObjectRingSize;
             objects = ring + kWaterObjectRingHeader;
-            for (int i = 0; i < 256; ++i)
+            for (int i = 0; i < kWaterObjectRingSize; ++i)
                 Ra::raObjectParametersConstruct(objects + sizeof(Ra::RaObjectParameters) * i);
         }
         m_waterObjectRing = objects;
