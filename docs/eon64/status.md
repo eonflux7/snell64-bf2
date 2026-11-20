@@ -153,7 +153,8 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    depth 2 greyed the near ridge, so 1 by default; steepening from 0.75 left a hazy wall
    at 500–700 m, from 0.35 the ridges separate into layers. Defaults to settle with the owner. The
    fog queues deleted (2026-11-20): nothing adds to slots 14 and 15 (the enqueue router fills 0–7,
-   direct adds 8–11, 16–27 and 31, each shader its own queue), so their flushes drew nothing.
+   direct adds 8–11, 16–27 and 31, each shader its own queue), so their flushes drew nothing; loaded on Kashan Desert, the same image, and
+   6 device resets (`renderer.vsync`) with the atlas drawing, no crash.
    Below the horizon the sky fills the horizon row, flat: from the air a bright horizon band over
    flat grey; task 5's geometry past the limit fills it (owner, 2026-11-20).
 5. View distance, as in the plan: geometry cut off at the radial distance (the far plane pushed
