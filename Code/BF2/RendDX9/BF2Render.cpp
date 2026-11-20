@@ -5931,13 +5931,33 @@ namespace dx9rend {
 
 
 namespace {
-// [CHOSEN, not recovered] The HiDPI console scale (Renderer::slot_0x58): the back-buffer height
-// over 900, at least 1. Retail's unscaled console at 1440x900 is the size the owner picked as right
-// (comparison with retail, 2026-11-20); above 900 lines the console keeps that share of the screen.
-float consoleScale(float backBufferHeight)
+// [CHOSEN, not recovered] The HiDPI console layout (Renderer::slot_0x58). Retail's unscaled console
+// at 1440x900 is the size the owner picked as right (comparison with retail, 2026-11-20); at higher
+// resolutions retail's console is too small. The 11-pixel bitmap font is only readable at
+// whole-number scales (a fractional scale blurs it, owner checks at 1.45 and 1.78), so the scale is
+// the back-buffer height over 900 rounded to a whole number, and the console shows as many lines
+// (at most the shipped 20) as cover the share of the screen the shipped console has at 900 lines.
+// Below 1350 lines the scale is 1: the shipped console with its 20 lines.
+struct ConsoleLayout
 {
+    float scale;    // a whole number, at least 1
+    int   lines;    // 1..20
+};
+
+ConsoleLayout consoleLayout(float backBufferHeight, int fontHeight)
+{
+    ConsoleLayout layout = { 1.0f, 20 };
     const float k = backBufferHeight / 900.0f;
-    return k > 1.0f ? k : 1.0f;
+    const float scale = ::floorf(k + 0.5f);
+    const float step = static_cast<float>(fontHeight) + 1.0f;
+    if (!(scale >= 2.0f) || !(step > 0.0f))
+        return layout;
+    // The shipped height ((fontHeight + 1) * 20 + 4) holds at 900 lines; k times it is the target.
+    const float target = (step * 20.0f + 4.0f) * k;
+    const float lines = ::floorf((target / scale - 4.0f) / step + 0.5f);
+    layout.scale = scale;
+    layout.lines = lines < 1.0f ? 1 : lines > 20.0f ? 20 : static_cast<int>(lines);
+    return layout;
 }
 } // namespace
 
@@ -5946,28 +5966,30 @@ float consoleScale(float backBufferHeight)
 // Compat strings use the VC7.1 CRT; their vector storage uses the engine heap.
 // [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
 // [CHOSEN, not recovered] HiDPI console: retail draws at one back-buffer pixel per font pixel, which
-// leaves 11-pixel lines on a 1664-line panel. Every console length (background, line step, margins,
-// glyphs) is multiplied by consoleScale: the back-buffer height over 900, at least 1
-// (900 lines: 1, 1080: 1.2, 1600: about 1.78, 1664: about 1.85, 2160: 2.4). The font draws through its
-// unused retail setScale slot: whole-number scales as uniform point-sampled blocks, fractional ones
-// linearly filtered. Line positions are whole pixels. Scale 1: the shipped arithmetic, unchanged.
+// leaves 11-pixel lines on a 1664-line panel. From 1350 lines every console length (background,
+// line step, margins, glyphs) is multiplied by consoleLayout's whole-number scale and the line
+// count follows it (1600 lines: scale 2 and 18 lines; 1800: scale 2 and 20; 2250: scale 3 and 17).
+// The font draws through its unused retail setScale slot as uniform point-sampled blocks.
+// Scale 1: the shipped arithmetic and 20 lines, unchanged; the layout is read before the lines
+// because the line count depends on it.
 void Renderer::slot_0x58()
 {
     const unsigned char statsWere = statsSwapEnabled(0);
 
-    std::vector<std::string> lines;
-    reinterpret_cast<io::Console*>(::dice::hfe::mainConsole)->getLines(20, lines);
-    const unsigned int lineCount = static_cast<unsigned int>(lines.size());
-
     IBase* const font    = static_cast<IBase*>(m_consoleFont);                  // +0x5CC
     IBase* const overlay = static_cast<IBase*>(m_consoleOverlay);               // +0x5C8
 
-    const float k = consoleScale(getRenderView()->getViewport()[3]);
-
     const int fontHeight = geom::fontPortedGetHeight(font);
+    const ConsoleLayout layout = consoleLayout(getRenderView()->getViewport()[3], fontHeight);
+    const float k = layout.scale;
+
+    std::vector<std::string> lines;
+    reinterpret_cast<io::Console*>(::dice::hfe::mainConsole)->getLines(layout.lines, lines);
+    const unsigned int lineCount = static_cast<unsigned int>(lines.size());
+
     const float consoleHeight = k == 1.0f
         ? (static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f
-        : ::floorf(((static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f) * k + 0.5f);
+        : ((static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f) * k;
 
     Vec2 overlaySize;
     overlaySize.x = 1.0f;
@@ -5997,8 +6019,7 @@ void Renderer::slot_0x58()
         if (k == 1.0f)
             geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), text);
         else
-            geom::fontPortedDrawText(font, ::floorf(2.0f * k + 0.5f),
-                                     ::floorf(static_cast<float>((height + 1) * line + 2) * k + 0.5f), text);
+            geom::fontPortedDrawText(font, 2.0f * k, static_cast<float>((height + 1) * line + 2) * k, text);
     }
     if (k != 1.0f)
         geom::fontPortedSetScale(font, 1.0f, 1.0f);    // the font's other users draw at 1

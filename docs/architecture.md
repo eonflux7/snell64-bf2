@@ -170,11 +170,11 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   the stored value until a resolution is set again.
 - Every successful device reset logs the back-buffer size, mode, refresh rate,
   fullscreen, vsync and multisampling.
-- The console is enlarged by the back-buffer height over 900, at least 1 (900
-  lines: 1, 1080: 1.2, 1600: about 1.78, 1664: about 1.85, 2160: 2.4), so it keeps
-  the share of the screen retail's console has at 1440x900. A whole-number scale
-  draws its bitmap font as point-sampled blocks, a fractional one linearly
-  filtered.
+- From 1350 lines the console is drawn at a whole-number scale, the back-buffer
+  height over 900 rounded (1600 and 1800 lines: 2, 2250: 3), with its bitmap font
+  as point-sampled blocks. It shows as many lines, at most the shipped 20, as cover
+  the share of the screen retail's console has at 1440x900 (1600 lines: 18 lines).
+  Below 1350 lines it is the shipped console.
 - macOS: the menu's `.ani` cursors are enlarged by `MenuViewport::bitmapScale`, the
   4:3 menu viewport's height over 600 rounded down (1 below 1200 lines, 2 at 1600
   and 1664, 3 at 1912), so they look no larger against the UI than in the 800x600
