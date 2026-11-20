@@ -6,7 +6,7 @@ an open issue added or closed. When a milestone is accepted, its section here mo
 
 | Lane | Done | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) done; next task 5 (view distance) | [renderer.md](renderer.md#roadmap) |
+| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) done; task 5 (view distance) in progress | [renderer.md](renderer.md#roadmap) |
 | `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](ui.md#milestones) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](perf-load.md#state) |
@@ -166,6 +166,20 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    distance unchanged. Look for: no reach at the screen's edges past its centre; aircraft
    against the sky gone at the same distance as vehicles against terrain; from a jet, a
    landscape to the horizon instead of a fogged void; nothing pops at the limit.
+   Decided with the owner, 2026-11-20: the haze is no longer steepened to full at fog end
+   (`renderer.hazeSteepen` deleted); it stays exponential and carries on past fog end, and
+   objects end by the dither ([renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections)).
+   Built 2026-11-20 (`render(atmosphere)`, contract 9; shaders), A/B `renderer.viewDistance`:
+   the cut (`Ra_ViewDistanceClip`, a 4x4 Bayer dither over the last 15 % by distance from the
+   camera, in every opaque world effect and its prepass; particles, trails, decals and blended
+   roads fade on alpha); the world view's projection unbounded (reversed float depth), its
+   frustum still at the view distance, so objects cull as before; with the cut on, the terrain
+   culler and the surrounding ring take the frustum out to 40 km; past fog end the haze carries
+   on at the last slice's mean extinction along the ray. In game on Muttrah City (`ridges`,
+   `high`): objects end at the limit, the bay, coast and ranges go on behind in layers of
+   haze; no shader error. Not yet seen by the owner. Left: water past the limit (the sea out to
+   the horizon) and the far ground ring; the dither's look (4x4 Bayer per pixel, alpha to
+   coverage not used yet); jets and anti-air; device resets; the cost of terrain to 40 km.
 6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
    `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
    acceptance if they do not pay for their cost.
