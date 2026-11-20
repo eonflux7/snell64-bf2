@@ -6,7 +6,7 @@ an open issue added or closed. When a milestone is accepted, its section here mo
 
 | Lane | Done | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections: task 2 built (owner's look pending), task 3 (sky and sun) in progress: the full-screen sky pass | [renderer.md](renderer.md#roadmap) |
+| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections: task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) in game, tuning the haze | [renderer.md](renderer.md#roadmap) |
 | `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](ui.md#milestones) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](perf-load.md#state) |
@@ -144,6 +144,15 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    The two fog queues (`RSMTFogPass`, `RSMTFogTransparentPass`): deleted if every entry now fogs in
    its own shader, else kept with the reason recorded. Underwater fog and the thermal heat haze
    unchanged. Look for: ridges in layers, valleys hazier than ridgelines, haze warmer toward the sun.
+   Built 2026-11-20 (`render(atmosphere)` 7eeb2da0 and 91dab088, contract 8; shaders): `Ra_GetAerial`
+   reads the atlas on s9 per pixel (VPOS and distance; particles too, per pixel rather than per
+   vertex: they already fog per pixel), with `RaAerial` in c223; retail fog under water, in first
+   person and in thermals. Full haze is the sky's radiance along each ray (not the fog colour), so
+   it meets the sky; the haze's shape is `renderer.hazeDepth`, `hazeFalloff`, `hazeSteepen`. In
+   game on Muttrah City (`ridges`, A/B): no compile failures (load trace), frame rate normal;
+   depth 2 greyed the near ridge, so 1 by default; steepening from 0.75 left a hazy wall
+   at 500–700 m, from 0.35 the ridges separate into layers. Defaults to settle with the owner; the
+   fog queues not yet looked at.
 5. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
    `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
    acceptance if they do not pay for their cost.
