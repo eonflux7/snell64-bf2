@@ -27,10 +27,10 @@ is in [renderer-pipeline.md](renderer-pipeline.md).
 | 9. Draw submission | Accepted | `2eb902ce`, `0a623df8`, `e87543df`, `f3515fb4`, `7bdd3a77`, `4bc56ff8`, `e9b6a8a4`, `965bb8bf`, `c2f7ef33`, `3c745649`, `2002788d` |
 | 10. Terrain in one pass | Accepted | `2eb4d02d`, `c21a012e`, `0d9e15a6`, `57fa2899`, `3b9da48c`, `6fd523bb`, and the deletion ("milestone 10 accepted") |
 | 11. Atmosphere, sky IBL, water reflections | In progress | — |
-| 12. View distance | Not started | — |
-| 13. Clouds | Not started | — |
-| 14. HDR bloom + auto-exposure | Not started | — |
-| 15. GTAO + lightmap channel ownership | Not started | — |
+| 12. Clouds | Not started | — |
+| 13. HDR bloom + auto-exposure | Not started | — |
+| 14. GTAO + lightmap channel ownership | Not started | — |
+| 15. View distance | Not started | — |
 
 The owner accepts each milestone in game before the next starts. From milestone 9 on that is done
 against the `tools` lane's reference views and benchmark paths ([tools.md](tools.md)), with the GPU
@@ -40,7 +40,7 @@ against the previous milestone's baseline; a regression stands only if the owner
 explicitly, and is recorded with the milestone in [renderer-pipeline.md](renderer-pipeline.md).
 
 Order: draw submission comes before terrain and the atmosphere, so the new terrain draw is written
-once on the new path and the parameters milestones 11–15 add cost nothing per draw. Terrain comes
+once on the new path and the parameters milestones 11–14 add cost nothing per draw. Terrain comes
 before the atmosphere, so aerial perspective and sky reflections are written once into a single
 terrain pass. Bloom and auto-exposure depend only on the HDR scene and can move earlier if night
 layers need them sooner.
@@ -80,7 +80,7 @@ reference views. What should change on screen, and so what to look at:
 - **Distance.** Far terrain and buildings lose contrast and take on the sky's colour with distance,
   so ridges separate into layers. Valleys hold more haze than ridgelines; the haze is brighter and
   warmer toward the sun, bluer away from it. Retail fog is one colour by distance.
-- **Sky.** The sky comes from the model (clear until milestone 13's clouds), and its horizon meets the haze over the terrain without a
+- **Sky.** The sky comes from the model (clear until milestone 12's clouds), and its horizon meets the haze over the terrain without a
   seam. The sun has a disc and a forward-scattering glow from the same model.
 - **Sky light.** Surfaces are lit by the sky from its direction: blue from above, darker and
   ground-tinted from below, brighter toward the sun, instead of one flat colour.
@@ -115,7 +115,7 @@ Design:
   the terrain's mean height) built on the CPU with the fit (the sun does not move), by the same
   code the fit evaluates, into managed textures that survive device resets. Per frame only the
   aerial-perspective atlas, a pixel pass, with cascade shadowing per slice for the shafts.
-- **Sky cube.** Upper half: the model's sky (and milestone 13's clouds once they exist). Lower half: the ground, the terrain
+- **Sky cube.** Upper half: the model's sky (and milestone 12's clouds once they exist). Lower half: the ground, the terrain
   colormap's mean colour lit by the authored sun and sky, under the haze at the horizon (sky alone
   below the horizon makes every glossy surface look chrome). Prefiltered GGX, one mip per
   roughness; its irradiance as 9 spherical-harmonic coefficients, taken at load.
@@ -145,7 +145,7 @@ Design:
 Decisions (owner, 2026-11-20):
 - The model draws the whole sky; the painted dome and its cloud layers are not shown (owner,
   2026-11-20, at task 3: a modern sky, not constrained by the game's approach; faithfulness to
-  each level is not the goal). The sky is clear until volumetric clouds (milestone 13). The sky's air
+  each level is not the goal). The sky is clear until volumetric clouds (milestone 12). The sky's air
   is Earth's on every level, physically correct; overcast comes from the clouds (owner,
   2026-11-20). Fitting the Rayleigh tint and density to the dome's zenith was tried and dropped:
   the domes' colours are mostly painted cloud and haze, so Kashan's clear sky read grey and
@@ -161,7 +161,7 @@ Decisions (owner, 2026-11-20):
   and a full physical fit (Rayleigh and Mie densities free) ran to its bounds on Fallujah West. The
   sky keeps physics for its shape and colour and takes a per-level sky gain, partly applied, set by
   `renderer.skyGainBlend` (task 2).
-- Bloom stays in milestone 14. The sun's glow and specular glints read fully only then, and are
+- Bloom stays in milestone 13. The sun's glow and specular glints read fully only then, and are
   judged here knowing that. (Delegated, 2026-11-20.)
 
 Survey (task 1, `tools.survey`, [tools.md](tools.md#survey)), 2026-11-20, at the spawn camera of
@@ -212,36 +212,12 @@ and s15: the atlas, the sky cube, and the split-sum BRDF table if task 1 finds a
 (otherwise an analytic fit). The water scene texture and the sky's transmittance table are effect
 parameters. Each task that adds to what the shaders may rely on raises the contract version (6 on).
 
-### 12. View distance
-
-Decided by the owner, 2026-11-20. Each level's view distance (fog end) stays the gameplay limit,
-so no level is retuned; what changes is how the limit looks and that it is the same in every
-direction.
-
-- **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
-  plane, and fog and haze use the same distance. Today the screen's edges and corners reach up to
-  30–40 % further than its centre, an advantage for whoever turns a target to the edge.
-- **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
-  or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
-  against terrain vanish at the same distance; today the aircraft's silhouette survives against a
-  sky that differs from the fog colour. The view distance is the distance at which an object's
-  contrast reaches zero.
-- **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
-- **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
-  distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
-  horizon, all under aerial perspective; no vehicles, objects or vegetation out there. Aircraft
-  see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
-  the land's shape is visible further, targets are not.
-
-Next after milestone 11 (owner, 2026-11-20), before the clouds. The haze already uses the
-radial distance (milestone 11); the geometry cutoff is the far plane.
-
-### 13. Clouds
+### 12. Clouds
 
 Decided by the owner, 2026-11-20: the levels' painted cloud layers are replaced by modern clouds,
 not constrained by the game's approach; the sky is clear until then. Clouds must not change
 gameplay: aircraft have no ceiling the clouds could sit above, so nothing that hides a target is
-placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full when milestone 12
+placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full when milestone 11
 is accepted:
 
 - **Sky clouds (first).** Overcast decks, high cloud and distant banks drawn into the sky at
@@ -269,7 +245,7 @@ First task: a prototype of the sky clouds and the coverage value alone, judged o
 from the ground and the air at coverage 0.3, 0.7 and 1.0, before the lighting is coupled. Budget
 about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at acceptance.
 
-### 14. HDR bloom + auto-exposure
+### 13. HDR bloom + auto-exposure
 
 An energy-conserving bloom without threshold, and exposure that adapts between interiors and open
 terrain, both before the frame grade. The tonemap's output dithered before its 8-bit encode: the sky's dark blue
@@ -289,9 +265,32 @@ in an engine-owned pixel register, the resolve expands in the depth rebuild's fu
 every pass blending before the resolve (decals, particles, water, first-person transparents,
 additive light passes) blends compressed values, with additive sums clamped at the expansion.
 
-### 15. GTAO + lightmap channel ownership
+### 14. GTAO + lightmap channel ownership
 
 GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: inside cascade
 range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
 cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
 higher resolution unless the reference views show the baked sky term failing.
+
+### 15. View distance
+
+Decided by the owner, 2026-11-20. Each level's view distance (fog end) stays the gameplay limit,
+so no level is retuned; what changes is how the limit looks and that it is the same in every
+direction.
+
+- **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
+  plane, and fog and haze use the same distance. Today the screen's edges and corners reach up to
+  30–40 % further than its centre, an advantage for whoever turns a target to the edge.
+- **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
+  or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
+  against terrain vanish at the same distance; today the aircraft's silhouette survives against a
+  sky that differs from the fog colour. The view distance is the distance at which an object's
+  contrast reaches zero.
+- **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
+- **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
+  distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
+  horizon, all under aerial perspective; no vehicles, objects or vegetation out there. Aircraft
+  see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
+  the land's shape is visible further, targets are not.
+
+Order against milestones 13 and 14 to be set by the owner; it comes after milestone 12.

@@ -113,7 +113,7 @@ left alone.
 - Back-buffer size and MSAA, map and game mode.
 - Camera position, heading and pitch.
 - Sun elevation and azimuth. Exposure is a constant in the shaders until auto-exposure (render
-  milestone 14) gives the engine a value to show.
+  milestone 13) gives the engine a value to show.
 
 DXVK's HUD is off in the launch environment.
 

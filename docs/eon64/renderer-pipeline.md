@@ -105,7 +105,7 @@ in [Frame](#frame), the sampler rules in the [shader contract](#shader-contract)
   the last tenth of the view distance; near and far overgrowth share one lighting model
   (`a7d9e0e1`, `1e7a1c89`, `680d8890`).
 - Dropped: thin-geometry widening (cables break into dashes beyond about 100 m, as in retail).
-  Moved to milestone 14: the compressed (Karis) resolve.
+  Moved to milestone 13: the compressed (Karis) resolve.
 
 Limits: shading once per pixel leaves glossy surfaces sparkling (specular AA is milestone 11). The
 default video profile still picks 8x antialiasing while the scene runs 4x. `Ra_LodDitherClip` runs

@@ -6,7 +6,7 @@
 // drives aerial perspective. At load the model is fitted to the level's authored light:
 //   1. sunlight above the atmosphere = the authored sun (Lightmanager.staticSunColor, the sunlight
 //      at the ground) over the sky's transmittance at the sun's elevation, clamped to >= 0.1;
-//   2. the sky: Earth's air (a clear sky on every level; overcast is milestone 13's clouds), and
+//   2. the sky: Earth's air (a clear sky on every level; overcast is milestone 12's clouds), and
 //      one sky gain scaling the scattered light so the horizon's luminance meets the authored fog
 //      colour's, applied as gain^renderer.skyGainBlend;
 //   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
@@ -560,7 +560,7 @@ void evaluate(const SkyParams& p, FitContext& f, V3& zenith, V3& horizon)
 
 // 2. The sky: Earth's air on every level, a clear sky (owner, 2026-11-20). The authored domes'
 // colours are mostly painted cloud and haze; fitted to them, the Rayleigh tint and density greyed
-// Kashan's sky and turned overcast Saaremaa's navy. Overcast is milestone 13's clouds. Only the
+// Kashan's sky and turned overcast Saaremaa's navy. Overcast is milestone 12's clouds. Only the
 // level's brightness is fitted, by the sky gain (fit, below): the authored dome and fog are
 // 1.7-2.9x brighter by day than a physical sky under the authored sun (and 10x darker at night).
 SkyParams earthSky(const V3& albedo)
@@ -1043,7 +1043,7 @@ bool rendererAtmosphereDrawSky(void* effect, bool underWater)
 
     // The sun disc: the authored sun (the sunlight at the ground, which the fit keeps) spread over
     // the disc's solid angle, so the disc's irradiance is the sun's; its luminance capped so the
-    // MSAA resolve of its edge stays within a pixel (bloom, milestone 14, spreads it).
+    // MSAA resolve of its edge stays within a pixel (bloom, milestone 13, spreads it).
     const double radius = kSunAngularRadius * kPi / 180.0;
     const double solidAngle = 2.0 * kPi * (1.0 - std::cos(radius));
     V3 disc = v3(g.inputs.sun[0], g.inputs.sun[1], g.inputs.sun[2]) * (kPi / solidAngle);

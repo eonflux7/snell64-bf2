@@ -83,7 +83,7 @@ tried on Muttrah City by an agent: a view shot before the HUD and one with `tool
 ## Current: `render` milestone 11, atmosphere, sky IBL, water reflections
 
 The goal is a visibly more realistic image; plan, design and decisions (the model's sky, clear
-until milestone 13's clouds; authored sun colour kept; fog end stays the visibility limit):
+until milestone 12's clouds; authored sun colour kept; fog end stays the visibility limit):
 [renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections). One A/B console variable per
 part while in development (`renderer.atmosphere`, `renderer.lightShafts`, `renderer.skyIbl`,
 `renderer.waterSsr`); old paths and the variables are deleted at acceptance. Intermediate tasks:
@@ -128,14 +128,14 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    2.7, 3.1, 5.1, 0.11 at night). Not yet seen by the owner (the Atmosphere tab); nothing on screen
    changes until task 3.
 3. Sky and sun: the model draws the whole sky, clear (the painted dome and its cloud layers not
-   shown; clouds are render milestone 13, owner 2026-11-20); the sun disc and its forward-scattering glow from the model, the flare's
+   shown; clouds are render milestone 12, owner 2026-11-20); the sun disc and its forward-scattering glow from the model, the flare's
    occlusion test kept. The sky is one full-screen pass at the far plane (`RaSky`, contract 7) in
    the dome's place, filling what nothing covers; under water it fills the water's fog colour, and
    thermals keep their heat gradient. The dome mesh draws only with `renderer.atmosphere 0`; at
    acceptance it and its techniques are deleted, and the sky moves to an effect of its own. Built:
    the sky and disc seen by the owner on Muttrah City on the dome (2026-11-20, "looks good",
    `renderer.skyGainBlend 0.5`); the full-screen pass replacing it, checked by an agent on Muttrah City: the sky fills what nothing covers, the disc and glow sit where retail's flare sprite does (`renderer.atmosphere 0` A/B), 6 device resets (`renderer.vsync`) without a crash; seen by the owner (2026-11-20, "looks good"); under water and thermals not checked (deferred by the owner, 2026-11-20). The
-   banding in the dark blue and the sun's glare go to render milestone 14 (the tonemap's dither,
+   banding in the dark blue and the sun's glare go to render milestone 13 (the tonemap's dither,
    bloom). Look for: no seam where terrain meets the sky; the horizon brighter and warmer
    toward the sun; the sky correct under water and in thermals.
 4. Aerial perspective: `Ra_ApplyFog` replaced by one function (transmittance and in-scatter from the

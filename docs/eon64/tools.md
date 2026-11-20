@@ -299,7 +299,7 @@ Runs alongside render milestone 9; parts may be its first tasks.
 - **Pass toggles:** skip a pass and see the frame and the timings change, live.
 - **Pass markers** (`D3DPERF_BeginEvent`) named like the GPU spans, so captures read by pass.
 - **Pixel inspector:** the colour, depth and linear depth under the cursor, the normal in debug
-  modes, and a luminance histogram (for auto-exposure, render milestone 14).
+  modes, and a luminance histogram (for auto-exposure, render milestone 13).
 - **Overrides:** time of day, sun angle, fog.
 - **Variable sweep:** `view.sweep VAR FROM TO STEP` shoots the current view per value and writes
   one strip with the timings.
