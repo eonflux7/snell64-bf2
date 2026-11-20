@@ -67,7 +67,7 @@ int main()
     check(pick(m2, {0, 0, 0}) < 0, "unknown desktop");
     check(pick(std::vector<dm::Mode>(), {1440, 900, 60}) < 0, "empty list");
 
-    // The HiDPI bitmap factor (console font, menu cursors): the menu viewport height over 600,
+    // The HiDPI cursor factor: the menu viewport height over 600,
     // rounded down, so neither looks larger against the UI than in the 800x600 menu.
     using dice::hfe::ui::MenuViewport;
     check(MenuViewport::bitmapScale(800, 600) == 1, "800x600: 1");

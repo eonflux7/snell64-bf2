@@ -15,6 +15,7 @@
 #include <d3dx9.h>                            // HRESULT, RECT, D3DCOLOR, STDMETHODCALLTYPE
 #include <cstdio>
 #include <cstdlib>
+#include <math.h>                             // floorf - the whole-number scale test
 
 #include <stdio.h>
 #include <string.h>
@@ -403,9 +404,12 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
     const int length = static_cast<int>(text.size());
     if (length <= 0)
         return;
-    // [CHOSEN, not recovered] A scale other than 1 (no retail caller sets one; the HiDPI console
-    // does) draws whole-pixel glyph blocks: biased texture coordinates and point magnification.
-    const bool scaled = m_scaleX != 1.0f || m_scaleY != 1.0f;
+    // [CHOSEN, not recovered] A whole-number scale other than 1 (no retail caller sets one; the
+    // HiDPI console does) draws whole-pixel glyph blocks: biased texture coordinates and point
+    // magnification. A fractional scale keeps the shipped coordinates and the pass's linear
+    // filter, so the glyphs are not uneven.
+    const bool scaled = (m_scaleX != 1.0f || m_scaleY != 1.0f) &&
+                        m_scaleX == ::floorf(m_scaleX) && m_scaleY == ::floorf(m_scaleY);
 
     PortedFontVertex* vertex = static_cast<PortedFontVertex*>(
         dx9rend::vertexBufferLock(s_portedFontVertexBuffer, 0, 0, D3DLOCK_DISCARD));
