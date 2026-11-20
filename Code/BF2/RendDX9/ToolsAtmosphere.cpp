@@ -245,8 +245,7 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
                  a.horizonTarget[0], a.horizonTarget[1], a.horizonTarget[2], a.horizonModel[0],
                  a.horizonModel[1], a.horizonModel[2]);
     std::fprintf(f, "[fit] ground albedo %.4f %.4f %.4f\n", a.groundAlbedo[0], a.groundAlbedo[1], a.groundAlbedo[2]);
-    std::fprintf(f, "[fit] haze density %.4e /m, albedo %.4f %.4f %.4f\n", a.hazeDensity, a.hazeAlbedo[0],
-                 a.hazeAlbedo[1], a.hazeAlbedo[2]);
+    std::fprintf(f, "[fit] haze density %.4e /m\n", a.hazeDensity);
     std::fprintf(f, "[atlas] format %s, vertex fetch %s, filtered %s\n",
                  a.atlasFloat32 ? "A32B32G32R32F" : "A16B16G16R16F", a.atlasVertexFetch ? "yes" : "no",
                  a.atlasVertexFilter ? "yes" : "no");

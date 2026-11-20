@@ -720,7 +720,6 @@ void drawAtmosphereTab()
         atmosphereRgb("horizon model", a.horizonModel);   // before the gain
         atmosphereRgb("ground albedo", a.groundAlbedo);
         ImGui::Text("%-18s %.3e /m", "haze density", a.hazeDensity);
-        atmosphereRgb("haze albedo", a.hazeAlbedo);
         ImGui::Text("atlas %s: vertex fetch %s, filtered %s", a.atlasFloat32 ? "A32B32G32R32F" : "A16B16G16R16F",
                     a.atlasVertexFetch ? "yes" : "no", a.atlasVertexFilter ? "yes" : "no");
         ImGui::Separator();

@@ -9,11 +9,13 @@
 //   2. the sky: Earth's densities, the Rayleigh tint fitted to the dome texture's zenith colour
 //      (its chromaticity), and one sky gain scaling the scattered light so the horizon's
 //      luminance meets the authored fog colour's, applied as gain^renderer.skyGainBlend;
-//   3. the haze: density from fog end, albedo from the fog colour.
+//   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
+//      (the horizon's at and below it), so terrain at fog end meets the sky without a seam.
 // The transmittance, multiple-scattering and sky-view tables are built here on the CPU after a fit
 // (the sun does not move; about 100 ms with the fit) and uploaded to managed textures, so they are
 // the very model the fit evaluated and survive device resets. Only the aerial-perspective atlas is
-// drawn per frame, by RaAtmosphere.fx (shader contract 6, renderer-pipeline.md). Pixel passes for
+// drawn per frame, by RaAtmosphere.fx (shader contracts 6 and 8, renderer-pipeline.md), and bound
+// to the reserved sampler s9 for every lit shader (Ra_GetAerial, with RaAerial in c223). Pixel passes for
 // the load-time tables were tried first: this D3DX compiler's loops that are not unrolled came out
 // wrong under DXVK (the multiple-scattering table 10x low), so the atlas's march is unrolled too.
 #ifdef BF2_IMAGE_RENDDX9
@@ -76,7 +78,6 @@ const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
 const double kHazeFalloff = 400.0;          // m: density falls by e over this height
 const double kHazeDepthAtFogEnd = 2.0;      // horizontal optical depth at fog end, before steepening
 const double kHazeSteepenStart = 0.75;      // share of fog end where the steepening begins
-const double kHazeG = 0.6;                  // Henyey-Greenstein: haze brighter toward the sun
 
 // Sizes, as RaAtmosphere.fx defines them.
 const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
@@ -161,10 +162,6 @@ double miePhase(double g, double c)
 {
     const double k = 3.0 / (8.0 * kPi) * (1.0 - g * g) / (2.0 + g * g);
     return k * (1.0 + c * c) / std::pow(std::max(1.0 + g * g - 2.0 * g * c, 1e-4), 1.5);
-}
-double hazePhase4Pi(double g, double c)
-{
-    return (1.0 - g * g) / std::pow(std::max(1.0 + g * g - 2.0 * g * c, 1e-4), 1.5);
 }
 
 // Transmittance to the top, marched (no ground test).
@@ -432,7 +429,6 @@ struct State
     CpuTables tables;        // full size, for the textures
     float appliedBlend;      // renderer.skyGainBlend the sky view was built with
     double hazeDensity;      // 1/m at the reference height
-    V3 hazeAlbedo;
     double fitMs;
     // GPU.
     IDirect3DTexture9* trans;
@@ -446,6 +442,7 @@ struct State
     bool tablesDirty;        // the fit changed: upload the transmittance and multiple scattering
     bool skyViewDirty;       // the fit or the blend changed: rebuild and upload the sky view
     bool effectMissing;
+    bool atlasLive;          // this frame's atlas is drawn and bound to s9
 };
 
 State g = {};
@@ -649,15 +646,8 @@ void fit()
     // (renderer.skyGainBlend): t = 0 physical, 1 the authored level.
     g.skyGain = luminance(horizonTarget) / std::max(luminance(g.horizonModel), 1e-9);
 
-    // 3. The haze: full in-scatter on a horizontal ray, averaged over azimuth, is the fog colour.
+    // 3. The haze: its density; its light is the sky's (RaAtmosphere.fx).
     g.hazeDensity = kHazeDepthAtFogEnd / in.fogEnd;
-    double phase = 0.0;
-    const int azimuths = 32;
-    for (int i = 0; i < azimuths; ++i)
-        phase += hazePhase4Pi(kHazeG, std::cos(elevation) * std::cos(2.0 * kPi * (i + 0.5) / azimuths));
-    phase /= azimuths;
-    const V3 skyLight = v3(in.sky[0], in.sky[1], in.sky[2]);
-    g.hazeAlbedo = horizonTarget / vmax(f.sunGround * phase + skyLight, 1e-5);
 
     // The frame's tables at full size (the sky view follows in rendererAtmosphereFrame).
     buildTransmittance(g.sky, g.tables, kTransmittanceW, kTransmittanceH);
@@ -675,7 +665,7 @@ void fit()
         "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance)\n"
         "[ATMOS]   zenith target %.4f %.4f %.4f%s model %.4f %.4f %.4f\n"
         "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f (before the gain)\n"
-        "[ATMOS]   ground albedo %.3f %.3f %.3f; haze density %.3e /m, albedo %.3f %.3f %.3f\n",
+        "[ATMOS]   ground albedo %.3f %.3f %.3f; haze density %.3e /m\n",
         g.fitMs, elevation * 180.0 / kPi, g.refHeight, in.fogEnd,
         g.sky.rayleigh.x / kEarthRayleigh[0], g.sky.rayleigh.y / kEarthRayleigh[1],
         g.sky.rayleigh.z / kEarthRayleigh[2], g.skyGain,
@@ -684,8 +674,7 @@ void fit()
         g.zenithModel.x, g.zenithModel.y, g.zenithModel.z,
         horizonTarget.x, horizonTarget.y, horizonTarget.z,
         g.horizonModel.x, g.horizonModel.y, g.horizonModel.z,
-        g.groundAlbedo.x, g.groundAlbedo.y, g.groundAlbedo.z, g.hazeDensity,
-        g.hazeAlbedo.x, g.hazeAlbedo.y, g.hazeAlbedo.z);
+        g.groundAlbedo.x, g.groundAlbedo.y, g.groundAlbedo.z, g.hazeDensity);
 }
 
 // ---- GPU ----
@@ -841,8 +830,8 @@ void fillConstants(float c[16][4])
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
         { float(g.hazeDensity), float(1.0 / kHazeFalloff), float(g.refHeight), in.fogEnd },
-        { float(g.hazeAlbedo.x), float(g.hazeAlbedo.y), float(g.hazeAlbedo.z), float(kHazeG) },
-        { in.sun[0], in.sun[1], in.sun[2], float(kHazeSteepenStart) },
+        { float(kHazeSteepenStart), 0.0f, 0.0f, 0.0f },
+        { in.sun[0], in.sun[1], in.sun[2], 0.0f },
         { in.sky[0], in.sky[1], in.sky[2], 0.0f },
     };
     std::memcpy(c, rows, sizeof(rows));
@@ -912,6 +901,8 @@ bool drawPass(void* effect, const std::string& technique, IDirect3DTexture9* tar
     c[15][3] = 1.0f / c[15][1];
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 16);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaSkyViewTable"))
+        d3dx->SetTexture(h, g.skyView);
 
     IDirect3DSurface9* surface = 0;
     target->GetSurfaceLevel(0, &surface);
@@ -928,6 +919,21 @@ bool drawPass(void* effect, const std::string& technique, IDirect3DTexture9* tar
     return true;
 }
 
+// The atlas on the reserved sampler s9 (Ra_GetAerial), filtered within a slice; 0 unbinds it.
+void bindAtlas(IDirect3DTexture9* atlas)
+{
+    IDirect3DDevice9* const d = device();
+    d->SetTexture(kAerialSampler, atlas);
+    if (!atlas)
+        return;
+    d->SetSamplerState(kAerialSampler, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    d->SetSamplerState(kAerialSampler, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+    d->SetSamplerState(kAerialSampler, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    d->SetSamplerState(kAerialSampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+    d->SetSamplerState(kAerialSampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+    d->SetSamplerState(kAerialSampler, D3DSAMP_SRGBTEXTURE, FALSE);
+}
+
 } // anonymous namespace
 
 bool& rendererAtmosphereEnabled()
@@ -942,6 +948,7 @@ float& rendererSkyGainBlend()
 
 void rendererAtmosphereFrame()
 {
+    g.atlasLive = false;
     if (!g_enabled || !device())
         return;
     Inputs in;
@@ -961,7 +968,7 @@ void rendererAtmosphereFrame()
     if (!g.fitted)
         return;
     updateTables();
-    if (!ensureAtlas())
+    if (!rendererAtmosphereDrawsSky() || !ensureAtlas())   // the atlas's light is the sky view's
         return;
 
     void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaAtmosphere");
@@ -980,15 +987,35 @@ void rendererAtmosphereFrame()
     fillConstants(c);
     fillCamera(c);
     PassTarget saved;
+    bindAtlas(0);   // never sampled while it is the target
     beginPasses(saved);
     static const std::string kAp("RaAtmosPerspective");
-    drawPass(effect, kAp, g.atlas, c);
+    g.atlasLive = drawPass(effect, kAp, g.atlas, c);
     endPasses(saved);
     effectRelease(static_cast<Effect*>(effect));
+    if (g.atlasLive)
+        bindAtlas(g.atlas);
+}
+
+void rendererAtmosphereAerialConstants(float c[4])
+{
+    c[0] = c[1] = c[2] = c[3] = 0.0f;
+    // The atlas's tiles span the world view's viewport; Ra_GetAerial takes it at the target's origin.
+    const float* const vp = rendererGetRenderView()->getViewport();   // x, y, width, height
+    if (!g.atlasLive || cameraIsUnderWater() || g.inputs.fogEnd <= 0.0f || vp[0] != 0.0f || vp[1] != 0.0f
+        || vp[2] <= 0.0f || vp[3] <= 0.0f)
+        return;
+    c[0] = 1.0f / vp[2];
+    c[1] = 1.0f / vp[3];
+    c[2] = 1.0f / g.inputs.fogEnd;
+    c[3] = 1.0f;
 }
 
 void rendererAtmosphereRelease()
 {
+    if (g.atlas && device())
+        bindAtlas(0);
+    g.atlasLive = false;
     releaseTexture(g.atlas);   // the tables are managed: they survive the reset
 }
 
@@ -1015,7 +1042,6 @@ AtmosphereInfo rendererAtmosphereInfo()
         i.zenithModel[k] = static_cast<float>(at(g.zenithModel, k));
         i.horizonTarget[k] = static_cast<float>(at(g.horizonTarget, k));
         i.horizonModel[k] = static_cast<float>(at(g.horizonModel, k));
-        i.hazeAlbedo[k] = static_cast<float>(at(g.hazeAlbedo, k));
         i.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
     }
     i.haveZenith = g.haveZenith;

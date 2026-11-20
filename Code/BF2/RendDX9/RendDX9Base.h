@@ -726,8 +726,8 @@ void rendererHdrReleaseSurface();
 // render (s13) and their constants are published (rendererSetSunCascadeConstants); the lit shaders
 // sample the cascades themselves. rendererDepthPrepassEndWorldPass zeroes the constants, so the
 // first-person passes and every other view keep their baked sunlight.
-// Samplers s13 and s15 are reserved for these renderer frame resources: no effect may use them for
-// anything else.
+// Samplers s9, s13 and s15 are reserved for these renderer frame resources (s9 the aerial-perspective
+// atlas, rendererAtmosphereFrame): no effect may use them for anything else.
 void rendererDepthPrepass(bool drawTerrain, float time);
 void rendererDepthPrepassEndWorldPass();
 void rendererDepthPrepassRelease();
@@ -807,7 +807,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/eon64/renderer-pipeline.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 7
+#define RA_CONTRACT_VERSION 8
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -828,6 +828,12 @@ bool& rendererAtmosphereEnabled();
 float& rendererSkyGainBlend();
 void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
+// The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
+// register kAerialRegister, contract 8) for the world pass: 1 / the viewport's width and height,
+// 1 / fog end, 1; zero (the shaders' retail fog) while no atlas was drawn this frame, under water,
+// or with a viewport off the target's origin.
+const unsigned int kAerialSampler = 9;
+void rendererAtmosphereAerialConstants(float c[4]);
 // Whether the model draws the sky (renderer.atmosphere on and the sky-view table built). While it
 // does, the sky is one full-screen pass (rendererAtmosphereDrawSky) and the painted dome, its cloud
 // layers and the retail flare sprite are not drawn (the flare's occlusion test is kept).
@@ -850,7 +856,7 @@ struct AtmosphereInfo
     float rayleigh[3];                  // times Earth's
     float sunTop[3];
     float zenithTarget[3], zenithModel[3], horizonTarget[3], horizonModel[3];
-    float hazeAlbedo[3], groundAlbedo[3];
+    float groundAlbedo[3];
 };
 AtmosphereInfo rendererAtmosphereInfo();
 // RASM, the sun cascade constants: 22 float4s, laid out in RaSunShadow.fxh. Pixel shaders read them
@@ -867,8 +873,12 @@ void stateManagerSetSunCascadeConstants(const float* constants);
 // threshold t, so the two LODs cover complementary pixels. (0, 1) keeps every pixel. The queues
 // write it before every entry draw (renderEntryBindLodDither).
 const unsigned int kLodDitherRegister = 222;
-const unsigned int kEngineRegisterEnd = 223;   // c200..c222 dropped from effect writes
+// [RENDER] Milestone 11 aerial perspective: RaAerial, one float4 in pixel register c223 (the last
+// ps_3_0 register), engine-owned like RASM and published with it (rendererAtmosphereAerialConstants).
+const unsigned int kAerialRegister = 223;
+const unsigned int kEngineRegisterEnd = 224;   // c200..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
+void stateManagerSetAerial(const float* value /* one float4 */);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

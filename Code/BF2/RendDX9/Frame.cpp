@@ -184,6 +184,7 @@ IDirect3DTexture9* g_linearDepthTexture = 0;
 IDirect3DSurface9* g_linearDepthSamples = 0;   // multisampled, or null when the scene is not
 const DWORD kLinearDepthSampler = 15;
 float g_sunCascadeConstants[kSunCascadeVec4s * 4] = {};   // RASM for this frame's world view
+float g_aerialConstants[4] = {};    // RaAerial for this frame's world view
 const float kNoSunCascades[kSunCascadeVec4s * 4] = {};
 bool g_sunCascadesLive = false;     // RASM is published: the world pass or its transparents draw
 bool g_softParticleDepth = false;   // s15 holds this frame's prepass depth and the world pass draws
@@ -206,15 +207,17 @@ void bindSampler(DWORD stage, IDirect3DTexture9* texture, D3DTEXTUREFILTERTYPE f
     device->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, FALSE);
 }
 
-// RASM for this frame's world pass, or zero (nothing covered: every receiver keeps its baked
-// sunlight), to the pixel registers and for the particle effects.
-// The frame's values stay in g_sunCascadeConstants while zeros are published, so the world
-// transparents get them back after the first-person passes.
+// RASM and RaAerial for this frame's world pass, or zero (nothing covered: every receiver keeps its
+// baked sunlight; retail fog), to the pixel registers and for the particle effects.
+// The frame's values stay in g_sunCascadeConstants and g_aerialConstants while zeros are published,
+// so the world transparents get them back after the first-person passes.
 void publishSunCascadeConstants(bool zero)
 {
     g_sunCascadesLive = !zero;
-    if (g_rendererBase)
-        stateManagerSetSunCascadeConstants(zero ? kNoSunCascades : g_sunCascadeConstants);
+    if (!g_rendererBase)
+        return;
+    stateManagerSetSunCascadeConstants(zero ? kNoSunCascades : g_sunCascadeConstants);
+    stateManagerSetAerial(zero ? kNoSunCascades : g_aerialConstants);
 }
 
 // The linear depth targets for the scene depth `depth`: same size, same sample count.
@@ -330,6 +333,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     // + clip.w * forward + clip.x * right' + clip.y * up' is the world point of a clip position.
     rendererSunShadowsRender(time, g_sunCascadeConstants);
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
+    rendererAtmosphereAerialConstants(g_aerialConstants);
     {
         IRenderView* const view = rendererGetRenderView();
         const float* const c = view->getViewMatrixPtr()->m;
