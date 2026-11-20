@@ -170,8 +170,9 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   the stored value until a resolution is set again.
 - Every successful device reset logs the back-buffer size, mode, refresh rate,
   fullscreen, vsync and multisampling.
-- The console is enlarged by the back-buffer height over 1100, at least 1 (1080
-  lines: 1, 1600: about 1.45, 1664: 1.5, 2160: about 2). A whole-number scale
+- The console is enlarged by the back-buffer height over 900, at least 1 (900
+  lines: 1, 1080: 1.2, 1600: about 1.78, 1664: about 1.85, 2160: 2.4), so it keeps
+  the share of the screen retail's console has at 1440x900. A whole-number scale
   draws its bitmap font as point-sampled blocks, a fractional one linearly
   filtered.
 - macOS: the menu's `.ani` cursors are enlarged by `MenuViewport::bitmapScale`, the

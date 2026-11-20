@@ -5932,10 +5932,11 @@ namespace dx9rend {
 
 namespace {
 // [CHOSEN, not recovered] The HiDPI console scale (Renderer::slot_0x58): the back-buffer height
-// over 1100, at least 1.
+// over 900, at least 1. Retail's unscaled console at 1440x900 is the size the owner picked as right
+// (comparison with retail, 2026-11-20); above 900 lines the console keeps that share of the screen.
 float consoleScale(float backBufferHeight)
 {
-    const float k = backBufferHeight / 1100.0f;
+    const float k = backBufferHeight / 900.0f;
     return k > 1.0f ? k : 1.0f;
 }
 } // namespace
@@ -5946,8 +5947,8 @@ float consoleScale(float backBufferHeight)
 // [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
 // [CHOSEN, not recovered] HiDPI console: retail draws at one back-buffer pixel per font pixel, which
 // leaves 11-pixel lines on a 1664-line panel. Every console length (background, line step, margins,
-// glyphs) is multiplied by consoleScale: the back-buffer height over 1100, at least 1
-// (1080 lines: 1, 1600: about 1.45, 1664: about 1.5, 2160: about 2). The font draws through its
+// glyphs) is multiplied by consoleScale: the back-buffer height over 900, at least 1
+// (900 lines: 1, 1080: 1.2, 1600: about 1.78, 1664: about 1.85, 2160: 2.4). The font draws through its
 // unused retail setScale slot: whole-number scales as uniform point-sampled blocks, fractional ones
 // linearly filtered. Line positions are whole pixels. Scale 1: the shipped arithmetic, unchanged.
 void Renderer::slot_0x58()
