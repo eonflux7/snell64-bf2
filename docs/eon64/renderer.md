@@ -27,9 +27,10 @@ is in [renderer-pipeline.md](renderer-pipeline.md).
 | 9. Draw submission | Accepted | `2eb902ce`, `0a623df8`, `e87543df`, `f3515fb4`, `7bdd3a77`, `4bc56ff8`, `e9b6a8a4`, `965bb8bf`, `c2f7ef33`, `3c745649`, `2002788d` |
 | 10. Terrain in one pass | Accepted | `2eb4d02d`, `c21a012e`, `0d9e15a6`, `57fa2899`, `3b9da48c`, `6fd523bb`, and the deletion ("milestone 10 accepted") |
 | 11. Atmosphere, sky IBL, water reflections | In progress | — |
-| 12. Volumetric clouds | Not started | — |
+| 12. Clouds | Not started | — |
 | 13. HDR bloom + auto-exposure | Not started | — |
 | 14. GTAO + lightmap channel ownership | Not started | — |
+| 15. View distance | Not started | — |
 
 The owner accepts each milestone in game before the next starts. From milestone 9 on that is done
 against the `tools` lane's reference views and benchmark paths ([tools.md](tools.md)), with the GPU
@@ -211,25 +212,38 @@ and s15: the atlas, the sky cube, and the split-sum BRDF table if task 1 finds a
 (otherwise an analytic fit). The water scene texture and the sky's transmittance table are effect
 parameters. Each task that adds to what the shaders may rely on raises the contract version (6 on).
 
-### 12. Volumetric clouds
+### 12. Clouds
 
-Decided by the owner, 2026-11-20, at milestone 11 task 3: the levels' painted cloud layers are
-replaced by modern clouds, not constrained by the game's approach; the sky is clear until then.
-Outline, to be planned in full when milestone 11 is accepted:
+Decided by the owner, 2026-11-20: the levels' painted cloud layers are replaced by modern clouds,
+not constrained by the game's approach; the sky is clear until then. Clouds must not change
+gameplay: aircraft have no ceiling the clouds could sit above, so nothing that hides a target is
+placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full when milestone 11
+is accepted:
 
-- Raymarched cloud volume in a layer above the level (Schneider, Horizon Zero Dawn / Nubis): shape
-  and detail from tiling Perlin-Worley noise volumes built on the CPU at load (D3D9 samples volume
-  textures but cannot render into them), a weather map for coverage and type, height gradients
-  per cloud type.
-- Lit by milestone 11's model: sunlight through the atmosphere's transmittance, a short march
-  toward the sun for self-shadowing, a dual-lobe phase and multiple-scattering approximation, the
-  sky-view table as ambient; aerial perspective over distant clouds.
-- Marched at quarter resolution with temporal reprojection for the clouds alone (the scene stays
-  without TAA, milestone 8), upsampled against the depth; loops unrolled (the compiler's loops go
-  wrong under DXVK).
-- Shadows on the ground (a cloud shadow map from the sun) and into the sky cube.
-- Per-level coverage and type: picked per level outside this tree, a default otherwise.
-- Budget: about 1–2 ms at 1920x1080, measured on the benchmark paths at acceptance.
+- **Sky clouds (first).** Overcast decks, high cloud and distant banks drawn into the sky at
+  infinity, so they are never reached, flown above or into, and hide nothing. Raymarched per
+  direction through a cloud slab (Schneider, Horizon Zero Dawn / Nubis; Hillaire): Perlin-Worley
+  shape and erosion noise built on the CPU at load (D3D9 samples volume textures but cannot render
+  into them), a short march toward the sun, a dual-lobe phase, the powder term, a
+  multiple-scattering approximation, the sky-view table as ambient, aerial perspective toward the
+  horizon. Rendered into a cloud panorama of its own (about 1024x512; the 192x108 sky-view table is
+  too coarse for cloud edges), updated over several frames, drifting with the wind. No parallax, so
+  it carries no near cumulus. Loops unrolled (the compiler's loops go wrong under DXVK).
+- **Coverage drives the lighting.** One coverage value per level (0 clear, 1 storm; picked per
+  level outside this tree, a default otherwise) sets the clouds and the light together: the sun
+  dimmed and its shadows softened, sky light greyer, more even and relatively brighter, the haze and
+  reflections greyer through the sky they read. Overcast reads through the lighting, not the
+  texture.
+- **Sparse 3D clouds (later, its own task).** Small cumulus, and under overcast low ragged scud
+  below the deck, in the flight space and flown through: clusters of lit soft particles (no
+  raymarching, no temporal reprojection). Thin and sparse, so they hide almost nothing; they give
+  parallax and the feel of flying under weather.
+- Cloud shadows on the ground (a 2D map from the sun, scrolling with the wind) and into the sky
+  cube.
+
+First task: a prototype of the sky clouds and the coverage value alone, judged on Kashan Desert
+from the ground and the air at coverage 0.3, 0.7 and 1.0, before the lighting is coupled. Budget
+about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at acceptance.
 
 ### 13. HDR bloom + auto-exposure
 
@@ -257,3 +271,26 @@ GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: 
 range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
 cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
 higher resolution unless the reference views show the baked sky term failing.
+
+### 15. View distance
+
+Decided by the owner, 2026-11-20. Each level's view distance (fog end) stays the gameplay limit,
+so no level is retuned; what changes is how the limit looks and that it is the same in every
+direction.
+
+- **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
+  plane, and fog and haze use the same distance. Today the screen's edges and corners reach up to
+  30–40 % further than its centre, an advantage for whoever turns a target to the edge.
+- **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
+  or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
+  against terrain vanish at the same distance; today the aircraft's silhouette survives against a
+  sky that differs from the fog colour. The view distance is the distance at which an object's
+  contrast reaches zero.
+- **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
+- **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
+  distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
+  horizon, all under aerial perspective; no vehicles, objects or vegetation out there. Aircraft
+  see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
+  the land's shape is visible further, targets are not.
+
+Order against milestones 13 and 14 to be set by the owner; it comes after milestone 12.

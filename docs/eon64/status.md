@@ -128,7 +128,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    2.7, 3.1, 5.1, 0.11 at night). Not yet seen by the owner (the Atmosphere tab); nothing on screen
    changes until task 3.
 3. Sky and sun: the model draws the whole sky, clear (the painted dome and its cloud layers not
-   shown; volumetric clouds are render milestone 12, owner 2026-11-20); the sun disc and its forward-scattering glow from the model, the flare's
+   shown; clouds are render milestone 12, owner 2026-11-20); the sun disc and its forward-scattering glow from the model, the flare's
    occlusion test kept. The sky is one full-screen pass at the far plane (`RaSky`, contract 7) in
    the dome's place, filling what nothing covers; under water it fills the water's fog colour, and
    thermals keep their heat gradient. The dome mesh draws only with `renderer.atmosphere 0`; at
