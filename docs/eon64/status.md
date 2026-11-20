@@ -177,9 +177,23 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    culler and the surrounding ring take the frustum out to 40 km; past fog end the haze carries
    on at the last slice's mean extinction along the ray. In game on Muttrah City (`ridges`,
    `high`): objects end at the limit, the bay, coast and ranges go on behind in layers of
-   haze; no shader error. Not yet seen by the owner. Left: water past the limit (the sea out to
-   the horizon) and the far ground ring; the dither's look (4x4 Bayer per pixel, alpha to
-   coverage not used yet); jets and anti-air; device resets; the cost of terrain to 40 km.
+   haze; no shader error.
+   Owner's first look, 2026-11-20: far water a moving grid from high up, the surrounding ring
+   popping as the camera turned, static meshes wrongly cut (they should go on at their coarsest
+   LOD). Decided: static meshes go on past the limit, culled by their size on screen; vehicles,
+   soldiers, vegetation, roads, particles and decals still end there. Fixed 2026-11-20:
+   the haze past fog end integrated in closed form along each pixel's ray (`RaAerialHaze`,
+   c199; the per-tile extrapolation had amplified the tiles into stripes); the scenery frustum
+   built from the current view at each call (the cascades' cull had switched it off before the
+   water drew); the ring tested as a box against that frustum (retail's edge-crossing test missed
+   slots the frustum ends inside); the water (the grid arm the levels use, and the Ra arm) over
+   the whole map, then the sea past it in rings of cells to the horizon in each direction whose
+   surrounding slot ends in sea, open, sunlit and opaque; static meshes queried out to 40 km and
+   culled by `renderer.contributionCull`; bundled and skinned meshes past the cut not submitted.
+   In game on Muttrah City (`seahigh`, a new view 600 m over the bay; `ridges`): the sea to the
+   horizon without a seam, the city to the far end of the bay. Not yet seen by the owner. Left:
+   the far ground ring (land past the ring is sky); trees past the limit (overgrowth, still cut);
+   the dither's look; jets and anti-air; device resets; the cost of statics and terrain to 40 km.
 6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
    `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
    acceptance if they do not pay for their cost.
