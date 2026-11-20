@@ -201,8 +201,8 @@ void SurroundingPatch::measureHeights(const float* heights, unsigned int vertexC
         const float x = gx * m[0] + gz * m[4] + m[12];
         const float z = gx * m[1] + gz * m[5] + m[13];
         const float y = heights[3 * i] * t->m_secondaryWorldScale.y;
-        lowest = std::min(lowest, y);
-        if (std::max(std::fabs(x), std::fabs(z)) >= outer)
+        lowest = (std::min)(lowest, y);
+        if ((std::max)(std::fabs(x), std::fabs(z)) >= outer)
             edge.push_back(y);
     }
     t->m_surroundLowest[slot] = lowest;
