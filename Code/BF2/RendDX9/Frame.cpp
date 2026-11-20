@@ -371,6 +371,9 @@ void rendererDepthPrepass(bool drawTerrain, float time)
 
     // Terrain draws its depth after the queues below.
     static const unsigned int key = raHashString(std::string("RaDepthPrepass"));
+    // RaAerial for the prepass too (RASM stays zero): the view-distance cut (contract 9) runs in the
+    // main pixel shader the prepass calls, so both must cut the same pixels.
+    stateManagerSetAerial(g_aerialConstants);
     // Alpha-to-coverage: alpha-tested draws turn their alpha into a sample mask here, and their
     // lit passes test EQUAL against it with no alpha test of their own (stateManagerMapDepthState).
     // The vendor state (DXVK: NVIDIA's ATOC) acts only while a draw has its alpha test on, so
