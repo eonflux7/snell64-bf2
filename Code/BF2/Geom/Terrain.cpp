@@ -12,6 +12,7 @@
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include <string>
+#include <cfloat>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "Terrain.h"
 #include "QuadPatch.h"
@@ -509,6 +510,7 @@ Terrain::Terrain()
     for (int i = 0; i < 3; ++i) m_lodRangeIndexCount[i] = 0;                     // nine zero words
     for (int i = 0; i < 3; ++i) m_lodRangeTriangleCount[i] = 0;
     for (int i = 0; i < 8; ++i) m_surrounding[i] = 0;
+    for (int i = 0; i < 8; ++i) m_surroundLowest[i] = m_surroundOuterEdge[i] = FLT_MAX;   // [RENDER]
     dx9rend::registerDeviceLostResetListener(static_cast<dx9rend::DeviceLostResetListener*>(this), 1);
     dx9rend::registerRenderPathListener(static_cast<dx9rend::RenderPathListener*>(this));
     m_hiddenDetailLayer = -1;
@@ -2371,6 +2373,7 @@ Terrain::~Terrain()
             ::renddx9abi::engineFree(ring);
             m_surrounding[s] = 0;
         }
+        m_surroundLowest[s] = m_surroundOuterEdge[s] = FLT_MAX;   // [RENDER]
     }
 
     // (11) The level-wide low-detail texture - the owner's reference only. Not nulled.

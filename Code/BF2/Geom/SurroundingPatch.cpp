@@ -24,7 +24,10 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendMisc/IRenderView.h"
 
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <vector>
 #include <cstdio>
 #include <cstring>
 
@@ -159,6 +162,7 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
             out[2] = src[2];
         }
     }
+    measureHeights(heights, vertexCount);
     ::renddx9abi::engineFree(heights);
     dx9rend::vertexBufferUnlock(heightVertexBuffer);
 
@@ -173,6 +177,39 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
         std::string name(t->m_lowDetailmapBaseName.c_str());
         name += suffix;
         lowDetailmap = dx9rend::textureManagerGetTexture(name);
+    }
+}
+
+// [RENDER] The sea past the view distance (render milestone 11 task 5): this slot's lowest height
+// and the median height along its outer edge, into the terrain's m_surroundLowest and
+// m_surroundOuterEdge. A vertex is the SHORT2 grid position in xzBytes, placed by `placement` as the
+// shader does (sttransxz), its height the first float of its record times the secondary y scale
+// (stscaletransy). The outer edge is where the ring's square ends, 1.5 spans from the centre.
+void SurroundingPatch::measureHeights(const float* heights, unsigned int vertexCount)
+{
+    Terrain* const t = terrain;
+    if (!heights || !xzBytes || slot < 0 || slot >= 8)
+        return;
+    const short* const grid = static_cast<const short*>(xzBytes);
+    const float* const m = placement;
+    const float outer = 1.5f * static_cast<float>(span) - 0.5f * static_cast<float>(secondaryScaleX);
+    float lowest = FLT_MAX;
+    std::vector<float> edge;
+    for (unsigned int i = 0; i < vertexCount; ++i)
+    {
+        const float gx = grid[2 * i], gz = grid[2 * i + 1];
+        const float x = gx * m[0] + gz * m[4] + m[12];
+        const float z = gx * m[1] + gz * m[5] + m[13];
+        const float y = heights[3 * i] * t->m_secondaryWorldScale.y;
+        lowest = std::min(lowest, y);
+        if (std::max(std::fabs(x), std::fabs(z)) >= outer)
+            edge.push_back(y);
+    }
+    t->m_surroundLowest[slot] = lowest;
+    if (!edge.empty())
+    {
+        std::nth_element(edge.begin(), edge.begin() + edge.size() / 2, edge.end());
+        t->m_surroundOuterEdge[slot] = edge[edge.size() / 2];
     }
 }
 
@@ -517,11 +554,18 @@ bool SurroundingPatch::isVisible(int)
         && static_cast<double>(originZ) <= camZ && static_cast<double>(endZ) >= camZ)
         return true;
     // [RENDER] With the view-distance cut the ring reaches out to the scenery distance (render
-    // milestone 11 task 5): the terrain culler's frustum taken out that far.
-    const Frustum* const scenery = terrainSceneryFrustum();
-    if (scenery)
-        frustum = scenery;
-    const float farPlane = scenery ? scenery->getFarDist() : view->getFarPlane();        // +0x3C
+    // milestone 11 task 5), tested as a box against the terrain culler's frustum taken out that far.
+    // Retail's test below (do the patch's outer edges cross the frustum's edges in xz?) misses a
+    // patch the frustum's far end lies inside, which is most of them once the frustum reaches past
+    // the ring: the ring popped as the camera turned. The box's height is open (the file's bounds
+    // are in heightmap units), so only its xz extent culls.
+    if (const Frustum* const scenery = terrainSceneryFrustum())
+    {
+        const float box[6] = { static_cast<float>(originX), -100000.0f, static_cast<float>(originZ),
+                               static_cast<float>(endX), 100000.0f, static_cast<float>(endZ) };
+        return terrainFrustumIntersectsBox(scenery, box);
+    }
+    const float farPlane = view->getFarPlane();                                    // +0x3C
     const float x0 = static_cast<float>(originX);
     if (x0 - farPlane > camX) return false;
     const float x1 = static_cast<float>(endX);

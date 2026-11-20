@@ -1187,9 +1187,25 @@ void Terrain::drawWaterRa(float seaLevel)
     }
     view->getFrustumPtr();                                                // answered and dropped, as shipped
     const float* const cameraRow = view->getViewMatrixPtr()->m + 12;
-    const float radius = view->getFrustumPtr()->getFarDist();
+    // [RENDER] With the view-distance cut (render milestone 11 task 5) the sea reaches the horizon:
+    // the nodes out to the scenery distance, kept where their water lies in that frustum over
+    // terrain that reaches below it, then the sea past the map (drawWaterBeyond). Retail took every
+    // node within the view distance, as the frustum ended there.
+    const Frustum* const scenery = terrainSceneryFrustum();
+    const float radius = scenery ? scenery->getFarDist() : view->getFrustumPtr()->getFarDist();
     m_culler->gatherSphere(cameraRow, radius);
     std::vector<TerrainCullerNode*>* const list = m_culler->gatheredPatches();
+    if (scenery)
+    {
+        const float top = seaLevel + 0.1f, bottom = seaLevel - 0.1f;
+        const float cull = seaLevel + m_waterCullHeightOffset;
+        list->erase(std::remove_if(list->begin(), list->end(), [&](TerrainCullerNode* node) {
+            const TerrainAabb& b = node->bounds;
+            const float box[6] = { b.min.x, bottom, b.min.z, b.max.x, top, b.max.z };
+            return cull < node->patch->minHeight || !terrainFrustumIntersectsBox(scenery, box);
+        }), list->end());
+        drawWaterBeyond(seaLevel, scenery);
+    }
     TerrainCullerNode** it = list->data();
     if (it == list->data() + list->size())
         return;
@@ -1211,6 +1227,58 @@ void Terrain::drawWaterRa(float seaLevel)
         patch->drawWater(it, list, m_materialParameters, m_objectParameters);   // sub_1018D800, advances `it`
     }
     while (it != list->data() + list->size());
+}
+
+// [RENDER] The sea past the map (render milestone 11 task 5), in the grid water's cells
+// (drawWaterCell) with the surrounding technique. Over each surrounding slot that reaches below the
+// sea, one cell; past the ring, rings of eight cells each three times wider than the last, out past
+// the scenery distance, each cell drawn when the slot in its direction meets it with sea: the
+// median of that slot's outer edge below the sea level. Land past the ring is not drawn yet.
+void Terrain::drawWaterBeyond(float seaLevel, const Frustum* frustum)
+{
+    if (!m_waterSurroundingTechnique || !m_surroundingBuilt)
+        return;
+    m_waterObjectRingCursor = 0;
+    void*& technique = raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters));   // +0x14C
+    const float top = seaLevel + 0.1f, bottom = seaLevel - 0.1f;
+    float span = 0.0f;
+    bool sea[3][3] = {};
+    for (int s = 0; s < 8; ++s)
+    {
+        const SurroundingPatch* const ring = m_surrounding[s];
+        if (!ring)
+            continue;
+        span = static_cast<float>(ring->span);
+        const float x0 = static_cast<float>(ring->originX), x1 = static_cast<float>(ring->endX);
+        const float z0 = static_cast<float>(ring->originZ), z1 = static_cast<float>(ring->endZ);
+        const float cx = 0.5f * (x0 + x1), cz = 0.5f * (z0 + z1);
+        sea[cx > 0.0f ? 2 : cx < 0.0f ? 0 : 1][cz > 0.0f ? 2 : cz < 0.0f ? 0 : 1] =
+            m_surroundOuterEdge[s] < seaLevel;
+        const float box[6] = { x0, bottom, z0, x1, top, z1 };
+        if (m_surroundLowest[s] < seaLevel && terrainFrustumIntersectsBox(frustum, box))
+        {
+            technique = m_waterSurroundingTechnique;
+            drawWaterCell(x0, z0, x1, z1, 0);
+        }
+    }
+    if (span <= 0.0f)
+        return;
+    const float reach = frustum->getFarDist() + 1.5f * span;
+    for (float cell = 3.0f * span; 0.5f * cell < reach; cell *= 3.0f)
+    {
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+            {
+                if ((i == 1 && j == 1) || !sea[i][j])
+                    continue;
+                const float x0 = (static_cast<float>(i) - 1.5f) * cell, z0 = (static_cast<float>(j) - 1.5f) * cell;
+                const float box[6] = { x0, bottom, z0, x0 + cell, top, z0 + cell };
+                if (!terrainFrustumIntersectsBox(frustum, box))
+                    continue;
+                technique = m_waterSurroundingTechnique;
+                drawWaterCell(x0, z0, x0 + cell, z0 + cell, 0);
+            }
+    }
 }
 
 // sub_100DCA50 - the grid water: every patch-sized cell of the frustum's xz bounds, tested against

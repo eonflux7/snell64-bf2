@@ -757,6 +757,12 @@ public:
         void* weight[2];     // RaTerrainWeight0..1 (texture)
     };
     RaTerrainHandles m_raTerrain;
+    // [RENDER] Not retail: the sea past the view distance (render milestone 11 task 5). Per
+    // surrounding slot, measured at load: its lowest height and the median height along its outer
+    // edge (world y, m); +FLT_MAX for a slot the level does not have.
+    float m_surroundLowest[8];
+    float m_surroundOuterEdge[8];
+    void drawWaterBeyond(float seaLevel, const Frustum* frustum);
 };
 
 #if defined(_M_IX86)

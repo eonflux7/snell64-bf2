@@ -205,6 +205,7 @@ public:
     bool isVisibleInFrustum(const Frustum* frustum);                 // 0x1018E550  [INFERRED] name; the bounds sphere (+0x70, +0x7C) against the frustum
     bool isVisible(int unused);                                      // 0x1018F420  camera inside, far-plane reject, then the slot's edge tests
     void draw(int unused);                                           // 0x1018F7B0  textures, sttransxz, the two streams, pass 0, one draw
+    void measureHeights(const float* heights, unsigned int vertexCount);   // [RENDER] not retail: see the .cpp
 
     Terrain*              terrain;              // +0x004
     void*                 xzBytes;              // +0x008  file: 4 x vertexCount bytes (packed xz per vertex)
