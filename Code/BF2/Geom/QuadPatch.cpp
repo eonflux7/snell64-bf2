@@ -1240,20 +1240,38 @@ void TerrainAabb::refresh()
 
 namespace {
 Frustum g_sceneryFrustum;   // [RENDER] the last answer of terrainSceneryFrustum
+struct SceneryFrustumKey
+{
+    float view[16];
+    float fov, aspect, nearPlane, farPlane;
+};
+SceneryFrustumKey g_sceneryFrustumKey;
+bool g_sceneryFrustumBuilt = false;
 }
 
 // [RENDER] The current render view's frustum out to the scenery distance while the view-distance
-// cut is on (a perspective view), else 0. Built from the view at each call, so the terrain culler,
-// the water and the surrounding ring agree whatever other views (the sun's cascades) were culled in
-// between.
+// cut is on (a perspective view), else 0. Taken from the view at each call (rebuilt when the view
+// changed), so the terrain culler, the water, the surrounding ring and the static meshes'
+// submission agree whatever other views (the sun's cascades) were culled in between.
 const Frustum* terrainSceneryFrustum()
 {
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();
     const float scenery = dx9rend::rendererSceneryDistance();
     if (scenery <= 0.0f || view->getProjectionMode() == 1)
         return 0;
-    rendmath::frustumSetPerspective(g_sceneryFrustum, view->getFov(), view->getAspect(),
-                                    view->getNearPlane(), scenery, *view->getViewMatrixPtr());
+    SceneryFrustumKey key;
+    std::memcpy(key.view, view->getViewMatrixPtr()->m, sizeof(key.view));
+    key.fov = view->getFov();
+    key.aspect = view->getAspect();
+    key.nearPlane = view->getNearPlane();
+    key.farPlane = scenery;
+    if (!g_sceneryFrustumBuilt || std::memcmp(&key, &g_sceneryFrustumKey, sizeof(key)) != 0)
+    {
+        rendmath::frustumSetPerspective(g_sceneryFrustum, key.fov, key.aspect, key.nearPlane,
+                                        scenery, *view->getViewMatrixPtr());
+        g_sceneryFrustumKey = key;
+        g_sceneryFrustumBuilt = true;
+    }
     return &g_sceneryFrustum;
 }
 

@@ -40,6 +40,7 @@ namespace hfe {
 namespace geom {
 // Geom/StaticMeshMaterial.cpp ([RENDER] milestone 9, declared in Geom/StaticMeshTemplate.h).
 bool staticMeshMaterialContinues(const void* material, const void* next, unsigned int buildSerial);
+const Frustum* terrainSceneryFrustum();   // [RENDER] Geom/QuadPatch.cpp, declared in Geom/Terrain.h
 }
 namespace dx9rend {
 
@@ -3332,11 +3333,18 @@ void rendererSetContributionCullPixels(float pixels)
     g_contributionCullPixels = pixels;
 }
 
+// For the world view while the view-distance cut is on, the frustum out to the scenery distance
+// (render milestone 11 task 5): the camera's own ends in a flat far plane at the view distance,
+// which cut static meshes past it by view depth, so they came and went as the camera turned.
 const Frustum* rendererSubmitCullFrustum()
 {
     if (g_casterCapture.active && g_casterCapture.volume)
         return g_casterCapture.volume;
-    return rendererGetRenderViewDup()->getFrustumPtr();
+    IRenderView* const view = rendererGetRenderViewDup();
+    if (view == rendererGetRenderView())
+        if (const Frustum* const scenery = geom::terrainSceneryFrustum())
+            return scenery;
+    return view->getFrustumPtr();
 }
 
 std::vector<ShadowCaster>& rendererShadowCasters()
