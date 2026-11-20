@@ -6,7 +6,7 @@ an open issue added or closed. When a milestone is accepted, its section here mo
 
 | Lane | Done | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) in game, tuning the haze | [renderer.md](renderer.md#roadmap) |
+| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) done; next task 5 (view distance) | [renderer.md](renderer.md#roadmap) |
 | `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](ui.md#milestones) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](perf-load.md#state) |
@@ -157,6 +157,8 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    6 device resets (`renderer.vsync`) with the atlas drawing, no crash.
    Below the horizon the sky fills the horizon row, flat: from the air a bright horizon band over
    flat grey; task 5's geometry past the limit fills it (owner, 2026-11-20).
+   Seen by the owner on Kashan Desert, 2026-11-20 ("looks good"): done, with the defaults as they
+   are (`hazeDepth 1`, `hazeFalloff 400`, `hazeSteepen 0.75`; 0.35 remains the alternative).
 5. View distance, as in the plan: geometry cut off at the radial distance (the far plane pushed
    past it), the last 10–15 % faded by alpha-to-coverage dither; objects faded to the radiance
    behind them; the low-detail surround terrain and a far ground ring (or sea) drawn past the
