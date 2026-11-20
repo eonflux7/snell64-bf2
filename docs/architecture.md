@@ -165,6 +165,8 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
 - Any other profile resolution the display does not list runs as the closest listed
   mode ([issue #4](https://github.com/kr4uzi/OpenBF2/issues/4)); `Video.con` keeps
   the stored value until a resolution is set again.
+- Every successful device reset logs the back-buffer size, mode, refresh rate,
+  fullscreen, vsync and multisampling.
 
 ## Client menu disconnect
 

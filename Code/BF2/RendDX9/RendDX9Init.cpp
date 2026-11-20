@@ -1915,6 +1915,47 @@ void noteResetFailure(HRESULT hr)
                            : "");
 }
 
+// [CHOSEN, not recovered] - diagnostics only (the shipped reset logs nothing). Names the mode a
+// successful Reset produced: the back buffer's real size (its surface description), the mode's
+// refresh rate, fullscreen, vsync and multisampling, so a resolution change from the options page
+// leaves its result in the log. A Reset that repeats the last logged state (the inactive-window
+// loss loop resets every 100 ms) is counted and summarised at powers of two.
+void noteResetSuccess(RendDX9Base* b)
+{
+    struct State { unsigned w, h, refresh, fullscreen, vsync, samples; };
+    static State last = { 0, 0, 0, 0, 0, 0 };
+    static unsigned int repeats = 0;
+    State now = { b->pp.BackBufferWidth, b->pp.BackBufferHeight, b->modeRefresh, b->fullscreen,
+                  b->vsync, static_cast<unsigned>(b->pp.MultiSampleType) };
+    IDirect3DSurface9* surface = 0;
+    if (SUCCEEDED(b->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &surface)) && surface)
+    {
+        D3DSURFACE_DESC desc;
+        if (SUCCEEDED(surface->GetDesc(&desc)))
+        {
+            now.w = desc.Width;
+            now.h = desc.Height;
+        }
+        surface->Release();
+    }
+    if (now.w == last.w && now.h == last.h && now.refresh == last.refresh &&
+        now.fullscreen == last.fullscreen && now.vsync == last.vsync && now.samples == last.samples)
+    {
+        ++repeats;
+        if ((repeats & (repeats - 1u)) == 0u)
+            ::renddx9abi::logf("resetDevice: back buffer unchanged at %ux%u (%u repeated reset(s))",
+                               now.w, now.h, repeats);
+        return;
+    }
+    last = now;
+    repeats = 0;
+    ::renddx9abi::logf("resetDevice: back buffer %ux%u, mode %ux%u@%uHz, fullscreen=%u vsync=%u "
+                       "multisample=%u",
+                       now.w, now.h, static_cast<unsigned>(b->modeWidth),
+                       static_cast<unsigned>(b->modeHeight), now.refresh, now.fullscreen, now.vsync,
+                       now.samples);
+}
+
 } // anonymous namespace
 
 
@@ -1933,7 +1974,10 @@ bool resetDevice(void* renderer)
         return false;
     }
     if (hr == D3D_OK)
+    {
+        noteResetSuccess(b);                            // [CHOSEN] diagnostics, see above
         return true;
+    }
 
     // Retail's Debug line fires on every failed attempt, and the loss loop retries without bound;
     // [CHOSEN] this mirror is rate-limited like noteResetFailure (hits 1..4, then powers of two).
