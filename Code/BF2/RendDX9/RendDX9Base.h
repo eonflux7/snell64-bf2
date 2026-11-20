@@ -851,7 +851,7 @@ bool rendererAtmosphereDrawSky(void* effect, bool underWater);
 // The fit and the tables, for the debug menu.
 struct AtmosphereInfo
 {
-    bool fitted, haveZenith;
+    bool fitted, haveZenith, zenithClear;
     bool atlasVertexFetch, atlasVertexFilter, atlasFloat32;
     IDirect3DTexture9* transmittance;   // 256 x 64
     IDirect3DTexture9* multiScatter;    // 32 x 32

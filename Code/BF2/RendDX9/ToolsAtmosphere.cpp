@@ -239,7 +239,7 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
                  a.skyGainApplied, rendererSkyGainBlend());
     std::fprintf(f, "[fit] sun above the atmosphere %.4f %.4f %.4f (irradiance)\n", a.sunTop[0], a.sunTop[1], a.sunTop[2]);
     std::fprintf(f, "[fit] zenith target %.4f %.4f %.4f%s, model %.4f %.4f %.4f (before the gain)\n",
-                 a.zenithTarget[0], a.zenithTarget[1], a.zenithTarget[2], a.haveZenith ? "" : " (unread)",
+                 a.zenithTarget[0], a.zenithTarget[1], a.zenithTarget[2], !a.haveZenith ? " (unread)" : a.zenithClear ? " (clear texels)" : " (overcast, whole band)",
                  a.zenithModel[0], a.zenithModel[1], a.zenithModel[2]);
     std::fprintf(f, "[fit] horizon target %.4f %.4f %.4f, model %.4f %.4f %.4f (before the gain)\n",
                  a.horizonTarget[0], a.horizonTarget[1], a.horizonTarget[2], a.horizonModel[0],

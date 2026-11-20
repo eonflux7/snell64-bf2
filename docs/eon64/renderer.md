@@ -146,7 +146,9 @@ Decisions (owner, 2026-11-20):
 - The model draws the whole sky; the painted dome and its cloud layers are not shown (owner,
   2026-11-20, at task 3: a modern sky, not constrained by the game's approach; faithfulness to
   each level is not the goal). The sky is clear until volumetric clouds (milestone 12). The dome
-  texture's zenith colour stays a fitting input. Earlier decisions kept the painted dome, first
+  texture's zenith colour stays a fitting input, read from its clear-sky texels (the most
+  saturated quarter of the top band; the whole band when even those are grey, an overcast dome),
+  so painted clouds do not grey the clear sky. Earlier decisions kept the painted dome, first
   down to the horizon, then above 20°, then its cloud layers.
 - The authored sun colour (`Lightmanager.staticSunColor`) stays the sunlight at the ground, and lit
   surfaces keep using it. The model works backwards from it to the sunlight above the atmosphere,

@@ -7,7 +7,7 @@
 //   1. sunlight above the atmosphere = the authored sun (Lightmanager.staticSunColor, the sunlight
 //      at the ground) over the sky's transmittance at the sun's elevation, clamped to >= 0.1;
 //   2. the sky: Earth's densities, the Rayleigh tint fitted to the dome texture's zenith colour
-//      (its chromaticity), and one sky gain scaling the scattered light so the horizon's
+//      (its clear-sky texels' chromaticity), and one sky gain scaling the scattered light so the horizon's
 //      luminance meets the authored fog colour's, applied as gain^renderer.skyGainBlend;
 //   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
 //      (the horizon's at and below it), so terrain at fog end meets the sky without a seam.
@@ -413,6 +413,7 @@ struct State
     // Read once per texture or terrain.
     const void* domeRead;
     bool haveZenith;
+    bool zenithClear;        // read from the band's clear-sky texels (readDome)
     V3 zenith;               // linear
     const void* terrainRead;
     double refHeight;        // m: the terrain's mean height
@@ -485,11 +486,15 @@ bool gatherInputs(Inputs& in)
     return in.fogEnd > 1.0f;
 }
 
-// The dome texture's top band (the zenith; its rows run from zenith to horizon).
+// The dome texture's top band (the zenith; its rows run from zenith to horizon). Painted domes
+// carry their clouds, which are grey; the model's sky is clear (clouds are render milestone 12), so
+// the zenith colour is the clear sky's: the most saturated quarter of the band's texels. A band
+// whose saturated texels are still grey is an overcast dome, read whole.
 void readDome(const void* dome)
 {
     g.domeRead = dome;
     g.haveZenith = false;
+    g.zenithClear = false;
     const EngineTexture* const t = static_cast<const EngineTexture*>(dome);
     std::vector<unsigned char> rgba;
     unsigned int w = 0, h = 0;
@@ -501,13 +506,26 @@ void readDome(const void* dome)
         return;
     }
     const unsigned int rows = std::max(1u, h / 16);
-    double sum[3] = {};
+    struct Texel { double saturation; V3 linear; };
+    std::vector<Texel> band;
+    band.reserve(static_cast<size_t>(rows) * w);
     for (unsigned int y = 0; y < rows; ++y)
         for (unsigned int x = 0; x < w; ++x)
-            for (int k = 0; k < 3; ++k)
-                sum[k] += rgba[(static_cast<size_t>(y) * w + x) * 4 + k];
-    const double n = static_cast<double>(rows) * w * 255.0;
-    g.zenith = v3(srgbToLinear(sum[0] / n), srgbToLinear(sum[1] / n), srgbToLinear(sum[2] / n));
+        {
+            const unsigned char* const c = &rgba[(static_cast<size_t>(y) * w + x) * 4];
+            const V3 lin = v3(srgbToLinear(c[0] / 255.0), srgbToLinear(c[1] / 255.0), srgbToLinear(c[2] / 255.0));
+            const double hi = std::max(lin.x, std::max(lin.y, lin.z));
+            const double lo = std::min(lin.x, std::min(lin.y, lin.z));
+            band.push_back(Texel{hi > 1e-4 ? (hi - lo) / hi : 0.0, lin});
+        }
+    std::sort(band.begin(), band.end(), [](const Texel& a, const Texel& b) { return a.saturation > b.saturation; });
+    const size_t quarter = std::max<size_t>(1, band.size() / 4);
+    const size_t n = band[quarter - 1].saturation > 0.15 ? quarter : band.size();
+    V3 sum = v3(0, 0, 0);
+    for (size_t i = 0; i < n; ++i)
+        sum = sum + band[i].linear;
+    g.zenith = sum * (1.0 / static_cast<double>(n));
+    g.zenithClear = n < band.size();
     g.haveZenith = true;
 }
 
@@ -675,7 +693,7 @@ void fit()
         g.sky.rayleigh.x / kEarthRayleigh[0], g.sky.rayleigh.y / kEarthRayleigh[1],
         g.sky.rayleigh.z / kEarthRayleigh[2], g.skyGain,
         f.sunGround.x, f.sunGround.y, f.sunGround.z, g.sunTop.x, g.sunTop.y, g.sunTop.z,
-        g.zenith.x, g.zenith.y, g.zenith.z, g.haveZenith ? "" : " (unread)",
+        g.zenith.x, g.zenith.y, g.zenith.z, !g.haveZenith ? " (unread)" : g.zenithClear ? " (clear texels)" : " (overcast, whole band)",
         g.zenithModel.x, g.zenithModel.y, g.zenithModel.z,
         horizonTarget.x, horizonTarget.y, horizonTarget.z,
         g.horizonModel.x, g.horizonModel.y, g.horizonModel.z,
@@ -1065,6 +1083,7 @@ AtmosphereInfo rendererAtmosphereInfo()
         i.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
     }
     i.haveZenith = g.haveZenith;
+    i.zenithClear = g.zenithClear;
     i.atlasVertexFetch = g.atlasVertexFetch;
     i.atlasVertexFilter = g.atlasVertexFilter;
     i.atlasFloat32 = g.atlasFormat == D3DFMT_A32B32G32R32F;
