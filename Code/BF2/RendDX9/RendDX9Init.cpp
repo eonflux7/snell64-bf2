@@ -2429,6 +2429,10 @@ void constructD3DHalf(void* renderer)
                    classManager->getSingleton(renddx9abi::HostString("hWndBf2TempSlt")));
     }
     copyDisplayModeFrom(renderer, slot);
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+    if (slot)
+        fitFullscreenStartMode(renderer);     // [CHOSEN, not recovered] see BF2Render.cpp
+#endif
 
     // External loaders may lack BF2's display-mode singleton. Skip construction when
     // absent; normal BF2 plugin loading publishes it before this call.

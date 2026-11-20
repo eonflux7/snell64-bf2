@@ -7,6 +7,7 @@
 #include "Main/IVideoOptions.h"
 #include "../Core/Ids.h"
 #include "../RendMisc/IRenderer.h"
+#include "../RendMisc/DisplayModePolicy.h"  // [CHOSEN] the new-profile resolution pick
 #include "../Core/SettingsRepostitory.h"  // settings - "GSLoadLevel" gates the antialiasing push
 #include <cstdio>                       // [CHOSEN] sscanf for the new-profile resolution pick
 #include <new>
@@ -156,38 +157,30 @@ bool VideoSettings::apply()
 namespace {
 
 // [CHOSEN, not recovered] The renderer's resolution entry ("%ix%i@%iHz") a new profile starts
-// with: the largest that fits the renderer's desktop mode (IRenderer +0xDC, the adapter's
-// GetAdapterDisplayMode; the Metal backend answers the main display's point size), preferring the
-// desktop's refresh rate, then the highest. Empty when no entry fits or no mode is reported.
+// with, chosen against the renderer's desktop mode (IRenderer +0xDC, the adapter's
+// GetAdapterDisplayMode; the Metal backend answers the main display's point size) by
+// displaymode::preferredMode: the largest entry that fits the desktop, else the Retina backing size
+// (a whole multiple of the desktop; Apple-silicon panels list no mode that fits the point size),
+// else the smallest larger entry. Empty when no entry qualifies or no mode is reported.
 std::string desktopFitResolution(dx9rend::IRenderer* renderer, const std::vector<std::string>& list)
 {
     unsigned int width = 0, height = 0, hz = 0;
     if (!renderer->getDesktopMode(width, height, hz))
         return std::string();
-    const int desktopWidth = static_cast<int>(width), desktopHeight = static_cast<int>(height);
-    const int desktopHz = static_cast<int>(hz);
-    std::string best;
-    long long bestArea = 0;
-    int bestHz = 0;
-    bool bestHzMatches = false;
-    for (const std::string& entry : list) {
-        int width = 0, height = 0, hz = 0;
-        if (std::sscanf(entry.c_str(), "%dx%d@%d", &width, &height, &hz) != 3)
+    std::vector<displaymode::Mode> modes;
+    std::vector<std::size_t> entries;
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        int w = 0, h = 0, r = 0;
+        if (std::sscanf(list[i].c_str(), "%dx%d@%d", &w, &h, &r) != 3 || w <= 0 || h <= 0 || r < 0)
             continue;
-        if (width > desktopWidth || height > desktopHeight)
-            continue;
-        const long long area = static_cast<long long>(width) * height;
-        const bool hzMatches = hz == desktopHz;
-        if (area > bestArea
-            || (area == bestArea && hzMatches && !bestHzMatches)
-            || (area == bestArea && hzMatches == bestHzMatches && hz > bestHz)) {
-            best = entry;
-            bestArea = area;
-            bestHz = hz;
-            bestHzMatches = hzMatches;
-        }
+        const displaymode::Mode mode = { static_cast<unsigned>(w), static_cast<unsigned>(h),
+                                         static_cast<unsigned>(r) };
+        modes.push_back(mode);
+        entries.push_back(i);
     }
-    return best;
+    const displaymode::Mode desktop = { width, height, hz };
+    const int best = modes.empty() ? -1 : displaymode::preferredMode(&modes[0], modes.size(), desktop, 0);
+    return best < 0 ? std::string() : list[entries[best]];
 }
 
 // [CHOSEN, not recovered] Owner decision 2026-11-14: the High scheme also takes the highest
@@ -242,8 +235,8 @@ void VideoSettings::setDefaults()
     }
     m_pending.videoOptionScheme = detectVideoOptionScheme();
     applyVideoOptionScheme(1);
-    // [CHOSEN, not recovered] High stages "1024x768"; a new profile takes the largest listed
-    // resolution that fits the desktop instead, when one does.
+    // [CHOSEN, not recovered] High stages "1024x768"; a new profile takes the desktop-fitting
+    // resolution instead (desktopFitResolution), when the list has one.
     const std::string resolution = desktopFitResolution(renderer, getResolutionList());
     if (!resolution.empty()) {
         options->setDynamicOption(1, resolution);

@@ -2465,6 +2465,15 @@ if(BUILD_TESTING)
     add_test(NAME bf2_hud_widescreen_check COMMAND bf2_hud_widescreen_check)
 endif()
 
+# [TEMP] [CHOSEN, not recovered] Content-free display-mode and HiDPI UI-factor policy checks.
+add_executable(bf2_display_mode_policy_check EXCLUDE_FROM_ALL Code/Tests/display_mode_policy.cpp)
+bf2_configure_cpp_target(bf2_display_mode_policy_check)
+bf2_set_platform_compat(bf2_display_mode_policy_check)
+bf2_set_image(bf2_display_mode_policy_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_display_mode_policy_check COMMAND bf2_display_mode_policy_check)
+endif()
+
 if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Content-free offline popup VM regression.
     add_executable(bf2_swiff_offline_connect_popup_check EXCLUDE_FROM_ALL

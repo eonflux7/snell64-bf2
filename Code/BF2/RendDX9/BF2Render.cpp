@@ -50,6 +50,10 @@
 #include "../Geom/DecalSystem/DecalManager.h"    // typed update / render-path draw
 #include "../Geom/RoadEditableRenderer.h"   // IRoadEditableRenderer - the typed drawAll below
 #include "../RendMisc/IRenderer.h"
+#include "../RendMisc/DisplayModePolicy.h"   // [CHOSEN] native fullscreen start mode
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+#include "../Platform/Host/ClientHost.h"     // [CHOSEN] fitFullscreenStartMode resizes the client
+#endif
 #include "../RendMisc/IRenderView.h"
 #include "../Math/Frustum.h"
 #include "RendDX9Math.h"                    // the RendDX9.dll Math copies
@@ -5625,6 +5629,24 @@ Mode40 modeFromAdapterMode(const D3DDISPLAYMODE& mode)
 // [RETIRE-WHEN: macos-display-mode-policy] Validate this G3 policy on Intel and M2;
 // settle the plan's fractional-resolution/Retina policy before retiring the debt.
 void injectRequestedMode(RendDX9Base* b);
+
+// The adapter's X8R8G8B8 modes as policy records (the sizes buildModeListImpl lists).
+std::vector<displaymode::Mode> listedAdapterModes(RendDX9Base* b)
+{
+    std::vector<displaymode::Mode> modes;
+    const UINT count = b->d3d9->GetAdapterModeCount(b->adapter, D3DFMT_X8R8G8B8);
+    for (UINT i = 0; i < count; ++i)
+    {
+        D3DDISPLAYMODE mode = {};
+        if (FAILED(b->d3d9->EnumAdapterModes(b->adapter, D3DFMT_X8R8G8B8, i, &mode)) ||
+            mode.Width > 65535 || mode.Height > 65535 || mode.RefreshRate > 65535)
+            continue;
+        const displaymode::Mode m = { mode.Width, mode.Height, mode.RefreshRate };
+        modes.push_back(m);
+    }
+    return modes;
+}
+
 void buildModeListImpl(RendDX9Base* b)
 {
     if (!b->modeList.empty() || !b->d3d9) return;
@@ -5649,13 +5671,13 @@ void buildModeListImpl(RendDX9Base* b)
     injectRequestedMode(b);
 }
 
-// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] The requested window size
-// (GSWindowSizeX/Y, i.e. +szx/+szy, copied in by copyDisplayModeFrom) joins the list when the
-// display lists no mode of that size. A Windows driver lists the classic sizes on every panel, so
-// retail's own requests ("800x600", VideoSettings' "800x600@60Hz") always match; the M2's built-in
-// panel has no 800x600, and setDynamicOption's miss then stops the game. This backend never
-// switches display modes and presents at the panel's rate, so the size is added at the desktop
-// rate and at the 60 Hz the game's defaults name.
+// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] A size the display does not
+// list joins the list when it was requested for a window, or explicitly (+szx/+szy, i.e.
+// GSWindowSizeX/Y) for fullscreen: any client size can be presented, and setDynamicOption must
+// find the request (the M2's built-in panel has no 800x600). A fullscreen start without +szx/+szy
+// does not reach here with an unlisted size: fitFullscreenStartMode already replaced the engine
+// default. This backend never switches display modes and presents at the panel's rate, so the size
+// is added at the desktop rate and at the 60 Hz the game's defaults name.
 void injectRequestedMode(RendDX9Base* b)
 {
     const unsigned int w = b->modeWidth, h = b->modeHeight;
@@ -5805,6 +5827,44 @@ void buildModeListImpl(RendDX9Base* b)
 #endif
 
 } // anonymous namespace
+
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] A fullscreen start asks for the
+// engine's 800x600 (GSWindowSizeX/Y unset; BF2Render::init's defaults) whatever the display. When
+// the display does not list that size (Apple-silicon panels list only their backing sizes), the
+// device starts at displaymode::preferredMode instead - the mode a new profile takes - rather than
+// at 800x600 stretched over the panel, and the host's client takes the same size. Windowed starts
+// and explicit +szx/+szy keep their request (injectRequestedMode lists it). Runs after
+// copyDisplayModeFrom, before the device exists. Retire with the debt above.
+void fitFullscreenStartMode(void* renderer)
+{
+    RendDX9Base* const b = reinterpret_cast<RendDX9Base*>(renderer);
+    if (!b->fullscreen || !b->d3d9)
+        return;
+    if (readIntSetting("GSWindowSizeX", 0) != 0 && readIntSetting("GSWindowSizeY", 0) != 0)
+        return;
+    const std::vector<displaymode::Mode> modes = listedAdapterModes(b);
+    if (modes.empty() || displaymode::listsSize(&modes[0], modes.size(), b->modeWidth, b->modeHeight))
+        return;
+    D3DDISPLAYMODE desktop = {};
+    if (FAILED(b->d3d9->GetAdapterDisplayMode(b->adapter, &desktop)))
+        return;
+    const displaymode::Mode desk = { desktop.Width, desktop.Height, desktop.RefreshRate };
+    const int index = displaymode::preferredMode(&modes[0], modes.size(), desk, 800);
+    if (index < 0)
+        return;
+    const displaymode::Mode& chosen = modes[index];
+    ::renddx9abi::logf("fitFullscreenStartMode: requested %ux%u not listed by the display; starting at "
+                       "%ux%u@%uHz (desktop %ux%u) [CHOSEN, not recovered]",
+                       b->modeWidth, b->modeHeight, chosen.width, chosen.height, chosen.refresh,
+                       desk.width, desk.height);
+    b->modeWidth = static_cast<unsigned short>(chosen.width);
+    b->modeHeight = static_cast<unsigned short>(chosen.height);
+    b->modeRefresh = static_cast<unsigned short>(chosen.refresh);
+    host::ClientHost::instance().resizeClient(static_cast<int>(chosen.width),
+                                              static_cast<int>(chosen.height));
+}
+#endif
 
 // the mode-list builder (Renderer vtable slot +0x3C, `retn 4`: one filter argument,
 // IRenderer.h). Returns the base's std::vector<Mode40> (retail `this+0x90`), building the list

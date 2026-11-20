@@ -148,6 +148,21 @@ registry, which also works when Windows loads the two plugins as separate DLLs.
 SWF curve precision follows the ratio of output pixels to movie pixels.
 See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
 
+## Client display modes and HiDPI UI
+
+`[CHOSEN, not recovered]` policy shared by the rebuilt clients
+(`RendMisc/DisplayModePolicy.h`):
+
+- A new profile's resolution uses the preferred mode: the largest listed mode that
+  fits the desktop; when none fits (Apple-silicon panels list only their Retina
+  backing sizes, while the macOS desktop is reported in points), the listed whole
+  multiple of the desktop (the backing store, for example 2940x1912 for a
+  1470x956-point desktop); otherwise the smallest larger mode. On macOS and Linux a
+  fullscreen start without `+szx/+szy`, and the engine's own default sizes (the
+  presets' 800x600 and 1024x768, the empty profile's 800x600@60Hz), take the same
+  mode when the display does not list them. Windowed starts and explicit
+  `+szx/+szy` keep their size.
+
 ## Client menu disconnect
 
 The stock `mainMenu.swf` disconnect page queues `dice.bf2.Logic.disconnectGame`
