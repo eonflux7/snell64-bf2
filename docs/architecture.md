@@ -178,7 +178,9 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
 - macOS: the menu's `.ani` cursors are enlarged by `MenuViewport::bitmapScale`, the
   4:3 menu viewport's height over 600 rounded down (1 below 1200 lines, 2 at 1600
   and 1664, 3 at 1912), so they look no larger against the UI than in the 800x600
-  menu.
+  menu. On screen a cursor pixel covers that many back-buffer pixels, kept between
+  0.5 and 4 points per cursor pixel (`Platform/macOS/CursorScale.h`): 1.125 points
+  for 2560x1600 full screen on a 1440x900-point desktop.
 - macOS: Core Animation enlarges the drawable with nearest-neighbour filtering only
   at a whole-number factor (linear otherwise, so 800x600 or 1650x1050 full screen on
   a Retina panel is not jagged).

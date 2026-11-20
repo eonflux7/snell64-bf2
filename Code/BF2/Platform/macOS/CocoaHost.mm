@@ -18,6 +18,7 @@
 #include "ProcessAncestry.h"                // [CHOSEN] the launcher of this process (activation)
 #include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
 #include "../Host/CursorFile.h"
+#include "CursorScale.h"                 // [CHOSEN] the cursor's size on screen
 #include "../../Menu/MenuViewport.h"     // [CHOSEN] the HiDPI cursor factor (bitmapScale)
 
 #import <AppKit/AppKit.h>
@@ -951,7 +952,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
     // the 32x32 cursor at one back-buffer pixel per cursor pixel (a full-screen mode change on
     // Windows), so its size follows the game image: points per back-buffer pixel, times the frame
-    // size - and, on high-resolution back buffers, times MenuViewport::bitmapScale (customCursor).
+    // size - and, on high-resolution back buffers, times MenuViewport::bitmapScale. `scale` is
+    // that product within its bounds, in points per cursor pixel (customCursor, CursorScale.h).
     // Pixels are enlarged nearest-neighbour to the next whole multiple and, when the Retina
     // target is not a whole multiple, reduced to it with high-quality filtering.
     static NSCursor* buildCursorFrame(const CursorFrame& f, CGFloat scale, CGFloat backing)
@@ -1020,11 +1022,14 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return nil;
         // [CHOSEN, not recovered] The menu's .ani cursors grow with the HUD on high-resolution back
         // buffers (2560x1664: 2 back-buffer pixels per cursor pixel) instead of shrinking with it,
-        // never past retail's size against the UI (MenuViewport::bitmapScale rounds down).
-        const CGFloat hidpi = static_cast<CGFloat>(ui::MenuViewport::bitmapScale(
-            static_cast<unsigned>(std::max(backWidth, 0)), static_cast<unsigned>(backHeight)));
-        const CGFloat scale =
-            std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight)) * hidpi;
+        // never past retail's size against the UI (MenuViewport::bitmapScale rounds down). On
+        // screen a cursor pixel is that many back-buffer pixels, kept between 0.5 and 4 points
+        // (macos::cursorPointsPerPixel).
+        const unsigned bitmapScale = ui::MenuViewport::bitmapScale(
+            static_cast<unsigned>(std::max(backWidth, 0)), static_cast<unsigned>(backHeight));
+        const CGFloat hidpi = static_cast<CGFloat>(bitmapScale);
+        const CGFloat scale = static_cast<CGFloat>(
+            macos::cursorPointsPerPixel(b.size.height / backHeight, bitmapScale));
         const CGFloat backing = window && window.backingScaleFactor > 0 ? window.backingScaleFactor : 1.0;
         if (!c->cursors || std::fabs(c->builtScale - scale) > 0.001 || c->builtBacking != backing)
         {

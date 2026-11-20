@@ -15,6 +15,7 @@
 #include "../../BF2/IO/Input/NativeInputDeviceManager.h"
 #include "../../BF2/Platform/Host/ClientHost.h"
 #include "../../BF2/Platform/macOS/CocoaHostTestHooks.h"
+#include "../../BF2/Platform/macOS/CursorScale.h"
 #include "../../BF2/Platform/macOS/MacKeyMap.h"
 #include "../../BF2/Platform/macOS/MacRawMouse.h"
 #include "../../BF2/Platform/macOS/ProcessAncestry.h"
@@ -1137,6 +1138,33 @@ void testLaunchActivation()
     settle();
 }
 
+// CursorScale.h: points on screen per cursor pixel, from the points one back-buffer pixel covers
+// (the view's height in points over the back buffer's height) and MenuViewport::bitmapScale. The
+// cursor is bitmapScale back-buffer pixels per cursor pixel wherever that is between 0.5 and 4
+// points; both bounds apply to the product.
+void testCursorScale()
+{
+    begin("cursor size: bitmapScale back-buffer pixels per cursor pixel, within 0.5 to 4 points");
+    using macos::cursorPointsPerPixel;
+    const auto about = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
+    check(cursorPointsPerPixel(0.5625, 2) == 1.125,
+          "2560x1600 full screen on a 1440x900-point desktop, factor 2: 1.125 points (the approved size)");
+    check(about(cursorPointsPerPixel(0.43, 3), 1.29),
+          "a full-screen mode above the desktop's backing size (0.43, factor 3): 1.29 points, not 1.5");
+    check(about(cursorPointsPerPixel(0.485, 2), 0.97),
+          "a 2560x1600 window shrunk to fit the screen (0.485, factor 2): 0.97 points, not 1.0");
+    check(cursorPointsPerPixel(0.2, 1) == 0.5, "0.2 points per back-buffer pixel, factor 1: the 0.5-point floor");
+    check(cursorPointsPerPixel(0.2, 2) == 0.5 && about(cursorPointsPerPixel(0.3, 2), 0.6),
+          "the floor applies after the factor (0.2 x 2 is raised to 0.5, 0.3 x 2 stays 0.6)");
+    check(cursorPointsPerPixel(1.0, 1) == 1.0 && cursorPointsPerPixel(1.5, 1) == 1.5,
+          "between the bounds the product stands (1.0 and 1.5 points at factor 1)");
+    check(cursorPointsPerPixel(0.5, 3) == 1.5, "2940x1912 full screen on a 1470x956-point desktop, factor 3: 1.5 points");
+    check(cursorPointsPerPixel(5.0, 1) == 4.0 && cursorPointsPerPixel(3.0, 2) == 4.0 &&
+          cursorPointsPerPixel(4.0, 1) == 4.0,
+          "never more than 4 points per cursor pixel");
+    check(cursorPointsPerPixel(1.0, 0) == 1.0, "a factor of 0 counts as 1");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -1187,6 +1215,7 @@ int main(int argc, char** argv)
         testFocusRepair();
         testProcessAncestry();
         testLaunchActivation();
+        testCursorScale();
 
         host.removeListener(&log);
         g_manager->release();
