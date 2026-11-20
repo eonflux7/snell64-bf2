@@ -30,7 +30,6 @@ is in [renderer-pipeline.md](renderer-pipeline.md).
 | 12. Clouds | Not started | — |
 | 13. HDR bloom + auto-exposure | Not started | — |
 | 14. GTAO + lightmap channel ownership | Not started | — |
-| 15. View distance | Not started | — |
 
 The owner accepts each milestone in game before the next starts. From milestone 9 on that is done
 against the `tools` lane's reference views and benchmark paths ([tools.md](tools.md)), with the GPU
@@ -137,6 +136,24 @@ Design:
   refraction); water marches against the linear depth and falls back to the prefiltered sky where
   the ray leaves the screen. No reflections from under the surface: seen from underwater, water
   stays as it is.
+- **View distance** (owner, 2026-11-20). Each level's view distance (fog end) stays the gameplay
+  limit, so no level is retuned; what changes is how the limit looks and that it is the same in
+  every direction.
+  - **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
+    plane, as the haze already is (its distance is radial). Today the screen's edges and corners
+    reach up to 30–40 % further than its centre, an advantage for whoever turns a target to the edge.
+  - **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
+    or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
+    against terrain vanish at the same distance (retail fades to one fog colour, so the aircraft's
+    silhouette survives against a sky of another colour; task 4's full haze is already the sky's
+    radiance along the ray, to be checked from jets and anti-air). The view distance is the distance at which an object's
+    contrast reaches zero.
+  - **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
+  - **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
+    distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
+    horizon, all under aerial perspective; no vehicles, objects or vegetation out there. Aircraft
+    see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
+    the land's shape is visible further, targets are not.
 - **Thermals.** Thermal vision keeps its own formula and takes none of this.
 - **Budget.** Target for the whole milestone: at most 1 ms on the benchmark paths at 1920x1080
   (atlas 32x32 with 32 slices, sky view 192x108, cube 128 per face), measured at acceptance. Above
@@ -187,7 +204,7 @@ vehicles), and at Muttrah City's views `high` and `mountain`:
   by `EnvironmentMapInfo.emi` at load; generated only in the editor); no env-map templates. Per
   frame the manager picks the cube nearest the camera, and only bundled-mesh materials whose state
   has the env flag sample it, through `CubeMap`; water binds its own cube. Both go when the sky cube
-  replaces them (tasks 8 and 11).
+  replaces them (tasks 9 and 12).
 - **Materials.** Bundled states sort by technique name and flags: env-mapped opaque and blended
   techniques (paint and glass candidates), colour-map gloss (gloss in the colour map's alpha),
   alpha test, cockpit. Static materials carry only combo bits (base, detail, dirt, crack, normal
@@ -271,26 +288,3 @@ GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: 
 range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
 cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
 higher resolution unless the reference views show the baked sky term failing.
-
-### 15. View distance
-
-Decided by the owner, 2026-11-20. Each level's view distance (fog end) stays the gameplay limit,
-so no level is retuned; what changes is how the limit looks and that it is the same in every
-direction.
-
-- **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
-  plane, and fog and haze use the same distance. Today the screen's edges and corners reach up to
-  30–40 % further than its centre, an advantage for whoever turns a target to the edge.
-- **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
-  or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
-  against terrain vanish at the same distance; today the aircraft's silhouette survives against a
-  sky that differs from the fog colour. The view distance is the distance at which an object's
-  contrast reaches zero.
-- **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
-- **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
-  distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
-  horizon, all under aerial perspective; no vehicles, objects or vegetation out there. Aircraft
-  see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
-  the land's shape is visible further, targets are not.
-
-Order against milestones 13 and 14 to be set by the owner; it comes after milestone 12.

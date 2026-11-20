@@ -6,7 +6,7 @@ an open issue added or closed. When a milestone is accepted, its section here mo
 
 | Lane | Done | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections: task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) in game, tuning the haze | [renderer.md](renderer.md#roadmap) |
+| `render` | Milestones 1–10 accepted | Milestone 11, atmosphere, sky IBL, water reflections (view distance added as task 5): task 2 built (owner's look pending), task 3 (sky and sun) seen; task 4 (aerial perspective) in game, tuning the haze | [renderer.md](renderer.md#roadmap) |
 | `tools` | Milestone 1: tasks 1–3 | Milestone 3 cut to the benchmark path; milestone 1 tasks 4–5 built | [tools.md](tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](ui.md#milestones) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](perf-load.md#state) |
@@ -153,32 +153,39 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    depth 2 greyed the near ridge, so 1 by default; steepening from 0.75 left a hazy wall
    at 500–700 m, from 0.35 the ridges separate into layers. Defaults to settle with the owner; the
    fog queues not yet looked at.
-5. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
+5. View distance, as in the plan: geometry cut off at the radial distance (the far plane pushed
+   past it), the last 10–15 % faded by alpha-to-coverage dither; objects faded to the radiance
+   behind them; the low-detail surround terrain and a far ground ring (or sea) drawn past the
+   limit under aerial perspective, without vehicles, objects or vegetation. Each level's view
+   distance unchanged. Look for: no reach at the screen's edges past its centre; aircraft
+   against the sky gone at the same distance as vehicles against terrain; from a jet, a
+   landscape to the horizon instead of a fogged void; nothing pops at the limit.
+6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
    `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
    acceptance if they do not pay for their cost.
-6. Sky cube: at load and after a device reset, the dome and atmosphere above the horizon, the
+7. Sky cube: at load and after a device reset, the dome and atmosphere above the horizon, the
    ground term below it, prefiltered GGX one mip per roughness; its irradiance as 9 spherical-harmonic
    coefficients; the split-sum BRDF table (or the analytic fit if task 1 finds no third slot); the
    atlas and cube on reserved samplers. Retail environment maps it replaces are deleted at
    acceptance where task 1 finds no other reader.
-7. Shared lighting model: direct and ambient specular from one roughness and F0 (GGX, split sum),
+8. Shared lighting model: direct and ambient specular from one roughness and F0 (GGX, split sum),
    with an occlusion input; sky light as the irradiance at the normal times occlusion, scaled to the
    authored sky colour's luminance; gloss to roughness; the material class table (F0, roughness
    range; the PR mapping outside this tree); specular anti-aliasing (roughness widened by the
    normal's screen-space derivatives, Toksvig from the mipped normal's length). `renderer.skyIbl`.
-8. Bundled meshes (judged on test_bootcamp, which holds most vehicles): vehicles, cockpits and first-person models; the env map leaves albedo and becomes
+9. Bundled meshes (judged on test_bootcamp, which holds most vehicles): vehicles, cockpits and first-person models; the env map leaves albedo and becomes
    specular; class per material; occlusion by the hemi map, first-person models by the sky
    visibility under the camera (the terrain lightmap's sky channel copied to memory at load, read
    under the camera, smoothed over about 0.3 s). Look for: paint and glass reflecting the sky,
    strongest at grazing angles; vehicles lit from above and darker beneath; no edge sparkle.
-9. Static meshes: gloss map, occluded by the lightmap's sky visibility. Look for: glass and metal on
+10. Static meshes: gloss map, occluded by the lightmap's sky visibility. Look for: glass and metal on
    buildings reflecting the sky; walls lit by the sky from its direction.
-10. Soldiers (hemi map), decals and terrain.
-11. Water: the scene resolved to a texture just before water, after the sky, the fog pass, decals
+11. Soldiers (hemi map), decals and terrain.
+12. Water: the scene resolved to a texture just before water, after the sky, the fog pass, decals
     and the particles drawn before water (also the refraction source; depth is s15); a screen-space
     march against the linear depth, falling back to the prefiltered sky; replaces water's
     `CubeMap`; none from underwater. `renderer.waterSsr`. Look for: buildings and shore reflected.
-12. Acceptance: the owner's look at the reference views on the three maps against milestone 10;
+13. Acceptance: the owner's look at the reference views on the three maps against milestone 10;
     the night layer loads and looks no worse; benches against milestone 10 (8.39–8.48, 15.34,
     5.22 ms) within the plan's 1 ms budget or the regression accepted by the owner; GPU pass
     times; old paths and variables deleted; as-built moved to renderer-pipeline.md.
