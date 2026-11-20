@@ -890,15 +890,15 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
     return 0;
 }
 // PE 0x10026A80.
-// [RENDER] The registers kSunCascadeRegister..kEngineRegisterEnd hold the frame's sun cascade
+// [RENDER] The registers kEngineRegisterBegin..kEngineRegisterEnd hold the frame's sun cascade
 // constants (RASM, stateManagerSetSunCascadeConstants), the entry's LOD dither (RaLodDither,
-// renderEntryBindLodDither) and the aerial-perspective lookup (RaAerial, stateManagerSetAerial). The effects that read them declare them at those registers, and D3DX
+// renderEntryBindLodDither) and the aerial-perspective lookup (RaAerial and RaAerialHaze, stateManagerSetAerial). The effects that read them declare them at those registers, and D3DX
 // uploads the parameters' own zeros at each pass; that part of a write is dropped, so the range
 // keeps the engine's values. Retail mirrors every write.
 int __stdcall smSetPixelShaderConstantF(StateManager* self, unsigned int reg, const float* data,
                                         unsigned int count)
 {
-    const unsigned int first = kSunCascadeRegister;
+    const unsigned int first = kEngineRegisterBegin;
     const unsigned int end = kEngineRegisterEnd;
     if (reg < end && reg + count > first)
     {
@@ -1625,11 +1625,12 @@ void stateManagerSetLodDither(float a, float b)
     constFileWrite(self->psConst, self->psConstDirty, kLodDitherRegister, value, 1u);
 }
 
-// [RENDER] RaAerial into its reserved pixel register, past the filter above.
+// [RENDER] RaAerial and RaAerialHaze into their reserved pixel registers, past the filter above.
 void stateManagerSetAerial(const float* value)
 {
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kAerialRegister, value, 1u);
+    constFileWrite(self->psConst, self->psConstDirty, kAerialHazeRegister, value + 4, 1u);
 }
 
 // FXParameter.cpp's sparse-matrix fast path uploads bone rows through vslot +0x38.

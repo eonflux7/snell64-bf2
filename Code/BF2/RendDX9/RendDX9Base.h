@@ -839,10 +839,12 @@ void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
 // register kAerialRegister, contract 8) for the world pass: 1 / the viewport's width and height,
-// 1 / fog end, 1; zero (the shaders' retail fog) while no atlas was drawn this frame, under water,
-// or with a viewport off the target's origin.
+// 1 / fog end, 1 (2 with the view-distance cut, contract 9); then RaAerialHaze (kAerialHazeRegister):
+// the haze's density at the camera's height, 1 / its height falloff, 0, 0. All zero (the shaders'
+// retail fog) while no atlas was drawn this frame, under water, or with a viewport off the target's
+// origin.
 const unsigned int kAerialSampler = 9;
-void rendererAtmosphereAerialConstants(float c[4]);
+void rendererAtmosphereAerialConstants(float c[8]);
 // Whether the model draws the sky (renderer.atmosphere on and the sky-view table built). While it
 // does, the sky is one full-screen pass (rendererAtmosphereDrawSky) and the painted dome, its cloud
 // layers and the retail flare sprite are not drawn (the flare's occlusion test is kept).
@@ -884,9 +886,14 @@ const unsigned int kLodDitherRegister = 222;
 // [RENDER] Milestone 11 aerial perspective: RaAerial, one float4 in pixel register c223 (the last
 // ps_3_0 register), engine-owned like RASM and published with it (rendererAtmosphereAerialConstants).
 const unsigned int kAerialRegister = 223;
-const unsigned int kEngineRegisterEnd = 224;   // c200..c223 dropped from effect writes
+// [RENDER] Milestone 11 view distance (contract 9): RaAerialHaze in c199, the haze's density at the
+// camera's height and 1 / its height falloff, for Ra_GetAerial's haze past fog end. Published with
+// RaAerial.
+const unsigned int kAerialHazeRegister = 199;
+const unsigned int kEngineRegisterBegin = 199;
+const unsigned int kEngineRegisterEnd = 224;   // c199..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
-void stateManagerSetAerial(const float* value /* one float4 */);
+void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

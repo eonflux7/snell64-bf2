@@ -967,9 +967,10 @@ void rendererAtmosphereFrame()
         bindAtlas(g.atlas);
 }
 
-void rendererAtmosphereAerialConstants(float c[4])
+void rendererAtmosphereAerialConstants(float c[8])
 {
-    c[0] = c[1] = c[2] = c[3] = 0.0f;
+    for (int i = 0; i < 8; ++i)
+        c[i] = 0.0f;
     // The atlas's tiles span the world view's viewport; Ra_GetAerial takes it at the target's origin.
     const float* const vp = rendererGetRenderView()->getViewport();   // x, y, width, height
     if (!g.atlasLive || cameraIsUnderWater() || g.inputs.fogEnd <= 0.0f || vp[0] != 0.0f || vp[1] != 0.0f
@@ -979,6 +980,12 @@ void rendererAtmosphereAerialConstants(float c[4])
     c[1] = 1.0f / vp[3];
     c[2] = 1.0f / g.inputs.fogEnd;
     c[3] = g_viewDistanceCut ? 2.0f : 1.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
+    // RaAerialHaze: the atlas march's density (RaAtmosphere.fx, its exponent capped at 30) at the
+    // camera's height, for the closed-form haze past fog end.
+    const double cameraY = rendererGetRenderView()->getViewMatrixPtr()->m[13];
+    const double falloffs = std::min(-(cameraY - g.refHeight) / g_hazeFalloff, 30.0);
+    c[4] = static_cast<float>(hazeDensity() * std::exp(falloffs));
+    c[5] = 1.0f / g_hazeFalloff;
 }
 
 void rendererAtmosphereRelease()
