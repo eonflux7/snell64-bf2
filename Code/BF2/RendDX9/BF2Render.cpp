@@ -1405,8 +1405,11 @@ Renderer::Renderer()
     // list at +0x5C - the one the base constructor above just built.
     registerDeviceLostResetListener(static_cast<void*>(&m_deviceLostVptr), 1);
     registerRenderPathListener(&m_renderPathVptr);
-    reinterpret_cast<RendDX9Base*>(this)->renderView = Rend::createRenderViewDirect();
-    Rend::renderViewSetUnbounded(reinterpret_cast<RendDX9Base*>(this)->renderView);   // [RENDER] milestone 11 task 5
+    {
+        IBase* const view = Rend::createRenderViewDirect();
+        reinterpret_cast<RendDX9Base*>(this)->renderView = view;
+        Rend::renderViewSetUnbounded(view);   // [RENDER] milestone 11 task 5: no far plane
+    }
 
     // The tail matches PE 0x1002D4C5..0x1002DA25: every immediate and register store was checked
     // against the members above (the rest are the zeros and 0.0 doubles the ranges clear), and both
