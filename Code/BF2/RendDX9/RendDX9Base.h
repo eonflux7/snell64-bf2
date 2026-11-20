@@ -621,6 +621,8 @@ int*          effectShaderVersion(void* effect);
 void stateManagerPush();
 void stateManagerPop();
 void stateManagerSetRenderState(unsigned int state, unsigned int value);
+// [CHOSEN, not recovered] the deferred +0x28 SetSamplerState (HiDPI console font, FontSystem.cpp).
+void stateManagerSetSamplerState(unsigned int stage, unsigned int type, unsigned int value);
 // sub_10025BA0 - the persistent set: device mirror AND base value, issued at once (StateManager.cpp).
 void stateManagerSetRenderStatePersistent(unsigned int state, unsigned int value);
 // sub_10026880 - the pre-draw apply, published for the Ra shader's draw (RaShader::draw calls it

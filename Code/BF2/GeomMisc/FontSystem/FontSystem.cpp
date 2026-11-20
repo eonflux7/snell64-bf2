@@ -403,6 +403,9 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
     const int length = static_cast<int>(text.size());
     if (length <= 0)
         return;
+    // [CHOSEN, not recovered] A scale other than 1 (no retail caller sets one; the HiDPI console
+    // does) draws whole-pixel glyph blocks: biased texture coordinates and point magnification.
+    const bool scaled = m_scaleX != 1.0f || m_scaleY != 1.0f;
 
     PortedFontVertex* vertex = static_cast<PortedFontVertex*>(
         dx9rend::vertexBufferLock(s_portedFontVertexBuffer, 0, 0, D3DLOCK_DISCARD));
@@ -422,9 +425,18 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
         {
             const Glyph& glyph = m_glyphs[static_cast<unsigned char>(text.c_str()[i])];
             const float width = glyph.width;
-            const float u1 = glyph.u + width / static_cast<float>(m_textureWidth);
+            float u0 = glyph.u, v0 = glyph.v;
+            if (scaled)
+            {
+                // [CHOSEN, not recovered] The half-texel bias hits texel centres at one pixel per
+                // texel; at scale k the first pixel centre must land 0.5/k texels in, so each texel
+                // covers k whole pixels under the point filter set below.
+                u0 += (0.5f / m_scaleX - 0.5f) / static_cast<float>(m_textureWidth);
+                v0 += (0.5f / m_scaleY - 0.5f) / static_cast<float>(m_textureHeight);
+            }
+            const float u1 = u0 + width / static_cast<float>(m_textureWidth);
             const float lineHeight = static_cast<float>(m_height);
-            const float v1 = glyph.v + lineHeight / static_cast<float>(m_textureHeight);
+            const float v1 = v0 + lineHeight / static_cast<float>(m_textureHeight);
             const float x1 = x + width * m_scaleX;
             const float y1 = y + lineHeight * m_scaleY;
 
@@ -434,12 +446,12 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
             const float bottom = -(y1 * clipScaleY - 1.0f);
 
             ++glyphCount;
-            writePortedFontVertex(vertex[0], left,  top,    m_depth, colour, glyph.u, glyph.v);
-            writePortedFontVertex(vertex[1], right, top,    m_depth, colour, u1,      glyph.v);
-            writePortedFontVertex(vertex[2], right, bottom, m_depth, colour, u1,      v1);
-            writePortedFontVertex(vertex[3], left,  top,    m_depth, colour, glyph.u, glyph.v);
-            writePortedFontVertex(vertex[4], right, bottom, m_depth, colour, u1,      v1);
-            writePortedFontVertex(vertex[5], left,  bottom, m_depth, colour, glyph.u, v1);
+            writePortedFontVertex(vertex[0], left,  top,    m_depth, colour, u0, v0);
+            writePortedFontVertex(vertex[1], right, top,    m_depth, colour, u1, v0);
+            writePortedFontVertex(vertex[2], right, bottom, m_depth, colour, u1, v1);
+            writePortedFontVertex(vertex[3], left,  top,    m_depth, colour, u0, v0);
+            writePortedFontVertex(vertex[4], right, bottom, m_depth, colour, u1, v1);
+            writePortedFontVertex(vertex[5], left,  bottom, m_depth, colour, u0, v1);
             vertex += 6;
 
             advance = static_cast<float>(m_betweenWidth) + width;             // +0xC1C
@@ -457,6 +469,13 @@ void FontPorted::drawTextColoured(float x, float y, const std::string& text, uns
     s_portedFontTexLayer0->setValue(m_texture, 0);                          // +0xC4C
     dx9rend::effectBegin(s_portedFontEffect);
     dx9rend::effectBeginPass(s_portedFontEffect, 0);
+    if (scaled)
+    {
+        // [CHOSEN, not recovered] The Text pass magnifies LINEAR, which blurs a scaled bitmap
+        // font. The StateManager's deferred SetSamplerState overrides it for this draw; the
+        // Text_States pop below restores the pass's filter.
+        dx9rend::stateManagerSetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+    }
     dx9rend::vertexBufferBindStream(s_portedFontVertexBuffer, 0);
     dx9rend::rendererDrawPrimitive(static_cast<unsigned int>(glyphCount * 2),
                                    D3DPT_TRIANGLELIST, 0);
@@ -846,6 +865,11 @@ int fontPortedGetHeight(IBase* font)
 void fontPortedDrawText(IBase* font, float x, float y, const std::string& text)
 {
     static_cast<FontPorted*>(font)->drawText(x, y, text);
+}
+
+void fontPortedSetScale(IBase* font, float x, float y)
+{
+    static_cast<FontPorted*>(font)->setScale(x, y);
 }
 
 int fontPortedGetTextWidth(IBase* font, const std::string& text)

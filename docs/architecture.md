@@ -151,7 +151,7 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
 ## Client display modes and HiDPI UI
 
 `[CHOSEN, not recovered]` policy shared by the rebuilt clients
-(`RendMisc/DisplayModePolicy.h`):
+(`RendMisc/DisplayModePolicy.h`, `Menu/MenuViewport.h`):
 
 - A new profile's resolution uses the preferred mode: the largest listed mode that
   fits the desktop; when none fits (Apple-silicon panels list only their Retina
@@ -167,6 +167,10 @@ See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
   the stored value until a resolution is set again.
 - Every successful device reset logs the back-buffer size, mode, refresh rate,
   fullscreen, vsync and multisampling.
+- The console's bitmap font is enlarged by `MenuViewport::uiScale`: the 4:3 menu
+  viewport's height over the 600 authored lines, to the nearest whole number (1 up
+  to 900 lines, 2 at 1080, 3 at 1600 to 1912). The font then samples its texture
+  with point filtering so each font pixel stays a uniform block.
 
 ## Client menu disconnect
 

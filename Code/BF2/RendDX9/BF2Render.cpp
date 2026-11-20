@@ -50,6 +50,7 @@
 #include "../Geom/DecalSystem/DecalManager.h"    // typed update / render-path draw
 #include "../Geom/RoadEditableRenderer.h"   // IRoadEditableRenderer - the typed drawAll below
 #include "../RendMisc/IRenderer.h"
+#include "../Menu/MenuViewport.h"            // [CHOSEN] the HiDPI console scale
 #include "../RendMisc/DisplayModePolicy.h"   // [CHOSEN] native fullscreen start mode
 #if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 #include "../Platform/Host/ClientHost.h"     // [CHOSEN] fitFullscreenStartMode resizes the client
@@ -5922,6 +5923,7 @@ namespace geom {
 // objects initializeFontAndConsoleOverlay created (held here as IBase*, as createInstance returned).
 int  fontPortedGetHeight(IBase* font);                                            // Font::Ported +0x1C
 void fontPortedDrawText(IBase* font, float x, float y, const std::string& text);  // Font::Ported +0x18
+void fontPortedSetScale(IBase* font, float x, float y);                           // Font::Ported +0x28
 void overlayTextureSetSize(IBase* overlay, const Vec2& size);                      // OverlayTexture +0x18
 void overlayTextureDraw(IBase* overlay);                                           // OverlayTexture +0x10
 } // namespace geom
@@ -5933,6 +5935,11 @@ namespace dx9rend {
 // Re-read font height per line and restore statistics before destroying the line vector.
 // Compat strings use the VC7.1 CRT; their vector storage uses the engine heap.
 // [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
+// [CHOSEN, not recovered] HiDPI console: retail draws at one back-buffer pixel per font pixel, which
+// leaves 11-pixel lines on a 1664-line panel. Every console length (background, line step, margins,
+// glyphs) is multiplied by MenuViewport::uiScale - the HUD's own 600-line scale, whole - and the
+// font draws its glyphs as uniform blocks at that factor (FontPorted::setScale's unused retail
+// slot). 1 up to 900 lines: the shipped arithmetic, unchanged.
 void Renderer::slot_0x58()
 {
     const unsigned char statsWere = statsSwapEnabled(0);
@@ -5944,9 +5951,14 @@ void Renderer::slot_0x58()
     IBase* const font    = static_cast<IBase*>(m_consoleFont);                  // +0x5CC
     IBase* const overlay = static_cast<IBase*>(m_consoleOverlay);               // +0x5C8
 
+    const float* const viewport = getRenderView()->getViewport();
+    const unsigned int uiScale = ui::MenuViewport::uiScale(
+        static_cast<unsigned int>(viewport[2]), static_cast<unsigned int>(viewport[3]));
+    const float k = static_cast<float>(uiScale);
+
     const int fontHeight = geom::fontPortedGetHeight(font);
     const float consoleHeight =
-        (static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f;
+        ((static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f) * k;
 
     Vec2 overlaySize;
     overlaySize.x = 1.0f;
@@ -5954,24 +5966,29 @@ void Renderer::slot_0x58()
     geom::overlayTextureSetSize(overlay, overlaySize);
     geom::overlayTextureDraw(overlay);
 
-    // [CHOSEN] one-shot diagnostic, NOT in retail: proves on a live run that the console draw ran.
-    static bool s_firstDrawLogged = false;
-    if (!s_firstDrawLogged)
+    // [CHOSEN] diagnostic, NOT in retail: proves on a live run that the console draw ran, and
+    // names the scale whenever it changes.
+    static unsigned int s_loggedScale = 0;
+    if (s_loggedScale != uiScale)
     {
-        s_firstDrawLogged = true;
-        ::renddx9abi::logf("Renderer::slot_0x58 (console draw): first call - %u console lines, "
-                           "line height %d, background %.1f px", lineCount, fontHeight,
+        s_loggedScale = uiScale;
+        ::renddx9abi::logf("Renderer::slot_0x58 (console draw): %u console lines, line height %d, "
+                           "scale %u, background %.1f px", lineCount, fontHeight, uiScale,
                            static_cast<double>(consoleHeight));
     }
 
+    if (uiScale != 1)
+        geom::fontPortedSetScale(font, k, k);
     int line = 0;
     for (std::vector<std::string>::const_iterator it = lines.begin(); it != lines.end();
          ++it, ++line)
     {
         const std::string text = ::renddx9abi::fromHostString(*it);
         const int height = geom::fontPortedGetHeight(font);                    // re-read per line
-        geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), text);
+        geom::fontPortedDrawText(font, 2.0f * k, static_cast<float>((height + 1) * line + 2) * k, text);
     }
+    if (uiScale != 1)
+        geom::fontPortedSetScale(font, 1.0f, 1.0f);    // the font's other users draw at 1
 
     statsSwapEnabled(statsWere);
 

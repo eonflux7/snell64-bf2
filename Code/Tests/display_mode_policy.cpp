@@ -2,6 +2,7 @@
 // the fullscreen start mode and the new-profile resolution. The mode lists are those the hosts
 // report (pixel sizes; the macOS desktop in points). No device, renderer or profile is modelled.
 #include "../BF2/RendMisc/DisplayModePolicy.h"
+#include "../BF2/Menu/MenuViewport.h"
 #include <cstdio>
 #include <vector>
 
@@ -65,6 +66,22 @@ int main()
     check(pick(small, {1440, 900, 60}, 0) == 1, "without the floor the largest fitting");
     check(pick(m2, {0, 0, 0}) < 0, "unknown desktop");
     check(pick(std::vector<dm::Mode>(), {1440, 900, 60}) < 0, "empty list");
+
+    // The HiDPI UI factor (console, cursor): the menu viewport height over 600, nearest whole.
+    using dice::hfe::ui::MenuViewport;
+    check(MenuViewport::uiScale(800, 600) == 1, "800x600: 1");
+    check(MenuViewport::uiScale(1024, 768) == 1, "1024x768: 1");
+    check(MenuViewport::uiScale(1280, 800) == 1, "1280x800: 1");
+    check(MenuViewport::uiScale(1440, 900) == 1, "1440x900: 1 (1.5 rounds down)");
+    check(MenuViewport::uiScale(1920, 1080) == 2, "1920x1080: 2");
+    check(MenuViewport::uiScale(2560, 1600) == 3, "2560x1600: 3");
+    check(MenuViewport::uiScale(2560, 1664) == 3, "2560x1664: 3");
+    check(MenuViewport::uiScale(2940, 1912) == 3, "2940x1912: 3");
+    check(MenuViewport::uiScale(3840, 2160) == 4, "3840x2160: 4");
+    check(MenuViewport::uiScale(1600, 900) == 1, "16:9 1600x900: 1");
+    check(MenuViewport::uiScale(2560, 1080) == 2, "21:9 2560x1080: height decides, 2");
+    check(MenuViewport::uiScale(1200, 1600) == 1, "portrait 1200x1600: 4:3 width-limited (900), 1");
+    check(MenuViewport::uiScale(0, 0) == 1, "degenerate: 1");
 
     std::printf("display_mode_policy: %u/%u passed\n", checks - failures, checks);
     return failures ? 1 : 0;
