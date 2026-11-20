@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
-#include <unistd.h>                         // getppid: the launcher's pid (activation retries)
+#include <unistd.h>                         // getpid, getppid: who started this process
 
 #include "../Host/ClientHost.h"
 #include "../Host/KeyMap.h"
@@ -15,6 +15,7 @@
 #include "CocoaText.h"
 #include "MacKeyMap.h"
 #include "MacRawMouse.h"
+#include "ProcessAncestry.h"                // [CHOSEN] the launcher of this process (activation)
 #include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
 #include "../Host/CursorFile.h"
 #include "../../Menu/MenuViewport.h"     // [CHOSEN] the HiDPI cursor factor (bitmapScale)
@@ -197,31 +198,49 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     unsigned int deactivations = 0; // deactivationCount(): active -> inactive transitions
 
     // [CHOSEN, not recovered] Activation after a start from another application (the setup app
-    // runs the client through NSTask). Since macOS 14 activation is cooperative: a request made
-    // while another application is active may be refused, and a refused game window stays in
-    // front of the launcher without key status, so its clicks never reach the menu. The request
-    // is repeated for a few seconds, but only while the application that started this process (or
-    // nobody) is frontmost: an application the user went to meanwhile keeps the front.
-    bool   activationPending = false;
-    bool   fullscreenPending = false;
+    // runs the client through NSTask; a player or a script starts it from Terminal). Since
+    // macOS 14 activation is cooperative: a request made while another application is active may
+    // be refused, and a refused game window stays in front of the launcher without key status,
+    // so its clicks never reach the menu. The first request is made when the game window is
+    // shown (beginActivation) and opens an activation period of ten seconds, in which the
+    // request is repeated every half second (updateActivation) - but only at the expense of the
+    // launcher, of nobody, or of this process itself. An unrelated application that is in front
+    // at the first request (the user works elsewhere while a client starts in the background)
+    // gets that one request and keeps the front, and an application the user goes to afterwards
+    // ends the period.
+    bool   activationPending = false;  // an activation period is running
+    bool   fullscreenPending = false;  // a fullscreen start waiting for activation (createWindow)
     // [CHOSEN, not recovered] The system reports this process active (another app activated it
     // during launch) while NSApp never received the activation; AppKit then keeps isActive NO
     // and its windows non-key, so the engine's focus gate drops every click. When that state
     // lasts, the host trusts the system's answer until NSApp catches up or the user leaves.
-    bool   systemActive = false; // a fullscreen start waiting for activation (createWindow)
+    bool   systemActive = false;
     ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
-    double activationStarted = 0.0;  // systemUptime of the first request
-    double activationLastTry = 0.0;
-    // [CHOSEN, not recovered] The application frontmost at the first request (Terminal, a launcher
-    // script's terminal, Finder, the OpenBF2 app): retries continue while it stays in front, not
-    // only while the direct parent (a shell under Terminal is never frontmost) is.
-    pid_t  activationFrontPid = 0;
+    double activationStarted = 0.0;  // focusNow() of the period's first request
+    double activationLastTry = 0.0;  // of its last request, Dock reset or look at a bystander
+    // [CHOSEN, not recovered] Whose front the repeated requests may take, as pids; 0: nobody's.
+    // Launcher: the application in front at the first request when it is this process's parent
+    // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
+    // the client, the OpenBF2 app. Bystander: the application in front at the first request when
+    // it is no ancestor, or when the process lookup failed. It keeps the front: nothing is
+    // repeated and the Dock is left alone while it stays there. Click: the application the user
+    // left with a click into the inactive game window (clickedWhileInactive), which is the user
+    // choosing the game over it; the click makes a bystander this.
+    pid_t  activationLauncherPid = 0;
+    pid_t  activationBystanderPid = 0;
+    pid_t  activationClickPid = 0;
+    // Since when the requests have been free to take the front (focusNow()); 0 while the
+    // bystander holds it. The system-state fallback and the Dock reset wait one second from
+    // here, so a period that waited behind a bystander still gives AppKit that second once the
+    // game comes forward.
+    double activationFreeSince = 0.0;
     // [CHOSEN, not recovered] An unbundled executable started from Terminal can be left frontmost
     // for the window server while AppKit never completes its activation: NSApp stays inactive,
     // GCMouse delivers nothing, and only switching applications recovers. Activating the Dock
     // first resets that state, then this process asks again (the workaround SDL uses for
-    // Terminal launches). Once per activation, only while the user has not gone to another app.
-    double dockResetAt = 0.0;        // systemUptime of the Dock activation, 0 when not done
+    // Terminal launches). Once per activation period, and never against a bystander.
+    double dockResetAt = 0.0;        // focusNow() of the period's Dock activation; 0: none yet,
+                                     // -1: there is no Dock process
     // [CHOSEN, not recovered] Focus self-repair. windowKey and appActive cache AppKit's state as
     // the delegate callbacks report it, and the engine's input gate (hasFocus) reads only the
     // cache. A callback that never came, or a game window left without key status, would close
@@ -252,7 +271,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     bool scriptPointerSet = false;
 
     // [TEMP] setSystemFocusForTest: the answers AppKit and the system would give, so the focus
-    // repair can be checked without an application or a window.
+    // repair and the launch activation can be checked without an application or a window.
     struct TestSystem
     {
         bool   set = false;
@@ -265,6 +284,28 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         pid_t  frontPid = 0;            // the system's frontmost application; 0: none
         double now = 0.0;               // focusNow()
         int    makeKeyCalls = 0;
+        // The launch activation. Its requests and Dock resets are counted, none is made.
+        bool   activation = false;      // the simulation covers it (activationRuns)
+        pid_t  parentPid = 0;           // getppid()
+        pid_t  ancestors[6] = {};       // the parent's own ancestors, nearest first; 0 ends them
+        bool   ancestryDenied = false;  // the process lookup fails for every process
+        pid_t  dockPid = 0;             // the Dock's pid; 0: there is no Dock process
+        int    activationRequests = 0;  // requestActivation: a period's first, cooperative request
+        int    activationRetries = 0;   // requestActivationNow: its repeated requests
+        int    dockResets = 0;          // activateDock
+        // The simulated process table (macos::parentPidOf): the chain ends at launchd, pid 1.
+        pid_t parentOf(pid_t pid) const
+        {
+            if (ancestryDenied || pid <= 0)
+                return -1;
+            const size_t count = sizeof ancestors / sizeof ancestors[0];
+            if (pid == parentPid)
+                return ancestors[0] ? ancestors[0] : 1;
+            for (size_t i = 0; i < count && ancestors[i]; ++i)
+                if (ancestors[i] == pid)
+                    return i + 1 < count && ancestors[i + 1] ? ancestors[i + 1] : 1;
+            return -1;                           // no such process
+        }
     };
 #if defined(OPENBF2_HOST_TEST_SEAMS)
     bool testHeadless = false;      // enableHeadlessForTest: no window, no real cursor changes
@@ -346,10 +387,74 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         return false;
     }
 
+    // The application the system calls frontmost, read once for a decision; pid 0 when it names
+    // none. The name is for the log: nil when there is none and in a simulated system.
+    struct FrontApp
+    {
+        pid_t pid = 0;
+        bool  isDock = false;
+        NSString* name = nil;
+    };
+    FrontApp frontApplication() const
+    {
+        FrontApp app;
+        if (const TestSystem* t = testSystemState())
+        {
+            app.pid = t->frontPid;
+            app.isDock = t->dockPid != 0 && t->frontPid == t->dockPid;
+            return app;
+        }
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (front)
+        {
+            app.pid = front.processIdentifier;
+            app.isDock = [front.bundleIdentifier isEqualToString:@"com.apple.dock"] ? true : false;
+            app.name = front.localizedName;
+        }
+        return app;
+    }
+    // This process's parent: the launcher itself when an application started the client directly.
+    pid_t parentPid() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->parentPid;
+        return getppid();
+    }
+    // [CHOSEN, not recovered] Whether the application `pid` started this process: it is the
+    // parent or a further ancestor (Terminal -> login -> shell -> script -> client). A lookup that
+    // fails part of the way answers "unknown", which the caller treats as "no": the direct parent
+    // needs no lookup and is still recognised, while an application further up loses the
+    // repeated requests. That costs a click into the game window (or a switch to it) when the
+    // first request is refused; counting an unknown application as a launcher would let a client
+    // started in the background take the front from whatever the user works in.
+    macos::ProcessAncestry launcherAncestry(pid_t pid) const
+    {
+        if (const TestSystem* t = testSystemState())
+            return macos::processAncestry(pid, t->parentPid, [t](pid_t p) { return t->parentOf(p); });
+        return macos::processAncestry(pid, getppid(), macos::parentPidOf);
+    }
+
+    // Whether the host asks for activation at all: never in scripted runs, which do not take the
+    // user's focus ([TEMP] scriptedFocus), and in a test only against a simulated system that
+    // covers the activation.
+    bool activationRuns() const
+    {
+        if (scriptedFocus)
+            return false;
+        if (const TestSystem* t = testSystemState())
+            return t->activation;
+        return !testHeadless;
+    }
+
     // -[NSApplication activate] from macOS 14 on; activateIgnoringOtherApps: before (its
     // "ignoring" flag is ignored since macOS 14 and the selector deprecated).
-    static void requestActivation()
+    void requestActivation()
     {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->activationRequests;
+            return;
+        }
         if (@available(macOS 14.0, *))
         {
             [NSApp activate];
@@ -363,28 +468,58 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
-    // The first request, made when the game window is shown. Scripted runs never take the
-    // user's focus ([TEMP] scriptedFocus).
+    // The first request, made when the game window is shown, and the decision whose front the
+    // repeated requests may take: the application in front now is the launcher when it is this
+    // process's parent or another ancestor, and a bystander otherwise.
     void beginActivation()
     {
-        if (scriptedFocus || testHeadless)
+        if (!activationRuns() || nsAppActive())
             return;
-        if ([NSApp isActive])
-            return;
-        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, launcher pid %d)\n",
-                     front.localizedName.UTF8String ?: "none", front ? front.processIdentifier : 0,
-                     static_cast<int>(getppid()));
+        const double now = focusNow();
+        const FrontApp front = frontApplication();
         activationPending = true;
-        activationStarted = activationLastTry = uptime();
-        activationFrontPid = front && front.processIdentifier != getpid() ? front.processIdentifier : 0;
+        activationStarted = activationLastTry = now;
+        activationLauncherPid = activationBystanderPid = activationClickPid = 0;
         dockResetAt = 0.0;
+        const char* relation = "nobody is in front";
+        if (front.pid == getpid())
+            relation = "this process";
+        else if (front.pid != 0)
+        {
+            switch (launcherAncestry(front.pid))
+            {
+            case macos::AncestryYes:
+                activationLauncherPid = front.pid;
+                relation = front.pid == parentPid() ? "the parent of this process"
+                                                    : "an ancestor of this process";
+                break;
+            case macos::AncestryNo:
+                activationBystanderPid = front.pid;
+                relation = "not an ancestor of this process";
+                break;
+            case macos::AncestryUnknown:
+                activationBystanderPid = front.pid;
+                relation = "ancestry unknown as the process lookup failed, taken as not an ancestor";
+                break;
+            }
+        }
+        activationFreeSince = activationBystanderPid ? 0.0 : now;
+        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, %s; parent pid %d)%s\n",
+                     front.name.UTF8String ?: (front.pid ? "?" : "none"), static_cast<int>(front.pid),
+                     relation, static_cast<int>(parentPid()),
+                     activationBystanderPid ? " - one request, no retries or Dock reset while it stays in front"
+                                            : "");
         requestActivation();
     }
 
     // Asks for activation the strongest way available while this process may take the front.
     void requestActivationNow()
     {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->activationRetries;
+            return;
+        }
         [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
         requestActivation();
         if (window && visible && !minimized && !window.isKeyWindow)
@@ -394,64 +529,122 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
+    // Activates the Dock, which takes the front from whoever holds it. False without a Dock.
+    bool activateDock()
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            if (t->dockPid == 0)
+                return false;
+            ++t->dockResets;
+            return true;
+        }
+        NSArray<NSRunningApplication*>* docks =
+            [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.dock"];
+        if (docks.count == 0)
+            return false;
+        [docks.firstObject activateWithOptions:0];
+        return true;
+    }
+
     // [CHOSEN, not recovered] A click into the game window while AppKit still reports the
     // application inactive is the user choosing the game: ask for activation again (a request
     // made in response to the user's own input is not refused) and keep retrying from here, so
-    // the menu reacts without switching applications.
+    // the menu reacts without switching applications. The application in front at the click may
+    // lose the front to those requests, whatever it is, and so may the bystander a period waited
+    // behind: with the click it stops being one. A click that finds no period running, or one
+    // that only waited behind the bystander, starts the ten seconds; only a click that finds
+    // none running allows another Dock reset, so clicks within a period never repeat it.
     void clickedWhileInactive()
     {
-        if (scriptedFocus || testHeadless || [NSApp isActive])
+        if (!activationRuns() || nsAppActive())
             return;
         std::fprintf(stderr, "[host] click into the inactive game window - requesting activation\n");
+        const double now = focusNow();
+        const FrontApp front = frontApplication();
         if (!activationPending)
         {
-            activationPending = true;
-            activationStarted = uptime();
-            NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-            activationFrontPid = front && front.processIdentifier != getpid() ? front.processIdentifier : 0;
+            activationLauncherPid = activationBystanderPid = activationClickPid = 0;
             dockResetAt = 0.0;
         }
-        activationLastTry = uptime();
+        if (!activationPending || activationFreeSince == 0.0)
+        {
+            activationPending = true;
+            activationStarted = now;
+            activationFreeSince = now;
+        }
+        // The Dock that this period's reset put in front is not what the user clicked away from.
+        const bool ownDock = front.isDock && dockResetAt > 0.0;
+        if (front.pid != 0 && front.pid != getpid() && !ownDock)
+            activationClickPid = front.pid;
+        else if (activationBystanderPid)
+            activationClickPid = activationBystanderPid;
+        activationBystanderPid = 0;
+        activationLastTry = now;
         requestActivationNow();
     }
 
-    // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and
-    // repeats the request every half second for ten seconds while the launcher, nobody or this
-    // process is frontmost.
+    // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and for
+    // ten seconds repeats the request every half second while this process may take the front.
     void updateActivation()
     {
         if (!activationPending)
             return;
-        const double now = uptime();
-        if ([NSApp isActive])
+        if (!activationRuns())
+        {
+            activationPending = false;           // a test ended its simulation: nothing real is asked
+            return;
+        }
+        const double now = focusNow();
+        if (nsAppActive())
         {
             activationPending = false;
             std::fprintf(stderr, "[host] application active after %d ms\n",
                          static_cast<int>((now - activationStarted) * 1000.0));
             return;
         }
-        if (!systemActive && now - activationStarted > 1.0 &&
-            [NSRunningApplication currentApplication].active)
-        {
-            NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
-            if (f && f.processIdentifier == getpid())
-                enterSystemFallback();
-        }
-        // Retry while the first request's frontmost application, the launcher, nobody, or this
-        // process itself is frontmost. A child started by a launcher can already be reported
-        // frontmost (its window ordered front) while NSApp is still inactive; that state needs the
-        // retry most, and the window must be made key again with it.
-        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        const pid_t frontPid = front ? front.processIdentifier : 0;
-        const bool mayTakeFront = !front || frontPid == getppid() || frontPid == getpid() ||
-                                  (activationFrontPid && frontPid == activationFrontPid);
-        const bool dockInFront = dockResetAt > 0.0 && front &&
-                                 [front.bundleIdentifier isEqualToString:@"com.apple.dock"];
+        // This process may take the front from nobody, from itself, from its parent, from the
+        // launcher and from the application the user clicked away from. A child started by a
+        // launcher can already be reported frontmost (its window ordered front) while NSApp is
+        // still inactive; that state needs the retry most, and the window must be made key again
+        // with it.
+        const FrontApp front = frontApplication();
+        const pid_t self = getpid();
+        const bool mayTakeFront = front.pid == 0 || front.pid == self || front.pid == parentPid() ||
+                                  (activationLauncherPid && front.pid == activationLauncherPid) ||
+                                  (activationClickPid && front.pid == activationClickPid);
+        // The Dock is in front because this period's reset put it there.
+        const bool dockInFront = dockResetAt > 0.0 && front.isDock;
         if (!mayTakeFront && !dockInFront)
         {
-            activationPending = false;
-            std::fprintf(stderr, "[host] another application (%s) was activated; activation left to the user\n",
-                         front.localizedName.UTF8String ?: "?");
+            if (!activationBystanderPid || front.pid != activationBystanderPid)
+            {
+                activationPending = false;
+                std::fprintf(stderr, "[host] another application (%s) was activated; activation left to the user\n",
+                             front.name.UTF8String ?: "?");
+                return;
+            }
+            // The bystander of the first request is in front: it had that one request, and
+            // nothing is aimed at it. The period only waits for this process, its parent or
+            // nobody to be in front, or for the user's click. The half-second cadence runs on, so
+            // the next request follows within half a second of the front becoming free.
+            activationFreeSince = 0.0;
+            if (now - activationStarted > 10.0)
+            {
+                activationPending = false;
+                std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
+                return;
+            }
+            if (now - activationLastTry >= 0.5)
+                activationLastTry = now;
+            return;
+        }
+        if (mayTakeFront && activationFreeSince == 0.0)
+            activationFreeSince = now;
+        const bool freeForASecond = activationFreeSince != 0.0 && now - activationFreeSince > 1.0;
+        if (!systemActive && freeForASecond && front.pid == self && systemFrontmost())
+        {
+            enterSystemFallback();               // its becameActive ran this function for this pump
             return;
         }
         if (now - activationStarted > 10.0)
@@ -460,15 +653,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
             return;
         }
-        if (dockResetAt == 0.0 && now - activationStarted > 1.0 && mayTakeFront)
+        if (dockResetAt == 0.0 && freeForASecond && mayTakeFront)
         {
-            NSArray<NSRunningApplication*>* docks =
-                [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.dock"];
-            if (docks.count)
+            if (activateDock())
             {
                 dockResetAt = now;
                 std::fprintf(stderr, "[host] activation still pending; resetting it through the Dock\n");
-                [docks.firstObject activateWithOptions:0];
                 activationLastTry = now;     // ask again once the Dock has taken the front
                 return;
             }
@@ -594,8 +784,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // [CHOSEN, not recovered] Called on every pump: re-reads AppKit and passes through the
     // transitions the delegate callbacks would have made, so a cache they left stale lasts one
     // frame instead of until the next application switch. Unchanged state notifies nobody. While
-    // an activation request is pending updateActivation owns the state (its Dock reset puts the
-    // Dock in front for a moment).
+    // an activation period makes its requests updateActivation owns the state (its Dock reset
+    // puts the Dock in front for a moment); a period that only waits behind a bystander does not.
     void reconcileFocus()
     {
         if (!focusFollowsSystem())
@@ -609,7 +799,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
         else
             systemFrontSince = 0.0;
-        if (activationPending)
+        if (activationPending && activationFreeSince != 0.0)
             return;
         if (active && !appActive)
             becameActive();                      // an activation the delegate never reported
@@ -2206,6 +2396,13 @@ void CocoaHostTestHooks::setSystemFocusForTest(host::ClientHost& host, const Sys
     system.makeKeyWorks   = state->makeKeyWorks;
     system.frontPid       = static_cast<pid_t>(state->frontPid);
     system.now            = state->now;
+    system.activation     = state->activation;
+    system.parentPid      = static_cast<pid_t>(state->parentPid);
+    const size_t ancestors = sizeof system.ancestors / sizeof system.ancestors[0];
+    for (size_t i = 0; i < ancestors; ++i)
+        system.ancestors[i] = static_cast<pid_t>(state->ancestors[i]);
+    system.ancestryDenied = state->ancestryDenied;
+    system.dockPid        = static_cast<pid_t>(state->dockPid);
 }
 
 void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallback callback)
@@ -2221,6 +2418,7 @@ void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallb
 
 void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host)
 {
+    host.m_impl->updateActivation();            // pump's order
     host.m_impl->reconcileFocus();
 }
 
@@ -2232,6 +2430,21 @@ CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest
     stats.makeKeyCalls  = host.m_impl->testSystem.makeKeyCalls;
     stats.droppedInputs = host.m_impl->droppedInputs;
     stats.dropReports   = host.m_impl->dropReports;
+    return stats;
+}
+
+void CocoaHostTestHooks::beginActivationForTest(host::ClientHost& host)
+{
+    host.m_impl->beginActivation();
+}
+
+CocoaHostTestHooks::ActivationStats CocoaHostTestHooks::activationStatsForTest(const host::ClientHost& host)
+{
+    ActivationStats stats;
+    stats.pending    = host.m_impl->activationPending;
+    stats.requests   = host.m_impl->testSystem.activationRequests;
+    stats.retries    = host.m_impl->testSystem.activationRetries;
+    stats.dockResets = host.m_impl->testSystem.dockResets;
     return stats;
 }
 

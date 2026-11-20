@@ -31,7 +31,15 @@ public:
         bool   otherKeyWindow;  // another key, or visible and key-capable, window of this process
         bool   makeKeyWorks;    // making the game window key succeeds
         int    frontPid;        // the system's frontmost application; 0: none
-        double now;             // the clock of the focus repair, in seconds
+        double now;             // the clock of the focus repair and the activation, in seconds
+        // The launch activation. With `activation` the simulation covers it: the host decides as
+        // it does with a window, and its requests and Dock resets are counted instead of made
+        // (activationStatsForTest). Without it a simulated host never asks for activation.
+        bool   activation;
+        int    parentPid;       // this process's parent
+        int    ancestors[6];    // the parent's own ancestors, nearest first; 0 ends the list
+        bool   ancestryDenied;  // the process lookup fails, as in a sandbox that denies it
+        int    dockPid;         // the Dock's pid; 0: there is no Dock process
     };
     // Simulates that state for the host's focus repair (the per-pump reconciliation and the
     // repair on a press), which then runs without an application or a window; null ends it.
@@ -39,8 +47,18 @@ public:
     // The delegate callbacks, after the simulated state was changed to match.
     enum FocusCallback { WindowBecameKey, WindowResignedKey, AppBecameActive, AppResignedActive };
     static void focusCallbackForTest(host::ClientHost& host, FocusCallback callback);
-    // The focus part of pumpEvents.
+    // The focus part of pumpEvents: the launch activation, then the reconciliation.
     static void pumpFocusForTest(host::ClientHost& host);
+    // The first activation request, as createWindow makes it when the game window is shown.
+    static void beginActivationForTest(host::ClientHost& host);
+    struct ActivationStats
+    {
+        bool pending;           // an activation period is running
+        int  requests;          // first, cooperative requests made, one per beginActivation
+        int  retries;           // repeated requests made (every half second, and on a click)
+        int  dockResets;        // times the Dock was activated to reset a pending activation
+    };
+    static ActivationStats activationStatsForTest(const host::ClientHost& host);
     struct FocusRepairStats
     {
         bool     windowKey;     // the simulated window's key status now

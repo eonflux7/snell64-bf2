@@ -108,6 +108,24 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
   that finds the gate closed while the application is active repairs it first and is then
   delivered. Input the gate drops is reported on stderr as `[host] input dropped: ...`, once a
   second at most. None of this requests activation.
+- **Activation.** [CHOSEN] The system does not reliably activate a client started from another
+  application, so the host asks: once when the game window is shown, then every half second
+  for ten seconds. After one second without success it activates the Dock for a moment and
+  asks again; that resets a state in which the client is frontmost for the system but never
+  becomes active for AppKit (seen after a start from Terminal on Apple silicon). The repeated
+  requests and the Dock reset take the front only from the launcher, and when nobody or the
+  client itself is in front. The launcher is the application in front at the first request
+  when it is the client's parent or another ancestor in the process tree (Terminal above the
+  shells and scripts that started the client, the OpenBF2 app); the parent chain is read with
+  `sysctl(kern.proc.pid)` (`ProcessAncestry.h`). The parent counts whenever it is in front.
+  Any other application in front at the first request gets that one request, which macOS 14
+  and later may refuse, and keeps the front: a client started in the background while the
+  user works elsewhere waits for a click into its window or a switch to it. The same holds
+  when the process lookup fails, and for a client whose chain to the launching application
+  is broken: tmux or screen, SSH, a launchd job, a script that has ended, and a client that
+  restarted itself (mod activation), whose first instance has exited. An application the
+  user goes to after the first request ends the requests. A click into the inactive game
+  window starts them again, against whatever is in front then.
 - **Cursor.** `showCursor` reproduces Win32 `ShowCursor`'s display counter (visible while
   >= 0). `setCursorHiddenInView` is `SetCursor(0)` over the client area. Relative mouse mode
   (an exclusively acquired DirectInput mouse) hides the cursor, parks it in the view's centre
