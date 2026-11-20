@@ -851,7 +851,7 @@ bool rendererAtmosphereDrawSky(void* effect, bool underWater);
 // The fit and the tables, for the debug menu.
 struct AtmosphereInfo
 {
-    bool fitted, haveZenith, zenithClear;
+    bool fitted;
     bool atlasVertexFetch, atlasVertexFilter, atlasFloat32;
     IDirect3DTexture9* transmittance;   // 256 x 64
     IDirect3DTexture9* multiScatter;    // 32 x 32
@@ -859,9 +859,8 @@ struct AtmosphereInfo
     IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
     float fitMs, refHeight, fogEnd, hazeDensity;
     float skyGain, skyGainApplied;      // horizon gain, and gain^renderer.skyGainBlend
-    float rayleigh[3];                  // times Earth's
     float sunTop[3];
-    float zenithTarget[3], zenithModel[3], horizonTarget[3], horizonModel[3];
+    float zenithModel[3], horizonTarget[3], horizonModel[3];
     float groundAlbedo[3];
 };
 AtmosphereInfo rendererAtmosphereInfo();

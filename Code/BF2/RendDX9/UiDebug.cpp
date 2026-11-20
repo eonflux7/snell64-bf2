@@ -712,10 +712,8 @@ void drawAtmosphereTab()
     {
         ImGui::Text("fit %.0f ms, reference height %.1f m, fog end %.0f m", a.fitMs, a.refHeight,
                     a.fogEnd);
-        atmosphereRgb("rayleigh tint", a.rayleigh);
         ImGui::Text("%-18s %.2f, applied %.2f", "sky gain", a.skyGain, a.skyGainApplied);
         atmosphereRgb("sun above", a.sunTop);
-        atmosphereRgb(a.haveZenith ? "zenith target" : "zenith (unread)", a.zenithTarget);
         atmosphereRgb("zenith model", a.zenithModel);
         atmosphereRgb("horizon target", a.horizonTarget);
         atmosphereRgb("horizon model", a.horizonModel);   // before the gain

@@ -100,12 +100,8 @@ Design:
   would turn the whole sky into haze, so they cannot be one.
 - **Fit at load.** (1) Sunlight above the atmosphere = authored sun / transmittance at the sun's
   elevation, the transmittance clamped to at least 0.1 per channel (low suns, night layers),
-  evaluated with the sky's own parameters at every step of (2). (2) The sky: the Rayleigh tint (per
-  channel) fitted to the dome's zenith chromaticity, and its density (x Earth's, 0.5-10) so the
-  zenith's luminance over the horizon's is the dome's zenith over the fog colour: the physical
-  zenith under a high sun is 5-7x darker than its horizon, authored domes nearly as bright
-  overhead, and with Earth's density Kashan's sky read dark grey (2026-11-20). A dome too dark to
-  have a colour (night) keeps Earth's tint and density. One **sky gain** per
+  evaluated with the sky's own parameters at every step of (2). (2) The sky: Earth's air on every
+  level (Rayleigh, Mie and ozone at Earth's densities and colour), a clear sky. One **sky gain** per
   level scales the scattered light so the azimuth-averaged horizon at 1° meets the authored fog
   colour's luminance, applied as gain^`renderer.skyGainBlend` (0 a physical sky, 1 the authored
   level; default 0.5, settled at task 3's sky A/B). The sun (surfaces, disc) is never scaled.
@@ -148,10 +144,11 @@ Design:
 Decisions (owner, 2026-11-20):
 - The model draws the whole sky; the painted dome and its cloud layers are not shown (owner,
   2026-11-20, at task 3: a modern sky, not constrained by the game's approach; faithfulness to
-  each level is not the goal). The sky is clear until volumetric clouds (milestone 12). The dome
-  texture's zenith colour stays a fitting input, read from its clear-sky texels (the most
-  saturated quarter of the top band; the whole band when even those are grey, an overcast dome),
-  so painted clouds do not grey the clear sky. Earlier decisions kept the painted dome, first
+  each level is not the goal). The sky is clear until volumetric clouds (milestone 12). The sky's air
+  is Earth's on every level, physically correct; overcast comes from the clouds (owner,
+  2026-11-20). Fitting the Rayleigh tint and density to the dome's zenith was tried and dropped:
+  the domes' colours are mostly painted cloud and haze, so Kashan's clear sky read grey and
+  overcast Saaremaa's navy. Earlier decisions kept the painted dome, first
   down to the horizon, then above 20°, then its cloud layers.
 - The authored sun colour (`Lightmanager.staticSunColor`) stays the sunlight at the ground, and lit
   surfaces keep using it. The model works backwards from it to the sunlight above the atmosphere,

@@ -117,7 +117,7 @@ Tasks (1 done 2026-11-20: survey, reference views and their baseline shots):
    aerial-perspective atlas per frame, all pixel passes; the atlas format checked for vertex
    texture fetch. Tables on the debug overlay; `renderer.atmosphere`.
    Built 2026-11-20 (`render(atmosphere)`, `ui(debug)`, `tools(atmosphere)`; shaders): the fit as
-   decided with the owner (Rayleigh tint from the zenith's chromaticity, a per-level sky gain applied
+   decided with the owner (Earth's air on every level since 2026-11-20, a per-level sky gain applied
    as gain^`renderer.skyGainBlend`, default 0.5; [renderer.md](renderer.md#11-atmosphere-sky-ibl-water-reflections));
    the three load-time tables on the CPU (managed textures; pixel passes came out wrong, see the
    plan), the atlas a pixel pass with its march unrolled; A16B16G16R16F passes the vertex fetch check
