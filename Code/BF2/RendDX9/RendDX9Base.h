@@ -835,6 +835,10 @@ bool& rendererViewDistanceCut();
 // How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
 // against the world view's frustum taken out to here. 0 while the cut is off (the frustum's own far).
 float rendererSceneryDistance();
+// This frame's view-distance cut (m): fog end while the shaders cut there (RaAerial.w 2), else 0.
+// Bundled and skinned meshes wholly past it are not drawn; static meshes go on past it, culled by
+// their size on screen (renderer.contributionCull).
+float rendererViewDistanceCutRange();
 void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel

@@ -1248,6 +1248,15 @@ void SkinnedMesh::draw(void*, void*, void*)
     // The same value is also written into the Ra block at +0x580, where the shader reads it.
     *reinterpret_cast<float*>(&m_objectParameters.tail220) = distance;
 
+    // [RENDER] Render milestone 11 task 5: wholly past the view-distance cut, where the shaders
+    // would discard every pixel, nothing is submitted (shadow casters still are).
+    {
+        const float cut = dx9rend::rendererViewDistanceCutRange();
+        if (cut > 0.0f && !dx9rend::rendererCasterCaptureActive()
+            && distance - getBoundingRadius() > cut)
+            return;
+    }
+
     updateLodSelection();
 
     // [RENDER] Milestone 8: retail set a "cheap lighting" byte at +0x348 past the light manager's

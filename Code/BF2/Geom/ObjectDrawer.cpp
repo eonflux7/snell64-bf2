@@ -12,6 +12,7 @@
 #include "MeshTemplate.h"                     // meshBoundsFinalize (sub_101C5EB0) - slot +0x3C
 #include "StaticMesh.h"                       // StaticMeshOccluderRecord - slot +0xEC's records
 #include "StaticMeshTemplate.h"               // StaticMeshOccluderEdge
+#include "Terrain.h"                         // [RENDER] terrainSceneryFrustum
 #include "BoxCorners.h"                      // the eight-corner object box (0x100AE110)
 
 #include "../../RendDX9Abi/BfMemory.h"
@@ -420,6 +421,18 @@ void objectDrawerQueryGrid(const void* frustum, ObjectDrawerSet& out,
 }
 
 
+// [RENDER] The frustum the drawer queries the grids with: for the world view while the view-distance
+// cut is on (render milestone 11 task 5), out to the scenery distance, so static meshes go on past
+// the view distance (culled there by their size on screen, renderer.contributionCull) while bundled
+// and skinned meshes stop at the cut (their draws); else the view's own.
+const void* objectDrawerFrustum(dx9rend::IRenderView* view)
+{
+    if (view == dx9rend::rendererGetRenderView())
+        if (const Frustum* const scenery = terrainSceneryFrustum())
+            return scenery;
+    return view->getFrustumPtr();
+}
+
 void objectDrawerBuildOccluders(ObjectDrawer* self, ObjectDrawerSet& set);
 void objectDrawerDebugOccluders(ObjectDrawer* self, ObjectDrawerSet& set);
 void objectDrawerCullObjects(ObjectDrawer* self, ObjectDrawerSet& set);
@@ -674,7 +687,7 @@ void ObjectDrawer::updateVisible(float time)
     ObjectDrawerFlagPredicator predicator(world::IObject::OFIsVisible);   // sub_101C7E90(2)
 
     dx9rend::IRenderView* const view = static_cast<dx9rend::IRenderView*>(m_renderView);
-    objectDrawerQueryGrid<0x40>(view->getFrustumPtr(), m_visibleSet, &predicator, time);
+    objectDrawerQueryGrid<0x40>(objectDrawerFrustum(view), m_visibleSet, &predicator, time);
 
     objectDrawerSort(m_visibleSet);
 
@@ -724,7 +737,7 @@ void ObjectDrawer::draw(float time)
     objectDrawerClear(m_drawSet);                          // sub_10032330(this+0x40, 0, 0)
 
     dx9rend::IRenderView* const view = static_cast<dx9rend::IRenderView*>(m_renderView);
-    objectDrawerQueryGrid<0x4C>(view->getFrustumPtr(), m_drawSet, &predicator, time);
+    objectDrawerQueryGrid<0x4C>(objectDrawerFrustum(view), m_drawSet, &predicator, time);
 
     objectDrawerSort(m_drawSet);
 

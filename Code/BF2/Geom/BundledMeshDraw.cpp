@@ -9,6 +9,7 @@
 #include "StaticMesh.h"
 #include "XpLightManager.h"
 #include "../../RendDX9Abi/BfMemory.h"
+#include "../RendDX9/RendDX9Base.h"            // [RENDER] the view-distance cut
 #include "../Core/System.h"
 // Match XpLightManager's engine-interface import: retail HfeAbi already supplies
 // ClassManager's VC7.1 registration carriers. Only the virtual interfaces below
@@ -188,6 +189,10 @@ void BundledMesh::draw(void*,void*,void*)
     m_distanceToCamera=static_cast<float>(std::sqrt(
         difference.z*difference.z+difference.y*difference.y+difference.x*difference.x));
     std::memcpy(&m_parameters.tail220,&m_distanceToCamera,4);
+    // [RENDER] Render milestone 11 task 5: wholly past the view-distance cut, where the shaders
+    // would discard every pixel, nothing is submitted (shadow casters still are).
+    { const float cut=dx9rend::rendererViewDistanceCutRange();
+      if(cut>0.0f && !dx9rend::rendererCasterCaptureActive() && m_distanceToCamera-getBoundingRadius()>cut)return; }
     ++field<unsigned int>(slot<void*>(dx9rend::g_rendererBase,0x6C),0x240);
     updateLodSelection();
     if(m_template->m_maxPartCount>1 && m_partTransforms[1]==&bundledMeshZeroMatrix())

@@ -436,6 +436,7 @@ struct State
     bool skyViewDirty;       // the fit or the blend changed: rebuild and upload the sky view
     bool effectMissing;
     bool atlasLive;          // this frame's atlas is drawn and bound to s9
+    float cutRange;          // rendererViewDistanceCutRange
 };
 
 State g = {};
@@ -913,6 +914,11 @@ bool& rendererViewDistanceCut()
     return g_viewDistanceCut;
 }
 
+float rendererViewDistanceCutRange()
+{
+    return g.cutRange;
+}
+
 float rendererSceneryDistance()
 {
     return g_viewDistanceCut ? 40000.0f : 0.0f;
@@ -971,6 +977,7 @@ void rendererAtmosphereAerialConstants(float c[8])
 {
     for (int i = 0; i < 8; ++i)
         c[i] = 0.0f;
+    g.cutRange = 0.0f;
     // The atlas's tiles span the world view's viewport; Ra_GetAerial takes it at the target's origin.
     const float* const vp = rendererGetRenderView()->getViewport();   // x, y, width, height
     if (!g.atlasLive || cameraIsUnderWater() || g.inputs.fogEnd <= 0.0f || vp[0] != 0.0f || vp[1] != 0.0f
@@ -980,6 +987,7 @@ void rendererAtmosphereAerialConstants(float c[8])
     c[1] = 1.0f / vp[3];
     c[2] = 1.0f / g.inputs.fogEnd;
     c[3] = g_viewDistanceCut ? 2.0f : 1.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
+    g.cutRange = g_viewDistanceCut ? g.inputs.fogEnd : 0.0f;
     // RaAerialHaze: the atlas march's density (RaAtmosphere.fx, its exponent capped at 30) at the
     // camera's height, for the closed-form haze past fog end.
     const double cameraY = rendererGetRenderView()->getViewMatrixPtr()->m[13];
