@@ -431,8 +431,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
     // the 32x32 cursor at one back-buffer pixel per cursor pixel (a full-screen mode change on
     // Windows), so its size follows the game image: points per back-buffer pixel, times the frame
-    // size - and, on high-resolution back buffers, times MenuViewport::uiScale, the whole factor
-    // the console uses (customCursor). Pixels are enlarged nearest-neighbour to the next whole
+    // size - and, on high-resolution back buffers, times MenuViewport::cursorScale (customCursor). Pixels are enlarged nearest-neighbour to the next whole
     // multiple and, when the Retina target is not a whole multiple, reduced to it with
     // high-quality filtering.
     static NSCursor* buildCursorFrame(const CursorFrame& f, CGFloat scale, CGFloat backing)
@@ -500,8 +499,9 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         if (b.size.height <= 0)
             return nil;
         // [CHOSEN, not recovered] The menu's .ani cursors grow with the HUD on high-resolution back
-        // buffers (2560x1664: 3 back-buffer pixels per cursor pixel) instead of shrinking with it.
-        const CGFloat hidpi = static_cast<CGFloat>(ui::MenuViewport::uiScale(
+        // buffers (2560x1664: 2 back-buffer pixels per cursor pixel) instead of shrinking with it,
+        // never past retail's size against the UI (MenuViewport::cursorScale rounds down).
+        const CGFloat hidpi = static_cast<CGFloat>(ui::MenuViewport::cursorScale(
             static_cast<unsigned>(std::max(backWidth, 0)), static_cast<unsigned>(backHeight)));
         const CGFloat scale =
             std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight)) * hidpi;
@@ -529,7 +529,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             {
                 const CursorFrame& f = c->anim.frames[0];
                 std::fprintf(stderr, "[TEMP] [HOST] cursor %zu frame(s) %dx%d at %.3f pt per cursor pixel "
-                             "(uiScale %.0f, back=%dx%d, backing %.1f): %.1fx%.1f pt\n",
+                             "(cursorScale %.0f, back=%dx%d, backing %.1f): %.1fx%.1f pt\n",
                              c->anim.frames.size(), f.width, f.height, scale, hidpi, backWidth, backHeight,
                              backing, f.width * scale, f.height * scale);
                 std::fflush(stderr);

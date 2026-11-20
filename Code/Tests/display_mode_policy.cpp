@@ -82,6 +82,15 @@ int main()
     check(MenuViewport::uiScale(2560, 1080) == 2, "21:9 2560x1080: height decides, 2");
     check(MenuViewport::uiScale(1200, 1600) == 1, "portrait 1200x1600: 4:3 width-limited (900), 1");
     check(MenuViewport::uiScale(0, 0) == 1, "degenerate: 1");
+    // The cursor factor rounds down: never larger against the UI than 32 pixels on 600 lines.
+    check(MenuViewport::cursorScale(1440, 900) == 1, "cursor 1440x900: 1");
+    check(MenuViewport::cursorScale(1920, 1080) == 1, "cursor 1920x1080: 1");
+    check(MenuViewport::cursorScale(1920, 1200) == 2, "cursor 1920x1200: 2");
+    check(MenuViewport::cursorScale(2560, 1600) == 2, "cursor 2560x1600: 2");
+    check(MenuViewport::cursorScale(2560, 1664) == 2, "cursor 2560x1664: 2");
+    check(MenuViewport::cursorScale(2940, 1912) == 3, "cursor 2940x1912: 3");
+    check(MenuViewport::cursorScale(3840, 2160) == 3, "cursor 3840x2160: 3");
+    check(MenuViewport::cursorScale(0, 0) == 1, "cursor degenerate: 1");
 
     std::printf("display_mode_policy: %u/%u passed\n", checks - failures, checks);
     return failures ? 1 : 0;
