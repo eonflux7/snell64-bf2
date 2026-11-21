@@ -865,10 +865,13 @@ void testProcessAncestry()
 // front at the first request decides what follows. A launcher (the parent or another ancestor of
 // this process), nobody, and this process itself lose the front to a request every half second
 // and, after a second, to a reset through the Dock. An unrelated application gets the one
-// cooperative request and keeps the front. The requests run for ten seconds, counted from the
-// first request or, once, from the first look that finds the front free after a wait behind such
-// an application; and no period ends between its Dock reset and the request after it. Requests
-// and Dock resets are counted, none is made.
+// cooperative request and keeps the front. Cooperative means that the request yields to an active
+// application on every macOS version: before macOS 14 the host makes it with
+// activateIgnoringOtherApps:NO, and every other request with YES, which activates whatever
+// application is active. The requests run for ten seconds, counted from the first request or,
+// once, from the first look that finds the front free after a wait behind such an application;
+// and no period ends between its Dock reset and the request after it. Requests and Dock resets
+// are counted, none is made.
 void testLaunchActivation()
 {
     begin("launch activation: only a launcher loses the front to repeated requests");
@@ -899,6 +902,8 @@ void testLaunchActivation()
     // What the scenario under way added to the counters.
     Hooks::ActivationStats base = stats();
     const auto requests = [&]() { return stats().requests - base.requests; };
+    // Those of the first requests that ignore other applications; the rest are cooperative.
+    const auto ignoringOthers = [&]() { return stats().ignoringOthers - base.ignoringOthers; };
     const auto retries = [&]() { return stats().retries - base.retries; };
     const auto dockResets = [&]() { return stats().dockResets - base.dockResets; };
     // Ends whatever a scenario left: another application in front, twenty seconds later.
@@ -924,6 +929,8 @@ void testLaunchActivation()
     start(editor);
     check(stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0,
           "an unrelated application in front: the one cooperative request is made");
+    check(ignoringOthers() == 0,
+          "it does not ignore other applications: activateIgnoringOtherApps:NO before macOS 14");
     for (double step : { 0.1, 0.5, 0.6, 1.0, 2.0, 3.0 })
         after(step);                            // 7.2 s after the request
     check(stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0,
@@ -932,6 +939,35 @@ void testLaunchActivation()
     after(3.0);
     check(!stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0,
           "after ten seconds the host stops waiting, with that one request made");
+    check(ignoringOthers() == 0, "and no request of the whole wait ignored other applications");
+
+    // The first request by who is in front. It ignores other applications when the launcher,
+    // nobody or this process is in front. For an application that did not start the client, and
+    // for one that a denied lookup cannot place, it is cooperative. Before macOS 14 that is the
+    // flag of activateIgnoringOtherApps:, and with YES this one request alone would take the
+    // front from the application the user works in.
+    {
+        struct First { int front; bool lookupDenied; int ignoring; const char* what; };
+        const First firsts[] = {
+            { editor,   false, 0, "an unrelated application in front: the first request is cooperative" },
+            { dock,     false, 0, "the Dock in front: cooperative, the Dock did not start the client" },
+            { terminal, false, 1, "an ancestor in front: the first request ignores other applications" },
+            { script,   false, 1, "the parent in front: the first request ignores other applications" },
+            { 0,        false, 1, "nobody in front: the first request ignores other applications" },
+            { self,     false, 1, "this process in front for the system: the first request ignores other applications" },
+            { terminal, true,  0, "lookup denied, an ancestor above the parent in front: cooperative, it may be a stranger" },
+            { editor,   true,  0, "lookup denied, an unrelated application in front: cooperative" },
+            { script,   true,  1, "lookup denied, the parent in front: the first request ignores other applications" },
+        };
+        for (const First& first : firsts)
+        {
+            sys.ancestryDenied = first.lookupDenied;
+            start(first.front);
+            check(stats().pending && requests() == 1 && retries() == 0 &&
+                  ignoringOthers() == first.ignoring, first.what);
+        }
+        sys.ancestryDenied = false;
+    }
 
     // The same start, and the system grants the request.
     start(editor);

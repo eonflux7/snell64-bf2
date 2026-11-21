@@ -51,10 +51,16 @@ public:
     static void pumpFocusForTest(host::ClientHost& host);
     // The first activation request, as createWindow makes it when the game window is shown.
     static void beginActivationForTest(host::ClientHost& host);
+    // A first request either ignores other applications or is cooperative, that is, it yields to
+    // an active application on every macOS version. Before macOS 14 the two are
+    // activateIgnoringOtherApps:YES and activateIgnoringOtherApps:NO; from macOS 14 on both are
+    // -[NSApplication activate], which the system may refuse. The repeated requests all ignore
+    // other applications.
     struct ActivationStats
     {
         bool pending;           // an activation period is running
-        int  requests;          // first, cooperative requests made, one per beginActivation
+        int  requests;          // first requests made, one per beginActivation
+        int  ignoringOthers;    // those of them that ignore other applications
         int  retries;           // repeated requests made (every half second, and on a click)
         int  dockResets;        // times the Dock was activated to reset a pending activation
     };

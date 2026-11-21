@@ -121,11 +121,18 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
   or another ancestor in the process tree (Terminal above the shells and scripts that started
   the client, the OpenBF2 app); the parent chain is read with `sysctl(kern.proc.pid)`
   (`ProcessAncestry.h`). The parent counts whenever it is in front.
-  Any other application in front at the first request gets that one request, which macOS 14
-  and later may refuse, and keeps the front: a client started in the background while the
-  user works elsewhere waits for a click into its window or a switch to it. The same holds
-  when the process lookup fails, and for a client whose chain to the launching application
-  is broken: tmux or screen, SSH, a launchd job, a script that has ended, and a client that
+  Any other application in front at the first request gets that one request and no more, and
+  the request is a cooperative one: it yields to an application that is active. On macOS 14
+  and later every request is of that kind (`-[NSApplication activate]`, which the system may
+  refuse). On macOS 11 to 13 the caller chooses: the host makes this one request with
+  `activateIgnoringOtherApps:NO`, which activates only when no other application is active,
+  and all its other requests with `YES`, which activates whatever application is active and
+  would take the front with that one request alone. The macOS 11 to 13 branch follows AppKit's
+  documentation and was only compiled: no such system was at hand. Unless the system grants
+  the request, the other application keeps the front: a client started in the background while
+  the user works elsewhere waits for a click into its window or a switch to it. The same holds
+  when the process lookup fails, and for a client whose chain to the launching application is
+  broken: tmux or screen, SSH, a launchd job, a script that has ended, and a client that
   restarted itself (mod activation), whose first instance has exited. While the client
   waits, the host asks nothing and only looks at who is in front. When it finds the client
   itself (that one request can leave it frontmost for the system and inactive for AppKit),

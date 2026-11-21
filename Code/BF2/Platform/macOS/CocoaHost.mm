@@ -207,8 +207,9 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // request is repeated every half second (updateActivation) - but only at the expense of the
     // launcher, of nobody, or of this process itself. An unrelated application that is in front
     // at the first request (the user works elsewhere while a client starts in the background)
-    // gets that one request and keeps the front, and an application the user goes to afterwards
-    // ends the period.
+    // gets that one request, made on every macOS version in the form that yields to an active
+    // application (requestActivation). It keeps the front unless the system itself grants that
+    // request, and an application the user goes to afterwards ends the period.
     bool   activationPending = false;  // an activation period is running
     bool   fullscreenPending = false;  // a fullscreen start waiting for activation (createWindow)
     // [CHOSEN, not recovered] The system reports this process active (another app activated it
@@ -234,10 +235,11 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // Launcher: the application in front at the first request when it is this process's parent
     // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
     // the client, the OpenBF2 app. Bystander: the application in front at the first request when
-    // it is no ancestor, or when the process lookup failed. It keeps the front: nothing is
-    // repeated and the Dock is left alone while it stays there. Click: the application the user
-    // left with a click into the inactive game window (clickedWhileInactive), which is the user
-    // choosing the game over it; the click makes a bystander this.
+    // it is no ancestor, or when the process lookup failed. The host takes nothing from it: its
+    // one request yields to it (requestActivation), nothing is repeated and the Dock is left
+    // alone while it stays in front. Click: the application the user left with a click into the
+    // inactive game window (clickedWhileInactive), which is the user choosing the game over it;
+    // the click makes a bystander this.
     pid_t  activationLauncherPid = 0;
     pid_t  activationBystanderPid = 0;
     pid_t  activationClickPid = 0;
@@ -306,7 +308,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         pid_t  ancestors[6] = {};       // the parent's own ancestors, nearest first; 0 ends them
         bool   ancestryDenied = false;  // the process lookup fails for every process
         pid_t  dockPid = 0;             // the Dock's pid; 0: there is no Dock process
-        int    activationRequests = 0;  // requestActivation: a period's first, cooperative request
+        int    activationRequests = 0;  // requestActivation: a period's first request
+        int    activationIgnoringOthers = 0; // those of them made ignoring other applications
         int    activationRetries = 0;   // requestActivationNow: its repeated requests
         int    dockResets = 0;          // activateDock
         // The simulated process table (macos::parentPidOf): the chain ends at launchd, pid 1.
@@ -439,10 +442,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // [CHOSEN, not recovered] Whether the application `pid` started this process: it is the
     // parent or a further ancestor (Terminal -> login -> shell -> script -> client). A lookup that
     // fails part of the way answers "unknown", which the caller treats as "no": the direct parent
-    // needs no lookup and is still recognised, while an application further up loses the
-    // repeated requests. That costs a click into the game window (or a switch to it) when the
-    // first request is refused; counting an unknown application as a launcher would let a client
-    // started in the background take the front from whatever the user works in.
+    // needs no lookup and is still recognised, while an application further up gets a
+    // bystander's one cooperative request (requestActivation) and no repeated ones. That costs a
+    // click into the game window (or a switch to it) when that request is not granted: before
+    // macOS 14 whenever the application is active, from macOS 14 on when the system refuses it.
+    // Counting an unknown application as a launcher would let a client started in the
+    // background take the front from whatever the user works in.
     macos::ProcessAncestry launcherAncestry(pid_t pid) const
     {
         if (const TestSystem* t = testSystemState())
@@ -462,13 +467,29 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         return !testHeadless;
     }
 
-    // -[NSApplication activate] from macOS 14 on; activateIgnoringOtherApps: before (its
-    // "ignoring" flag is ignored since macOS 14 and the selector deprecated).
-    void requestActivation()
+    // [CHOSEN, not recovered] One activation request. `ignoringOtherApps` says whether it may take
+    // the front from an application that is active, which only a system before macOS 14 leaves
+    // to the caller:
+    // - macOS 14 and later: -[NSApplication activate]. Activation is cooperative there: the
+    //   system may refuse any request made while another application is active, so the flag
+    //   changes nothing.
+    // - macOS 11 to 13: activateIgnoringOtherApps:, which AppKit has marked for deprecation since.
+    //   With YES this process is activated whatever application is active; with NO "the app is
+    //   activated only if no other app is currently active" (NSApplication.h).
+    // A request that yields to an active application on all of these systems is called
+    // cooperative here. A bystander's one request is cooperative (beginActivation): made with
+    // YES, that request alone would take the front from the application the user works in on
+    // macOS 11 to 13, whatever the host withholds afterwards. Every other request ignores other
+    // applications; the host makes those only while this process may take the front (the first
+    // request without a bystander, updateActivation, clickedWhileInactive). The macOS 11 to 13
+    // branch follows AppKit's documentation; no such system was at hand to run it on.
+    void requestActivation(bool ignoringOtherApps)
     {
         if (TestSystem* t = testSystemState())
         {
             ++t->activationRequests;
+            if (ignoringOtherApps)
+                ++t->activationIgnoringOthers;
             return;
         }
         if (@available(macOS 14.0, *))
@@ -479,14 +500,16 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            [NSApp activateIgnoringOtherApps:YES];
+            [NSApp activateIgnoringOtherApps:ignoringOtherApps ? YES : NO];
 #pragma clang diagnostic pop
         }
     }
 
     // The first request, made when the game window is shown, and the decision whose front the
     // repeated requests may take: the application in front now is the launcher when it is this
-    // process's parent or another ancestor, and a bystander otherwise.
+    // process's parent or another ancestor, and a bystander otherwise. A bystander's request is
+    // the cooperative one; a launcher, nobody and this process itself get the request that
+    // ignores other applications (requestActivation).
     void beginActivation()
     {
         if (!activationRuns() || nsAppActive())
@@ -524,9 +547,9 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, %s; parent pid %d)%s\n",
                      front.name.UTF8String ?: (front.pid ? "?" : "none"), static_cast<int>(front.pid),
                      relation, static_cast<int>(parentPid()),
-                     activationBystanderPid ? " - one request, no retries or Dock reset while it stays in front"
+                     activationBystanderPid ? " - one cooperative request, no retries or Dock reset while it stays in front"
                                             : "");
-        requestActivation();
+        requestActivation(activationBystanderPid == 0);
     }
 
     // Asks for activation the strongest way available while this process may take the front.
@@ -538,7 +561,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return;
         }
         [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
-        requestActivation();
+        requestActivation(true);
         if (window && visible && !minimized && !window.isKeyWindow)
         {
             [window makeKeyAndOrderFront:nil];
@@ -2502,6 +2525,7 @@ CocoaHostTestHooks::ActivationStats CocoaHostTestHooks::activationStatsForTest(c
     ActivationStats stats;
     stats.pending    = host.m_impl->activationPending;
     stats.requests   = host.m_impl->testSystem.activationRequests;
+    stats.ignoringOthers = host.m_impl->testSystem.activationIgnoringOthers;
     stats.retries    = host.m_impl->testSystem.activationRetries;
     stats.dockResets = host.m_impl->testSystem.dockResets;
     return stats;
