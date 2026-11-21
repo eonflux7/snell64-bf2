@@ -1291,6 +1291,21 @@ void testLaunchActivation()
           "the period that the click inside createWindow began still runs 9.85 s after the first look");
     after(0.2);                                 // 10.05 s after the first look
     check(!stats().pending && retries() == 3 && dockResets() == 1, "and ends ten seconds after that look");
+    // A click can also arrive in the first frame's pump, which routes it before it looks. In a
+    // launcher's period the requests were free to run from the start and the click starts no
+    // count of its own, so it does not stand in for the first look either: the look of that same
+    // pump starts the ten seconds. Were the click taken for it, a first frame 10.5 s after the
+    // request would end the period right after the user's click, before its Dock reset.
+    start(terminal);
+    apply(10.5);
+    click();
+    check(stats().pending && retries() == 1 && !stats().lookCounted,
+          "a click in the first frame's pump of a launcher's period: it requests at once, and the ten seconds "
+          "are still to be counted from that pump's look");
+    pump();
+    check(stats().pending && stats().lookCounted && retries() == 1 && dockResets() == 1,
+          "the look of that pump, 10.5 s after the request: the period goes on and the activation is reset "
+          "through the Dock");
 
     // A start behind a bystander (here Terminal, the lookup denied) whose one request left this
     // process frontmost for the system and inactive for AppKit is repaired in full however late
@@ -1357,6 +1372,24 @@ void testLaunchActivation()
     check(stats().pending && fallback() && host.hasFocus() && dockResets() == 1 && retries() == 0,
           "an unrelated application at the request, this process in front at the look inside createWindow, the next "
           "look 10.5 s later: the system's state is used and the activation reset through the Dock");
+    // That look inside createWindow made the period's one count for a front that came free. When
+    // the unrelated application is in front again at the first look and the front comes free once
+    // more later, the request is repeated but the ten seconds are not counted a third time: the
+    // period ends ten seconds after the first look.
+    request(editor);
+    sys.frontPid = self;
+    apply(0.0);
+    lookInsideCreateWindow();
+    sys.frontPid = editor;
+    after(1.0);                                 // the first look: ten seconds from here
+    sys.frontPid = self;
+    after(9.5);                                 // 10.5 s after the request: the front is free again
+    check(stats().pending && retries() == 1 && dockResets() == 0,
+          "the front free at the look inside createWindow and again 9.5 s after the first look: the request is repeated");
+    after(0.6);                                 // 10.1 s after the first look
+    check(!stats().pending && retries() == 1 && dockResets() == 0,
+          "but the count for a front that came free was made inside createWindow: the period ends ten seconds "
+          "after the first look");
 
     // A period that waited behind an unrelated application counts its ten seconds once more from
     // the first look that finds the front free. In the starts above that look is the first look
@@ -1554,6 +1587,23 @@ void testLaunchActivation()
     after(0.6);
     check(stats().pending && retries() == 2,
           "a click with this process frontmost: the application left behind may lose the front too");
+    // The same when the click arrives while the period's own Dock reset has the Dock in front:
+    // the Dock is not what the user clicked away from, the unrelated application that the period
+    // waited behind is.
+    start(editor);
+    after(1.0);
+    sys.frontPid = self;
+    after(0.6);
+    after(0.6);
+    after(0.6);                                 // in front for 1.2 s: the fallback and the Dock reset
+    sys.frontPid = dock;
+    apply(0.1);
+    click();
+    sys.frontPid = editor;
+    after(0.6);
+    check(stats().pending && retries() == 4 && dockResets() == 1,
+          "a click while the reset has the Dock in front: the unrelated application of the first request is "
+          "the one clicked away from, and may lose the front");
 
     // Every application the user leaves with a click into the inactive game window may lose the
     // front until the period ends. A later click made with another application in front adds
@@ -1579,6 +1629,20 @@ void testLaunchActivation()
     sys.frontPid = terminal;                    // no ancestor's turn: an unrelated application was in front at the start
     after(0.2);
     check(!stats().pending, "an application the user went to without a click still ends the period");
+    // The applications clicked away from belong to one period. A click that finds no period
+    // running starts a new one against the application in front at that click alone: the editor
+    // and the browser, clicked away from in the period before, are again applications the user
+    // can go to, and that ends the requests.
+    apply(1.0);
+    click();                                    // no period running; Terminal is in front
+    pump();
+    check(stats().pending && retries() == 4,
+          "a click that finds no period running starts one against the application in front at the click");
+    sys.frontPid = editor;
+    after(0.6);
+    check(!stats().pending && retries() == 4,
+          "an application clicked away from in the period before is not this period's: the user going to it "
+          "ends the requests");
 
     // The same decision with the lookup the client makes: getppid() and the kernel's process
     // table instead of the simulated chain that every scenario above uses. The application in
@@ -1668,6 +1732,20 @@ void testLaunchActivation()
     after(1.0);
     check(stats().pending && requests() == 1 && ignoringOthers() == 0 && retries() == 0 && dockResets() == 0,
           "restarted without the marker, an unrelated application in front: a bystander with its one cooperative request");
+    // The marker belongs to this process's first showing of its game window, also when that
+    // showing finds the application active already and has nothing to ask: a window shown again
+    // later starts like any other.
+    setenv(marker, "1", 1);
+    Hooks::forgetRestartMarkerForTest(host);
+    finish();
+    appKitActive();
+    after(1.0);
+    base = stats();
+    Hooks::beginActivationForTest(host);
+    check(!stats().pending && requests() == 0, "restarted in front and active at the first showing: nothing is asked");
+    start(editor);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 0,
+          "that showing used the marker up: at the next one the unrelated application is a bystander");
 
     // The new instance can make its first request while the first one is still running and in
     // front. The first instance is then the parent, a launcher like any other. Once it has
@@ -1701,6 +1779,29 @@ void testLaunchActivation()
     after(0.2);
     check(!stats().pending,
           "one application follows the first instance: another one the user goes to ends the requests");
+    // Between the first instance's exit and the system naming its successor nobody may be in
+    // front for a moment, and the system may go on naming the first instance for a moment after
+    // it has exited. Neither look settles who follows: the application that comes to the front
+    // next does, and it counts as the launcher.
+    {
+        struct Between { int front; const char* what; };
+        const Between betweens[] = {
+            { 0, "restarted in front, nobody in front right after the first instance has exited: the application "
+                 "that follows counts as the launcher" },
+            { firstInstance, "restarted in front, the first instance still named in front after it has exited: the "
+                             "application that follows counts as the launcher" },
+        };
+        for (const Between& between : betweens)
+        {
+            restartedBy(true);
+            sys.parentPid = 1;                  // the first instance has exited
+            sys.frontPid = between.front;
+            after(0.2);
+            sys.frontPid = browser;
+            after(6.5);
+            check(stats().pending && retries() == 0 && dockResets() == 1, between.what);
+        }
+    }
     // The same restart from the background: no marker, and the period ends.
     restartedBy(false);
     sys.parentPid = 1;
@@ -1714,6 +1815,29 @@ void testLaunchActivation()
     after(6.5);
     check(!stats().pending && retries() == 0 && dockResets() == 0,
           "restarted in front, the first instance still running: an application the user went to ends the requests");
+    // That period ended with the question of who follows the first instance still open, since
+    // the first instance never exited in it. The question belongs to that period. A later first
+    // request of the same process, and a click that starts a period, begin without it: an
+    // application that comes to the front then is one the user went to.
+    sys.parentPid = 1;
+    start(0);
+    sys.frontPid = browser;
+    after(0.6);
+    check(!stats().pending && retries() == 0 && dockResets() == 0,
+          "a later first request without the marker: the application that comes to the front is not taken for "
+          "the first instance's successor");
+    restartedBy(true);
+    sys.frontPid = browser;
+    after(6.5);                                 // ends again with that question open
+    sys.parentPid = 1;
+    sys.frontPid = editor;
+    apply(1.0);
+    click();                                    // no period running: a new one, against the editor
+    sys.frontPid = browser;
+    after(0.6);
+    check(!stats().pending && retries() == 1 && dockResets() == 0,
+          "a click that starts a period after it: the application the user then goes to is not taken for the "
+          "first instance's successor either");
     // The system puts this process itself in front: no other application follows the first one.
     restartedBy(true);
     sys.parentPid = 1;
@@ -1740,6 +1864,24 @@ void testLaunchActivation()
     sys.frontPid = editor;
     after(0.2);
     check(!stats().pending, "and another application after that one ends the requests");
+    // The Dock that the period's own reset put in front is not the first instance's successor
+    // either: the application in front after it is.
+    setenv(marker, "1", 1);
+    Hooks::forgetRestartMarkerForTest(host);
+    sys.parentPid = 1;
+    start(0);
+    after(0.6);
+    after(0.6);                                 // nobody in front for 1.2 s: the Dock reset
+    sys.frontPid = dock;
+    after(0.35);                                // the request that reset owes, with the Dock in front
+    sys.frontPid = browser;
+    after(0.6);
+    check(stats().pending && retries() == 3 && dockResets() == 1,
+          "restarted in front, the Dock in front by the period's own reset: it is not the first instance's "
+          "successor, the application in front after it is");
+    sys.frontPid = editor;
+    after(0.2);
+    check(!stats().pending, "and an application after that one ends the requests");
     unsetenv(marker);
     Hooks::forgetRestartMarkerForTest(host);
     sys.parentPid = startParent;
