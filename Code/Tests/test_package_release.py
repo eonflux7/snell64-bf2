@@ -185,6 +185,11 @@ class PackageReleaseTests(unittest.TestCase):
                                  "api-ms-win-crt-*.dll", "part of Windows 10 and 11"):
                         self.assertIn(text, notice)
 
+    def test_vc_redist_dir_drops_a_stray_quote(self):
+        # cmd.exe: --vc-redist-dir "C:\VS\Redist\MSVC\14.44.35112\" reaches argv with a trailing quote.
+        self.assertEqual(PACKAGER.redist_path('C:\\VS\\14.44.35112" '), Path('C:\\VS\\14.44.35112'))
+        self.assertEqual(PACKAGER.redist_path("/opt/redist/14.44.35112"), Path("/opt/redist/14.44.35112"))
+
     def test_windows_vc_runtime_input_is_required_and_checked(self):
         self.populate()
         redist = self.args.vc_redist_dir

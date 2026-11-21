@@ -138,6 +138,12 @@ def pe_machine(path):
     return int.from_bytes(signature[4:6], "little")
 
 
+def redist_path(text):
+    """A --vc-redist-dir value: a Windows command line that quotes a folder ending in a backslash
+    ("C:\\...\\14.44.35112\\") hands the path over with a stray trailing quote; drop it."""
+    return Path(text.strip().rstrip('"').strip())
+
+
 def vc_runtime(redist_dir, platform):
     """The app-local Visual C++ runtime for a Windows platform: the newest Microsoft.VC*.CRT folder
     of its architecture below redist_dir (VCToolsRedistDir, which VsDevCmd sets to the redist
@@ -823,8 +829,8 @@ def main():
                              "<source-dir>/out/third_party), for the client's licence files")
     parser.add_argument("--revision", required=True, help="Full source commit SHA")
     parser.add_argument("--repository", required=True, help="GitHub owner/repository")
-    parser.add_argument("--vc-redist-dir", type=Path,
-                        default=Path(os.environ["VCToolsRedistDir"]) if os.environ.get("VCToolsRedistDir") else None,
+    parser.add_argument("--vc-redist-dir", type=redist_path,
+                        default=redist_path(os.environ["VCToolsRedistDir"]) if os.environ.get("VCToolsRedistDir") else None,
                         help="Windows: Visual Studio's VC\\Redist\\MSVC\\<version> folder (default: "
                              "%%VCToolsRedistDir%%, set by VsDevCmd); the newest Microsoft.VC*.CRT folder of "
                              "the platform's architecture supplies the app-local vcruntime140*/msvcp140* DLLs")
