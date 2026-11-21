@@ -478,6 +478,9 @@ int main()
     check(actor->getSpawnGroup() == -1 && server->ifPlayingCalls == 1,
           "spawning pass leaves a negative choice to spawnPlayer");
     players->roster.clear(); actor->setSpawnGroup(0); spawnManager = 0;
+    const int teamBefore = actor->getTeam();
+    check(!api->selectTeam(actor, 3) && !api->selectTeam(actor, -1) && !api->selectTeam(actor, -2) &&
+          actor->getTeam() == teamBefore, "team selection refuses a team outside 0 to 2 before any change");
 
     world::IPlayer* nullPlayer = 0;
     check(!python::buildArgs(-19, nullPlayer, std::vector<int>()).get(), "uninitialized command arguments return empty PyRef");

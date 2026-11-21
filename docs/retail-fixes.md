@@ -491,6 +491,31 @@ Each entry is a heading that names the fix, followed by these fields:
 - **Source:** `Code/BF2/Game/GameLogic/ServerGameLogic.cpp`; from [B2BF/OpenBF2
   #9](https://github.com/B2BF/OpenBF2/issues/9)
 
+### The server refuses a team outside 0 to 2
+
+- **Retail:** `GameServer::handleNetworkEvent` passes the 32-bit team a client requests (Linux ia-32
+  server `0x80AC7F8`) to `ServerGameLogic::selectTeam` (`0x80FBC40`; `bf2_w32ded.exe` `0x455900`),
+  and `Player::setTeam` (`0x80F3410`) stores any value. The player update sends the team as team + 1
+  in 0 to 3; for any other team the writer raises the Error "(fatal error) Value out of bounds"
+  (IO/BitStream.inl, line 59; `Player::getNetUpdate` `0x80EEA74`, `0x80F02AA`). Team -1 passes the
+  update, but a spawn attempt, such as one with the spawn screen's reset group -1, asks
+  `ScoreManager::getTeamScore` (`0x8107890`) for it, which raises the Error "TBM: Incorrect team
+  number" for every team but 1 and 2. An emitted Error ends the process. Not reproduced. The
+  Windows server's update writer was not read.
+- **OpenBF2:** `selectTeam` returns false for a team below 0 or above 2 before anything changes: no
+  team change, no Python notification, no correction event. Teams 0 to 2, team 0 included, are
+  handled as in retail.
+- **Applies to:** Client and server, wherever a game is hosted; all platforms.
+- **Retail clients:** Nothing on the wire changes. A retail client requests a team only through
+  `HudKitSelection::selectTeam` (`BF2.exe` `0x7A2180`), which sends neither -1 nor the current
+  team, and the stock spawn screen asks for teams 1 and 2 (`spawnManager.setPlayerTeam 1` and `2`
+  in `HudElementsSpawn.con`). Another value takes a modified client or that console command typed
+  with it, and every refused value brings a retail server to one of the Errors above, at the next
+  player update or spawn attempt. Whether a player can enter that command in the retail console
+  was not checked.
+- **Source:** `Code/BF2/Game/GameLogic/ServerGameLogic.cpp`,
+  `Code/Tests/gamelogic_registries_runtime.cpp`
+
 ### Wrong-length voice challenge datagram is dropped instead of ending the server
 
 - **Retail:** `VoipServerConnection::HandlePacketChallengeString` (Linux ia-32 server `0x8127600`,

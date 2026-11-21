@@ -1932,10 +1932,12 @@ bool ServerGameLogic::selectTeam(world::IPlayer* player, int team)
     if (!player)
         return false;
 
-    if (team <= 0 || team >= 3)
+    // [CHOSEN, not recovered] Retail fix "The server refuses a team outside 0 to 2"
+    // (docs/retail-fixes.md). Team 0 is accepted as in retail.
+    if (team < 0 || team > 2)
         return false;
 
-    player->setTeam(team, false);                                   // vt - the validating setter
+    player->setTeam(team, false);                                  // vt - the validating setter
 
     {
         python::PyRef args = python::buildArgs(player, m_shouldUpdateTicketSystem);   // +0x28C
