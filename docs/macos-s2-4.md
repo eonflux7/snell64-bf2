@@ -115,37 +115,45 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
   becomes active for AppKit (seen after a start from Terminal on Apple silicon). The reset
   leaves the Dock in front until the client asks again, so the ten seconds never end the
   requests between the two: the request after the reset is made even when they have run out,
-  and the requests end half a second after it. The repeated requests and the Dock reset take
-  the front only from the launcher, and when nobody or the client itself is in front. The
-  launcher is the application in front at the first request when it is the client's parent
-  or another ancestor in the process tree (Terminal above the shells and scripts that started
-  the client, the OpenBF2 app); the parent chain is read with `sysctl(kern.proc.pid)`
-  (`ProcessAncestry.h`). The parent counts whenever it is in front.
-  Any other application in front at the first request gets that one request and no more, and
-  the request is a cooperative one: it yields to an application that is active. On macOS 14
-  and later every request is of that kind (`-[NSApplication activate]`, which the system may
-  refuse). On macOS 11 to 13 the caller chooses: the host makes this one request with
-  `activateIgnoringOtherApps:NO`, which activates only when no other application is active,
-  and all its other requests with `YES`, which activates whatever application is active and
-  would take the front with that one request alone. The macOS 11 to 13 branch follows AppKit's
-  documentation and was only compiled: no such system was at hand. Unless the system grants
-  the request, the other application keeps the front: a client started in the background while
-  the user works elsewhere waits for a click into its window or a switch to it. The same holds
-  when the process lookup fails, and for a client whose chain to the launching application is
-  broken: tmux or screen, SSH, a launchd job, a script that has ended, and a client that
-  restarted itself (mod activation), whose first instance has exited. While the client
-  waits, the host asks nothing and only looks at who is in front. When it finds the client
-  itself (that one request can leave it frontmost for the system and inactive for AppKit),
-  the client's parent or nobody there, the repeated requests and the Dock reset start, and
-  their ten seconds count from that look, once per start. The reason is that the host is
-  not pumped while the engine initialises, six to seven seconds on the Intel test machine,
-  so its first look at a start can come when the ten seconds of the first request are
-  nearly or wholly gone. A look after those ten seconds that still finds the other
-  application in front ends the wait. A start from a launcher keeps counting from the first
-  request: when the initialisation outlasts its ten seconds, the host still takes the
-  system's word that the client is in front, but makes no Dock reset. An application the
-  user goes to after the first request ends the requests. A click into the inactive game
-  window starts them again, against whatever is in front then.
+  and the requests end half a second after it.
+  - *From when the ten seconds count.* From the host's first look at the start, not from the
+    first request. A look is one run of the event pump. `createWindow` looks once, right
+    after the first request. The engine then initialises without pumping, for six to seven
+    seconds on the Intel test machine and longer with a cold disk cache or in a debug build,
+    and the next look comes with the first frame. That look starts the ten seconds, once per
+    start and whoever is in front. A start whose first frame comes later than ten seconds
+    after the request therefore still gets the Dock reset and the repeated requests, and it
+    still ends, ten seconds after that look. Counted from the request, such a start ended at
+    its first frame with `[host] application not activated; click the game window or switch
+    to it`. The log marks the look: `[host] first look N ms after the first request; the ten
+    seconds count from here`.
+  - *Whose front the requests take.* The repeated requests and the Dock reset take the front
+    only from the launcher, and when nobody or the client itself is in front. The launcher is
+    the application in front at the first request when it is the client's parent or another
+    ancestor in the process tree (Terminal above the shells and scripts that started the
+    client, the OpenBF2 app); the parent chain is read with `sysctl(kern.proc.pid)`
+    (`ProcessAncestry.h`). The parent counts whenever it is in front.
+  - *Any other application in front at the first request* gets that one request and no more,
+    and the request is a cooperative one: it yields to an application that is active. On
+    macOS 14 and later every request is of that kind (`-[NSApplication activate]`, which the
+    system may refuse). On macOS 11 to 13 the caller chooses: the host makes this one request
+    with `activateIgnoringOtherApps:NO`, which activates only when no other application is
+    active, and all its other requests with `YES`, which activates whatever application is
+    active and would take the front with that one request alone. The macOS 11 to 13 branch
+    follows AppKit's documentation and was only compiled: no such system was at hand. Unless
+    the system grants the request, the other application keeps the front: a client started in
+    the background while the user works elsewhere waits for a click into its window or a
+    switch to it. The same holds when the process lookup fails, and for a client whose chain
+    to the launching application is broken: tmux or screen, SSH, a launchd job, a script that
+    has ended, and a client that restarted itself (mod activation), whose first instance has
+    exited. While the client waits, the host asks nothing and only looks at who is in front,
+    for ten seconds from its first look. When it finds the client itself (that one request
+    can leave it frontmost for the system and inactive for AppKit), the client's parent or
+    nobody there, the repeated requests and the Dock reset start, and the ten seconds count
+    once more from that look, once per start.
+  - *Later changes of the front.* An application the user goes to after the first request
+    ends the requests. A click into the inactive game window starts them again, against
+    whatever is in front then, with the ten seconds counted from the click.
 - **Cursor.** `showCursor` reproduces Win32 `ShowCursor`'s display counter (visible while
   >= 0). `setCursorHiddenInView` is `SetCursor(0)` over the client area. Relative mouse mode
   (an exclusively acquired DirectInput mouse) hides the cursor, parks it in the view's centre

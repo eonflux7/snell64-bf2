@@ -209,7 +209,9 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // at the first request (the user works elsewhere while a client starts in the background)
     // gets that one request, made on every macOS version in the form that yields to an active
     // application (requestActivation). It keeps the front unless the system itself grants that
-    // request, and an application the user goes to afterwards ends the period.
+    // request, and an application the user goes to afterwards ends the period. The ten seconds
+    // count from the host's first look at the period after window creation, not from the first
+    // request (activationCountFrom).
     bool   activationPending = false;  // an activation period is running
     bool   fullscreenPending = false;  // a fullscreen start waiting for activation (createWindow)
     // [CHOSEN, not recovered] The system reports this process active (another app activated it
@@ -220,17 +222,27 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
     double activationStarted = 0.0;  // focusNow() of the period's first request; the report counts from it
     double activationLastTry = 0.0;  // of its last request, Dock reset or look at a bystander
-    // [CHOSEN, not recovered] From when the period's ten seconds count (focusNow()): its first
-    // request, or the click that started it or ended its wait behind a bystander. The host is
-    // not pumped while the engine initialises (six to seven seconds on the Intel test machine,
-    // longer on a slower one), so a period that began behind a bystander is first looked at
-    // with most of those ten seconds gone, or all of them. The first pump that finds the front
-    // free after such a wait therefore starts the ten seconds again. It does so once per period
-    // (activationRecounted): a front that alternates between the bystander and this process
-    // cannot prolong the requests without end. Where the pump inside createWindow already finds
-    // the front free, that is this pump: nothing is gained and the period runs like a launcher's.
+    // [CHOSEN, not recovered] From when the period's ten seconds count (focusNow()). A look is one
+    // run of the event pump, which calls updateActivation. The host is not pumped while the
+    // engine initialises: the look inside createWindow follows the first request at once, and the
+    // next one comes with the first frame, six to seven seconds later on the Intel test machine
+    // and longer on a slower one, with a cold disk cache or in a debug build. Counted from the
+    // first request, most of the ten seconds would be gone at that look, or all of them, and the
+    // period would end before its Dock reset and its repeated requests could run. So they count
+    // - from the first look after the one inside createWindow, for every period that begins at
+    //   window creation and whoever is in front at that look (activationLookCounted);
+    // - once more from the first look that finds the front free after a wait behind a bystander
+    //   (activationRecounted);
+    // - from the click that starts a period or ends its wait behind a bystander, in place of the
+    //   first request (clickedWhileInactive).
+    // The two look-based counts happen once per period each, so a front that alternates between
+    // the bystander and this process cannot prolong the requests without end, and every period
+    // ends: ten seconds after the last of these counts, or with the request its Dock reset owes
+    // (dockAskedAt).
     double activationCountFrom = 0.0;
+    bool   activationLookCounted = false;
     bool   activationRecounted = false;
+    bool   creationLook = false;       // createWindow's own pump is running: the look inside it
     // [CHOSEN, not recovered] Whose front the repeated requests may take, as pids; 0: nobody's.
     // Launcher: the application in front at the first request when it is this process's parent
     // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
@@ -518,7 +530,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const FrontApp front = frontApplication();
         activationPending = true;
         activationStarted = activationCountFrom = activationLastTry = now;
-        activationRecounted = false;
+        activationLookCounted = activationRecounted = false;
         activationLauncherPid = activationBystanderPid = activationClickPid = 0;
         dockResetAt = dockAskedAt = 0.0;
         const char* relation = "nobody is in front";
@@ -623,6 +635,10 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             activationPending = true;
             activationStarted = activationCountFrom = now;
             activationFreeSince = now;
+            // The ten seconds count from this click, and no later look counts them again from
+            // window creation: clicks arrive in a pump, with the engine's initialisation over.
+            // The one exception is a click that the look inside createWindow itself delivers.
+            activationLookCounted = !creationLook;
         }
         // The Dock that this period's reset put in front is not what the user clicked away from.
         const bool ownDock = front.isDock && dockResetAt > 0.0;
@@ -634,15 +650,28 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         repeatRequest(now);
     }
 
+    // [CHOSEN, not recovered] The first look at a period after the one inside createWindow: its
+    // ten seconds count from here, whoever is in front (activationCountFrom). Once per period.
+    void countFromFirstLook(double now)
+    {
+        if (activationLookCounted || creationLook)
+            return;
+        activationLookCounted = true;
+        activationCountFrom = now;
+        std::fprintf(stderr, "[host] first look %d ms after the first request; the ten seconds count from here\n",
+                     static_cast<int>((now - activationStarted) * 1000.0));
+    }
+
     // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and for
     // ten seconds repeats the request every half second while this process may take the front.
-    // The ten seconds count from the first request. Two things move the end, because the host is
-    // not pumped while the engine initialises and so first looks at a start seconds after that
-    // request: a period that waited behind a bystander counts them again from the first pump
-    // that finds the front free (activationCountFrom), and no period ends between its Dock
-    // reset and the request that reset owes (dockAskedAt). A period whose front was free from
-    // the start, a launcher's, gets no second count: first looked at after its ten seconds, it
-    // enters the system-state fallback where that applies and ends without a Dock reset.
+    // The host is not pumped while the engine initialises and so first looks at a start seconds
+    // after its first request, however long the initialisation takes. The ten seconds therefore
+    // count from that look, the first after the one inside createWindow (countFromFirstLook),
+    // and a period that waited behind a bystander counts them once more from the first look that
+    // finds the front free (activationCountFrom). A period that is first looked at later than
+    // ten seconds after its request thus still gets the system-state fallback, the Dock reset and
+    // the repeated requests, and ends ten seconds after that look. No period ends between its
+    // Dock reset and the request that reset owes (dockAskedAt).
     void updateActivation()
     {
         if (!activationPending)
@@ -681,6 +710,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                              front.name.UTF8String ?: "?");
                 return;
             }
+            countFromFirstLook(now);
             // The bystander of the first request is in front: it had that one request, and
             // nothing is aimed at it. The period only waits for this process, its parent or
             // nobody to be in front, or for the user's click. The half-second cadence runs on, so
@@ -696,12 +726,14 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                 activationLastTry = now;
             return;
         }
+        countFromFirstLook(now);
         if (mayTakeFront && activationFreeSince == 0.0)
         {
             // The front is free after a wait behind the bystander: this process, its parent or
-            // nobody is in front. The first time in a period, the ten seconds count from here.
-            // Without that a start whose first pump comes late would have a second or two left
-            // for the requests, the system-state fallback and the Dock reset, or none at all.
+            // nobody is in front. The first time in a period, the ten seconds count from here
+            // once more. Without that a front that comes free late in the wait would leave a
+            // second or two for the requests, the system-state fallback and the Dock reset, or
+            // none at all.
             activationFreeSince = now;
             if (!activationRecounted)
             {
@@ -1992,7 +2024,12 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
         [window makeKeyAndOrderFront:nil];
         [window makeFirstResponder:view];
     }
+    // [CHOSEN, not recovered] The look inside createWindow. It follows the first request at once
+    // and is the last one before the engine has initialised, so the activation period's ten
+    // seconds count from the look after it, not from this one (Impl::countFromFirstLook).
+    m_impl->creationLook = true;
     pumpEvents();                                // deliver the activation before returning
+    m_impl->creationLook = false;
     m_impl->syncFocus();
     return true;
 }
@@ -2498,10 +2535,12 @@ void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallb
     }
 }
 
-void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host)
+void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host, bool insideCreateWindow)
 {
+    host.m_impl->creationLook = insideCreateWindow;   // as createWindow sets it around its pump
     host.m_impl->updateActivation();            // pump's order
     host.m_impl->reconcileFocus();
+    host.m_impl->creationLook = false;
 }
 
 CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest(const host::ClientHost& host)

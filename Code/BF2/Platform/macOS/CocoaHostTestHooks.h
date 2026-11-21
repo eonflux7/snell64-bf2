@@ -47,9 +47,13 @@ public:
     // The delegate callbacks, after the simulated state was changed to match.
     enum FocusCallback { WindowBecameKey, WindowResignedKey, AppBecameActive, AppResignedActive };
     static void focusCallbackForTest(host::ClientHost& host, FocusCallback callback);
-    // The focus part of pumpEvents: the launch activation, then the reconciliation.
-    static void pumpFocusForTest(host::ClientHost& host);
+    // The focus part of pumpEvents: the launch activation, then the reconciliation. One call is
+    // one look of the host at the activation period. `insideCreateWindow` makes it the look that
+    // createWindow runs right after the first request: the period's ten seconds do not count
+    // from that one but from the next look, as from the first frame's pump in the client.
+    static void pumpFocusForTest(host::ClientHost& host, bool insideCreateWindow = false);
     // The first activation request, as createWindow makes it when the game window is shown.
+    // createWindow then looks once (pumpFocusForTest with insideCreateWindow).
     static void beginActivationForTest(host::ClientHost& host);
     // A first request either ignores other applications or is cooperative, that is, it yields to
     // an active application on every macOS version. Before macOS 14 the two are

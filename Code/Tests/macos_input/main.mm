@@ -868,10 +868,12 @@ void testProcessAncestry()
 // cooperative request and keeps the front. Cooperative means that the request yields to an active
 // application on every macOS version: before macOS 14 the host makes it with
 // activateIgnoringOtherApps:NO, and every other request with YES, which activates whatever
-// application is active. The requests run for ten seconds, counted from the first request or,
-// once, from the first look that finds the front free after a wait behind such an application;
-// and no period ends between its Dock reset and the request after it. Requests and Dock resets
-// are counted, none is made.
+// application is active. A look is one run of the host's event pump. createWindow looks once,
+// right after the first request; the next look comes with the first frame, when the engine has
+// initialised. The requests run for ten seconds, counted from that look, the first after the one
+// inside createWindow, and once more from the first look that finds the front free after a wait
+// behind an unrelated application; and no period ends between its Dock reset and the request
+// after it. Requests and Dock resets are counted, none is made.
 void testLaunchActivation()
 {
     begin("launch activation: only a launcher loses the front to repeated requests");
@@ -913,15 +915,27 @@ void testLaunchActivation()
         sys.frontPid = browser;
         after(20.0);
     };
-    // A start: the game window is shown inactive with `front` in front, which makes the first
-    // request.
-    const auto start = [&](int front)
+    // The first request: the game window is shown inactive with `front` in front.
+    const auto request = [&](int front)
     {
         finish();
         sys.frontPid = front;
         after(1.0);
         base = stats();
         Hooks::beginActivationForTest(host);
+    };
+    // The look inside createWindow, which follows the first request at once.
+    const auto lookInsideCreateWindow = [&]()
+    {
+        Hooks::pumpFocusForTest(host, true);
+        sys.windowKey = Hooks::focusRepairStatsForTest(host).windowKey;
+    };
+    // A start, as createWindow makes it: the first request and its own look. Every `after` that
+    // follows is a later look, and the first of them stands for the first frame's.
+    const auto start = [&](int front)
+    {
+        request(front);
+        lookInsideCreateWindow();
     };
     Hooks::overrideFocusForTest(host, false, false);
 
@@ -936,9 +950,9 @@ void testLaunchActivation()
     check(stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0,
           "while it stays in front nothing is repeated and the Dock is left alone");
     check(!host.hasFocus() && !host.isAppActive() && !fallback(), "the game stays without focus");
-    after(3.0);
+    after(3.0);                                 // 10.1 s after the first look
     check(!stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0,
-          "after ten seconds the host stops waiting, with that one request made");
+          "ten seconds after its first look the host stops waiting, with that one request made");
     check(ignoringOthers() == 0, "and no request of the whole wait ignored other applications");
 
     // The first request by who is in front. It ignores other applications when the launcher,
@@ -1131,12 +1145,104 @@ void testLaunchActivation()
     after(0.6);
     after(0.6);
     check(retries() == 1 && dockResets() == 1, "lookup denied: the parent is still the launcher");
+    sys.ancestryDenied = false;
 
-    // The host is not pumped while the engine initialises: its first look at a start comes six to
-    // seven seconds after the first request on the Intel test machine and later on a slower one.
+    // The host is not pumped while the engine initialises: its first look at a start after the
+    // one inside createWindow comes six to seven seconds after the first request on the Intel
+    // test machine and later on a slower one. A period's ten seconds count from that look, so the
+    // repair is the same however long the initialisation took. Here a launcher's period is first
+    // looked at 10.5 s and 30 s after the request (a cold disk cache, a debug build): it still
+    // gets its Dock reset and its repeated requests, and ends ten seconds after that look.
+    for (double firstLook : { 10.5, 30.0 })
+    {
+        char what[240];
+        const auto say = [&](const char* text)
+        {
+            std::snprintf(what, sizeof what, "a launcher's period first looked at %.1f s after the request, %s",
+                          firstLook, text);
+            return what;
+        };
+        // The launcher is still in front: the system refused the first request.
+        start(terminal);
+        after(firstLook);
+        check(stats().pending && requests() == 1 && dockResets() == 1 && retries() == 0 && !fallback(),
+              say("the launcher in front: the period goes on and the activation is reset through the Dock at once"));
+        sys.frontPid = dock;
+        after(0.35);
+        check(stats().pending && retries() == 1, say("the launcher in front: the request after the reset is made"));
+        sys.frontPid = terminal;                // refused: the launcher is in front again
+        after(0.6);
+        after(0.6);
+        check(stats().pending && retries() == 3 && dockResets() == 1,
+              say("the launcher in front: the requests go on every half second, with the one Dock reset"));
+        after(8.3);                             // 9.85 s after the first look
+        check(stats().pending && retries() == 4,
+              say("the launcher in front: the period still runs 9.85 s after that look"));
+        after(0.2);                             // 10.05 s after the first look
+        check(!stats().pending && retries() == 4 && dockResets() == 1 && !host.hasFocus(),
+              say("the launcher in front: the period ends ten seconds after that look"));
+        // This process is in front for the system while AppKit reports it inactive, the state
+        // seen after a start from Terminal on Apple silicon.
+        start(terminal);
+        sys.frontPid = self;
+        after(firstLook);
+        check(stats().pending && fallback() && host.hasFocus() && dockResets() == 1 && retries() == 0,
+              say("this process in front for the system: its state is used and the activation reset through the Dock at once"));
+        sys.frontPid = dock;
+        after(0.35);
+        check(stats().pending && retries() == 1 && host.hasFocus(),
+              say("this process in front for the system: the request after the reset is made"));
+        sys.frontPid = self;                    // refused: in front for the system again, AppKit inactive
+        after(0.6);
+        after(0.6);
+        check(stats().pending && retries() == 3 && dockResets() == 1 && fallback(),
+              say("this process in front for the system: the requests go on every half second, with the one Dock reset"));
+        after(8.3);                             // 9.85 s after the first look
+        check(stats().pending && retries() == 4,
+              say("this process in front for the system: the period still runs 9.85 s after that look"));
+        after(0.2);                             // 10.05 s after the first look
+        check(!stats().pending && retries() == 4 && fallback() && host.hasFocus(),
+              say("this process in front for the system: the period ends ten seconds after that look, "
+                  "the system's state still holding the focus"));
+    }
+    // The request after that late Dock reset is granted: active without a click.
+    start(terminal);
+    sys.frontPid = self;
+    after(30.0);
+    sys.frontPid = dock;
+    after(0.35);
+    appKitActive();
+    after(0.05);
+    check(!stats().pending && !fallback() && host.hasFocus() && retries() == 1 && dockResets() == 1,
+          "a launcher's period first looked at 30.0 s after the request, the request after the reset granted: active");
+    // First looked at within ten seconds of the request (6.5 s, the Intel test machine), a period
+    // makes the requests it made when its ten seconds counted from the request, and goes on
+    // making them until ten seconds after that look.
+    start(terminal);
+    after(6.5);
+    check(stats().pending && dockResets() == 1 && retries() == 0,
+          "first look 6.5 s after the request: the activation is reset through the Dock at once");
+    sys.frontPid = dock;
+    after(0.35);
+    sys.frontPid = terminal;
+    after(0.6);
+    after(0.6);                                 // 8.05 s after the request
+    check(retries() == 3 && dockResets() == 1, "first look 6.5 s after the request: three requests in the next 1.55 s");
+    after(2.0);                                 // 10.05 s after the request, 3.55 s after the first look
+    check(stats().pending && retries() == 4,
+          "first look 6.5 s after the request: ten seconds after the request the period goes on");
+    after(6.3);                                 // 9.85 s after the first look
+    check(stats().pending && retries() == 5,
+          "first look 6.5 s after the request: the period still runs 9.85 s after that look");
+    after(0.2);                                 // 10.05 s after the first look
+    check(!stats().pending && retries() == 5 && dockResets() == 1,
+          "first look 6.5 s after the request: the period ends ten seconds after that look");
+
     // A start behind a bystander (here Terminal, the lookup denied) whose one request left this
     // process frontmost for the system and inactive for AppKit is repaired in full however late
-    // that look comes, because the ten seconds count again from it.
+    // the first look comes: the ten seconds count from that look, which is also the first to find
+    // the front free.
+    sys.ancestryDenied = true;
     for (double firstLook : { 8.8, 9.5, 10.5 })
     {
         char what[160];
@@ -1161,12 +1267,42 @@ void testLaunchActivation()
         after(0.05);
         check(!stats().pending && !fallback() && host.hasFocus(), say("and granted: active without a click"));
     }
-    // The same late look with the bystander still in front: the wait is over, nothing is asked.
+    // The same late look with the bystander still in front: the ten seconds count from that look
+    // as for every period, so the host goes on waiting. Nothing is asked while the bystander stays.
     start(terminal);
     after(10.5);
-    check(!stats().pending && retries() == 0 && dockResets() == 0 && !host.hasFocus(),
-          "first look 10.5 s after the request, the bystander still in front: the host stops waiting");
+    check(stats().pending && retries() == 0 && dockResets() == 0 && !host.hasFocus(),
+          "first look 10.5 s after the request, the bystander still in front: the host goes on waiting and asks nothing");
+    after(9.9);
+    check(stats().pending && retries() == 0 && dockResets() == 0,
+          "the wait behind the bystander lasts ten seconds from that look");
+    after(0.2);                                 // 10.1 s after the first look
+    check(!stats().pending && requests() == 1 && retries() == 0 && dockResets() == 0 && !host.hasFocus(),
+          "then the host stops waiting, with the one request made");
+    // This process comes to the front during that wait: repaired as after an earlier look.
+    start(terminal);
+    after(10.5);
+    sys.frontPid = self;
+    after(4.0);                                 // 14.5 s after the request
+    check(stats().pending && retries() == 1 && dockResets() == 0 && !fallback(),
+          "this process in front 4 s after a first look at 10.5 s: the request is repeated");
+    after(0.6);
+    after(0.6);
+    check(retries() == 2 && dockResets() == 1 && fallback() && host.hasFocus(),
+          "and a second later the system's state is used and the activation reset through the Dock");
     sys.ancestryDenied = false;
+    // The one cooperative request can be granted for the system at once. The look inside
+    // createWindow then already finds this process in front and counts the ten seconds for a
+    // front that came free. The next look counts them from itself all the same, so this start is
+    // repaired too when that look comes late.
+    request(editor);
+    sys.frontPid = self;
+    apply(0.0);
+    lookInsideCreateWindow();
+    after(10.5);
+    check(stats().pending && fallback() && host.hasFocus() && dockResets() == 1 && retries() == 0,
+          "an unrelated application at the request, this process in front at the look inside createWindow, the next "
+          "look 10.5 s later: the system's state is used and the activation reset through the Dock");
     // The front can also come free late by the bystander quitting: nobody in front counts alike.
     start(editor);
     after(9.0);
@@ -1177,8 +1313,8 @@ void testLaunchActivation()
     check(stats().pending && retries() == 2 && dockResets() == 1,
           "nobody in front 9.6 s after the request: two requests and the Dock reset follow");
 
-    // The ten seconds count again once per period. A front that goes back to the bystander and
-    // returns to this process does not start them a second time.
+    // For a front that comes free, the ten seconds count once per period. A front that goes back
+    // to the bystander and returns to this process does not start them again.
     start(editor);
     after(3.0);
     sys.frontPid = self;
@@ -1196,14 +1332,16 @@ void testLaunchActivation()
           "but the ten seconds are not counted a third time: the period ends");
 
     // The Dock reset puts the Dock in front until this process asks again, so no period ends
-    // between the two. Here a launcher's period is first looked at 9.8 s after the request.
+    // between the two. Here a launcher's period is first looked at 0.2 s after the request and
+    // then not for 9.8 s (a pump that stalls): the reset comes 9.8 s into the ten seconds.
     start(terminal);
     sys.frontPid = self;
+    after(0.2);
     after(9.8);
     check(fallback() && dockResets() == 1 && retries() == 0,
-          "first look 9.8 s after the request: the system's state is used and the activation reset at once");
+          "a look 9.8 s after the first one: the system's state is used and the activation reset at once");
     sys.frontPid = dock;
-    after(0.25);                                // 10.05 s after the request
+    after(0.25);                                // 10.05 s after the first look
     check(stats().pending && retries() == 0 && host.hasFocus(),
           "ten seconds over, the request after the reset still owed: the period goes on");
     after(0.1);
@@ -1217,31 +1355,25 @@ void testLaunchActivation()
     // A pump that comes late after the reset still makes that request, and sees it granted.
     start(terminal);
     sys.frontPid = self;
+    after(0.2);
     after(9.8);
     sys.frontPid = dock;
-    after(2.5);
+    after(2.5);                                 // 12.3 s after the first look
     check(stats().pending && retries() == 1 && dockResets() == 1,
           "no pump for 2.5 s after the Dock reset: the owed request is made by the next one");
     appKitActive();
     after(0.05);
     check(!stats().pending && !fallback() && host.hasFocus(), "and granted: active without a click");
-    // A launcher's period has its front free from the start and counts its ten seconds from the
-    // first request, whatever the engine's initialisation takes of them. First looked at after
-    // them, it uses the system's state and ends without a Dock reset.
-    start(terminal);
-    sys.frontPid = self;
-    after(10.5);
-    check(!stats().pending && fallback() && host.hasFocus() && retries() == 0 && dockResets() == 0,
-          "a launcher's period first looked at 10.5 s after the request: the system's state, no Dock reset");
     // The first request after the reset settles that debt, also when a click makes it.
     start(terminal);
     sys.frontPid = self;
+    after(0.2);
     after(9.8);
     sys.frontPid = dock;
     apply(0.1);
     click();
     check(stats().pending && retries() == 1, "a click with the Dock in front after the reset: its request is the owed one");
-    after(0.55);                                // 10.45 s after the first request
+    after(0.55);                                // 10.45 s after the first look
     check(!stats().pending && retries() == 1, "half a second later the period ends without another request");
 
     // A click into the inactive game window is the user choosing the game: the requests start,
@@ -1274,6 +1406,24 @@ void testLaunchActivation()
     after(10.0);
     check(stats().pending && retries() == 7,
           "no pump for ten seconds after that reset: the request it owes is still made");
+    // A period that a click starts counts its ten seconds from the click. Clicks arrive in a pump,
+    // after the engine's initialisation, so the look that follows does not count them again.
+    finish();
+    sys.frontPid = editor;
+    after(1.0);
+    base = stats();
+    click();
+    after(0.3);
+    after(0.9);                                 // 1.2 s after the click: the Dock reset
+    sys.frontPid = dock;
+    after(0.35);
+    sys.frontPid = editor;
+    after(8.35);                                // 9.9 s after the click
+    check(stats().pending && retries() == 3 && dockResets() == 1,
+          "a period that a click starts still runs 9.9 s after the click");
+    after(0.15);                                // 10.05 s after the click, 9.75 s after the look that followed it
+    check(!stats().pending && retries() == 3,
+          "and ends ten seconds after the click, not ten seconds after the look that followed it");
 
     // A click that ends a wait behind the bystander starts the ten seconds as well.
     start(editor);
