@@ -18,7 +18,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 Design, decisions and what is built: [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections).
 One A/B console variable per part while in development (`renderer.atmosphere`,
-`renderer.viewDistance`, `renderer.skyIbl`, `renderer.waterSsr`); all
+`renderer.viewDistance`, `renderer.waterSsr`); all
 deleted with the old paths at acceptance. The owner judges each A/B by eye against the plan's
 "what should change" list; a task that works but does not look better is not done. Every task that
 adds a frame resource is tried across device resets (`renderer.vsync` toggled while it draws).
@@ -40,8 +40,9 @@ Tasks:
 7. Sky cube (s10), SH9 irradiance (`RaSkySH`, c192–c198), split-sum BRDF table (s11). Built;
    checked by an agent with `tools.atmosphere`. Retail environment maps deleted at acceptance
    where nothing else reads them.
-8. Shared lighting model (`renderer.skyIbl`, contract 11). Built; bundled meshes wired with a
-   placeholder class, seen by an agent on test_bootcamp.
+8. Shared lighting model, one physical light (contract 11). Built; bundled meshes wired with a
+   placeholder class; the owner's look on test_bootcamp: better. Left: foliage and particles'
+   sky light (per vertex), point lights against the new sun.
 9. Bundled meshes (judged on test_bootcamp). Look for: paint and glass reflecting the sky,
    strongest at grazing angles; vehicles lit from above and darker beneath; no edge sparkle.
 10. Static meshes. Look for: glass and metal on buildings reflecting the sky; walls lit by the sky
@@ -59,10 +60,6 @@ Tasks:
 Built and checked by an agent; an entry goes when the owner has seen it.
 
 - Atmosphere tab (`tools.atmosphere`, milestone 11 task 2).
-- Sky light A/B (milestone 11 task 8): test_bootcamp views `gloss`, `gloss2`, `glass`,
-  `renderer.skyIbl 0/1`. Vehicles turn bluer from above and darker in shade. Owner's choice: keep
-  the old sky brightness (now) or each level's authored sky luminance (Fallujah West's sky would
-  outshine its sun).
 - Sky cube (milestone 11 task 7): `tools.atmosphere NAME` writes `NAME-skycube.png` (faces across,
   mips down) on Muttrah City; nothing in the scene reads it until task 8.
 - Device reset crash in the first frame (stale `RaShadowViewProj` handle): fixed in `717b2671`,

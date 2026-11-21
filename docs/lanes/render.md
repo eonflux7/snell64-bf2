@@ -169,14 +169,17 @@ Design:
   sun disc and the sky cube. A ground haze layer (density falling exponentially with height) drives
   aerial perspective. One atmosphere dense enough to reach full haze at PR's fog end (0.5–2 km)
   would turn the whole sky into haze, so they cannot be one.
-- **Fit at load.** (1) Sunlight above the atmosphere = authored sun / transmittance at the sun's
-  elevation, the transmittance clamped to at least 0.1 per channel (low suns, night layers),
-  evaluated with the sky's own parameters at every step of (2). (2) The sky: Earth's air on every
-  level (Rayleigh, Mie and ozone at Earth's densities and colour), a clear sky. One **sky gain** per
-  level scales the scattered light so the azimuth-averaged horizon at 1° meets the authored fog
-  colour's luminance, applied as gain^`renderer.skyGainBlend` (0 a physical sky, 1 the authored
-  level; default 0.5, settled at task 3's sky A/B). The sun (surfaces, disc) is never scaled.
-  (3) The haze layer: density from fog end, albedo from the authored fog colour, one height
+- **One light, physical** (owner, 2026-11-21: the authored mood could not be kept; physically
+  correct now, the look adjusted in post). The sun at the ground is the one every lit surface
+  takes: the authored sun decoded as the shaders decode it (colour^2.2 x 2^2.2, gamma and the x2
+  overbright), the anchor the lightmaps were baked under. Everything else is physical under it:
+  the sky, the sun disc, the haze's light, the sky cube and the sky irradiance. No authored sky or
+  fog brightness is applied; the frame grade's exposure (0 stops) sets the image, auto-exposure in
+  milestone 13.
+- **Fit at load.** (1) Sunlight above the atmosphere = that sun / transmittance at the sun's
+  elevation, the transmittance clamped to at least 0.1 per channel (low suns, night layers).
+  (2) The sky: Earth's air on every level (Rayleigh, Mie and ozone at Earth's densities and
+  colour), a clear sky, unscaled. (3) The haze layer: density from fog end, albedo from the authored fog colour, one height
   falloff for all levels, tuned at the aerial-perspective A/B.
 - **Haze curve.** Exponential in optical depth throughout, continuing past fog end for the scenery
   there; objects end at fog end by the radial dither, not by full haze (owner, 2026-11-20, at task 5:
@@ -187,15 +190,15 @@ Design:
   code the fit evaluates, into managed textures that survive device resets. Per frame only the
   aerial-perspective atlas, a pixel pass, with cascade shadowing per slice for the shafts.
 - **Sky cube.** Upper half: the model's sky (and milestone 12's clouds once they exist). Lower half: the ground, the terrain
-  colormap's mean colour lit by the authored sun and sky, under the haze at the horizon (sky alone
+  colormap's mean colour lit by the sun and this sky, under the haze at the horizon (sky alone
   below the horizon makes every glossy surface look chrome). Prefiltered GGX, one mip per
   roughness; its irradiance as 9 spherical-harmonic coefficients, taken at load.
 - **Sky light.** Every receiver's sky term is the irradiance at its normal times its occlusion:
   statics and terrain the lightmap's sky visibility, vehicles and soldiers the hemi map,
   first-person models the sky visibility under the camera (the terrain lightmap's sky channel
-  copied to memory at load, read under the camera, smoothed over about 0.3 s). The irradiance is scaled so its upward
-  value keeps the luminance of the authored sky colour: each level keeps its balance, and only the
-  direction and colour change.
+  copied to memory at load, read under the camera, smoothed over about 0.3 s). The irradiance is the model's, unscaled.
+  On test_bootcamp the sky lights an up-facing surface at 0.065 of the sun (the old flat sky:
+  0.18), about a clear day's in clean air; more aerosol is the lever if shade reads too dark.
 - **Lighting model.** Direct sun specular and ambient specular from the same roughness and F0 (GGX,
   split sum). Material interpretation without new assets: gloss maps become roughness, and each
   class (paint, glass, metal, fabric) has its own F0 and roughness range. The engine holds the class
@@ -249,11 +252,9 @@ Decisions (owner, 2026-11-20):
   so the sky, the sun disc and the haze agree with it.
 - The authored fog end stays the visibility limit (PR's view distance): objects end there by the
   radial dither (see View distance); the haze does not reach full there.
-- The authored dome and fog are brighter than a physical sky under the authored sun (by day the
-  horizon needs 2.7x on Muttrah City, 3.1x on Saaremaa, 5.1x on Fallujah West; 0.11x at night),
-  and a full physical fit (Rayleigh and Mie densities free) ran to its bounds on Fallujah West. The
-  sky keeps physics for its shape and colour and takes a per-level sky gain, partly applied, set by
-  `renderer.skyGainBlend` (task 2).
+- The sky is physical under the surfaces' sun, with no per-level gain (owner, 2026-11-21; it
+  replaced the partly applied sky gain of tasks 2–7). The authored horizon is brighter than the
+  model's (5.2x on test_bootcamp), shown by the tools but not applied.
 - Bloom stays in milestone 13. The sun's glow and specular glints read fully only then, and are
   judged here knowing that. (Delegated, 2026-11-20.)
 
@@ -326,26 +327,24 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   whole map, then the sea in rings of cells to the horizon in each direction whose surrounding slot
   ends in open, sunlit sea. Bundled and skinned meshes past the cut are not submitted.
 - **Sky cube** (task 7, `SkyCube.cpp`, contract 10): built on the CPU with the sky view (at the fit
-  and on `renderer.skyGainBlend` changes), 108 ms on Muttrah City, into managed textures (six
+), 108 ms on Muttrah City, into managed textures (six
   device resets passed). Below the horizon: the colormaps' mean albedo times (authored sun x sun
-  cosine + authored sky), hazed over the path from 10 m up (`kGroundViewHeight`) to the horizon's
+  cosine + the model sky's up irradiance), hazed over the path from 10 m up (`kGroundViewHeight`) to the horizon's
   radiance. Prefilter: 64 GGX samples per texel, the source mip chosen per sample. SH9 projected
-  from the top mip, sky and ground apart; only the sky is scaled (3.7x on Muttrah City: the sky's
-  up irradiance 0.17 0.35 0.74, bluer than the authored grey, by design). SH9 against the cosine
+  from the top mip, unscaled. SH9 against the cosine
   integral: within 1 % sideways, 2–13 % straight up and down (ringing at the horizon's step).
-  Nothing reads it until task 8. `tools.atmosphere` dumps it ([tools.md](tools.md#atmosphere)).
-- **Shared lighting model** (task 8, A/B `renderer.skyIbl`, contract 11): with the shaders, behind
-  `RaSkySH[6].w`. One perceptual roughness and F0 per pixel drive the sun's GGX highlight and the
-  sky's (split sum: cube mip roughness x 5, table on s11); gloss maps become roughness within the
-  material class's range, metals take F0 from albedo; roughness widened by the normal's
-  screen-space derivatives. Sky light: the SH at the normal times the receiver's sky visibility,
-  normalised in the shader to the old model's brightness (up, open: 0.18 of the sun), so only its
-  direction and colour change; the authored per-level sky luminance (to which the engine scales the
-  SH) is not used yet, which leaves the owner to choose at the A/B. Specular from the sky in
-  scene units, the sky as drawn, occluded by the sky visibility (Lagarde). Bundled meshes use it
-  first (task 9), with a placeholder class (env-mapped: paint, else matte). Seen on test_bootcamp
-  (agent, 2026-11-21): vehicles lit bluer from above and darker in shade (this level's SH sky is
-  B/R 4.7, against the old neutral sky), a sky sheen on grazing tops; glass waits for task 9's classes.
+  `tools.atmosphere` dumps it ([tools.md](tools.md#atmosphere)).
+- **Shared lighting model** (task 8, contract 11; no A/B, owner 2026-11-21): with the shaders.
+  The sky cube and SH are in the surfaces' units (the fit's sun is theirs), unscaled. Every
+  per-pixel lit shader takes its sky light from the SH at its normal times its sky visibility;
+  foliage and particles light per vertex, cannot read the pixel registers, and keep the old flat
+  sky (0.18 of the sun) until they get the SH as a parameter. Material model (effects opting in;
+  bundled meshes first, with a placeholder class until task 9): one perceptual roughness and F0 per
+  pixel drive the sun's GGX highlight and the sky's (split sum); gloss maps become roughness within
+  the material class's range, metals take F0 from albedo; roughness widened by the normal's
+  screen-space derivatives; sky specular occluded by the sky visibility (Lagarde). The frame
+  grade's exposure went from −1.25 to 0 stops with it (owner: looks better), particle emissives
+  following it. Not yet checked against the new sun: baked and dynamic point lights.
 - **Left** (owner's look, 2026-11-20: good on Saaremaa, Kashan Desert, Burning Sands, The Falklands): the far ground ring (land past the ring
   shows sky); below the horizon the sky repeats its horizon row, flat (seen from the air until the
   ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets
@@ -388,7 +387,7 @@ about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at acceptance.
 
 An energy-conserving bloom without threshold, and exposure that adapts between interiors and open
 terrain, both before the frame grade. The tonemap's output dithered before its 8-bit encode: the sky's dark blue
-bands without it (milestone 11). Bloom spreads the sun disc (luminance capped at 100) into its glare. Night layers need it: with the fixed exposure (−1.25 stops)
+bands without it (milestone 11). Bloom spreads the sun disc (luminance capped at 100) into its glare. Night layers need it: with the fixed exposure (then −1.25 stops; 0 since 2026-11-21)
 The Falklands night terrain reaches the tonemap at about 0.0155, and Khronos Neutral's toe
 (6.25·x² below 0.08) shows it at 5/255, where retail drew about 30/255. The adaptation needs an
 upper limit so night stays dark (about retail's level), and the toe may need softening for what
@@ -397,8 +396,8 @@ stays below 0.08. Night particles (milestone 7) are checked here, on The Falklan
 
 The compressed (Karis) resolve, moved here from milestone 10 (owner, 2026-11-20), decided by an A/B
 once auto-exposure runs: at a window seen from a dark interior and at foliage against the sky. It
-pays only where an edge's samples straddle the tonemap's shoulder, which at today's fixed exposure
-(−1.25 stops, Neutral linear to about 0.8) is little beyond the sky and specular glints (milestone
+pays only where an edge's samples straddle the tonemap's shoulder, which at the fixed exposure
+(0 stops since 2026-11-21) is little beyond the sky and specular glints (milestone
 11 handles those). Cost found in a first attempt: every scene pixel shader encodes through a flag
 in an engine-owned pixel register, the resolve expands in the depth rebuild's full-screen pass, and
 every pass blending before the resolve (decals, particles, water, first-person transparents,
@@ -610,7 +609,7 @@ and add its row here.
 | 8 | Aerial perspective (render milestone 11, task 4): the atlas (contract 6) is bound to the reserved sampler s9 (linear, clamp) after it draws, and pixel register c223 is the engine's `RaAerial` (1 / the viewport's width and height, 1 / fog end, w 1 while the atlas holds the world view's haze; zero in the first-person passes, under water, with `renderer.atmosphere 0`), published with `RASM`. Lit shaders fog through `Ra_GetAerial` (VPOS and the distance pick the atlas texel; w 0 or thermals: retail's fog curve). `RaAtmosPerspective` also gets `RaSkyViewTable`: full haze is the sky's radiance along each ray. `RaAtmosphere` rows 8–10: [8] unused (the steepening, removed at contract 9), [9].rgb the sun at the ground, [10].rgb the sky light |
 | 9 | View distance (render milestone 11, task 5): `RaAerial.w` is 2 while the radial cut applies (`renderer.viewDistance`, the world view with the atlas). `Ra_ViewDistanceFade` (1 inside, 0 at fog end and beyond, over the last 15 % by distance from the camera) and `Ra_ViewDistanceClip` (that fade against a 4x4 Bayer threshold, `Ra_Bayer4`) are called by every opaque world effect's main pixel shader, which its depth prepass calls too; blended effects (particles, trails, decals) take the fade on alpha. The atlas is no longer steepened: the haze stays exponential up to fog end. `RaAerialHaze` (c199, engine-owned, published with `RaAerial`): the haze's density at the camera's height and 1 / its height falloff; past fog end `Ra_GetAerial` integrates the haze in closed form along the pixel's ray (world-space positions). Static meshes (`RaShaderSTM`, and trees through the leaf and trunk effects), overgrowth and roads are not cut: the engine culls static meshes by size on screen, overgrowth at its own range |
 | 10 | Sky cube (render milestone 11, task 7): the sky cube on the reserved sampler s10 (`A16B16G16R16F` cube, 128 per face, 6 mips, trilinear, clamp): mip m is GGX-prefiltered for perceptual roughness m / 5 (alpha its square), so `texCUBElod(dir, roughness * 5)`; the model's clear sky above the horizon (no sun disc), the lit ground hazed toward the horizon below it; in scene units, the drawn sky's scale. The split-sum BRDF table on s11 (64x64 `A16B16G16R16F`, bilinear, clamp): u n.v, v perceptual roughness, r scale and g bias on F0 (Smith GGX, k = alpha / 2). `RaSkySH` in pixel registers c192–c198 (engine-owned): the sky's irradiance / pi (the authored sky colour's unit) at normal n per channel ch = dot([ch], (n, 1)) + dot([3 + ch], n.xyzz * n.yzzx) + [6][ch] * (n.x² − n.y²); [6].w 1 while live, all zero (and s10, s11 unbound) with `renderer.atmosphere 0` or before the first fit. Its sky part is scaled so its upward value keeps the authored sky colour's luminance; the ground's bounce is not scaled |
-| 11 | Sky light A/B (render milestone 11, task 8): `RaSkySH[6].w` is 1 while the sky cube is live and `renderer.skyIbl` is on, else 0; lit shaders take their sky light (the SH) and ambient specular (the cube and the split-sum table) only while it is 1. The cube, the table and the coefficients stay bound whenever live |
+| 11 | One light (render milestone 11, task 8): the atmosphere's sun at the ground (`RaAtmosphere[9]`, the sky, disc and haze) is the surfaces' sun, the authored colour^2.2 x 2^2.2; the sky is physical under it, unscaled (the sky gain is gone, `RaAtmosphere[4].w` is 1); `RaSkySH` and the sky cube are in those units, unscaled, so a shader uses them as they are next to `Ra_SunIrradiance` |
 
 Samplers 9, 10, 11, 13 and 15 are reserved for renderer frame resources, and pixel registers
 c192–c223 for `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

@@ -397,9 +397,9 @@ and other formats are reported unread.
 `RendDX9/ToolsAtmosphere.cpp`: the atmosphere's fit and its tables as drawn, for reading without
 the debug menu. Fails while `renderer.atmosphere` is 0 or before the first fit.
 
-- `[fit]`: fit time, reference height, fog end; sky gain and the applied share
-  (`renderer.skyGainBlend`); sunlight above the atmosphere; the zenith model and the horizon target
-  against the model (before the gain); ground albedo; haze density and albedo. `[atlas]`: its format and the
+- `[fit]`: fit time, reference height, fog end; the authored horizon over the model's (not
+  applied); sunlight above the atmosphere; the zenith model and the horizon target against the
+  model; ground albedo; haze density and albedo. `[atlas]`: its format and the
   vertex texture fetch check.
 - Per table (`transmittance`, `multiscatter`, `skyview`, `perspective`): size; per channel min,
   max, mean and the count of non-finite values; a PNG `<NAME>-<table>.png` with rgb scaled to the
