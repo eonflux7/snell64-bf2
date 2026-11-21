@@ -2823,8 +2823,9 @@ if(APPLE OR UNIX)
     endif()
 endif()
 
-# [TEMP] The argv join of the console entry points against the recovered SimpleParser
-# (Code/Tests/command_line_join_runtime.cpp); retail fix in docs/retail-fixes.md. Built on request.
+# [TEMP] The argv join of the console entry points against the recovered SimpleParser, and
+# SimpleParser::getKey's values against a model of the retail body
+# (Code/Tests/command_line_join_runtime.cpp); retail fixes in docs/retail-fixes.md. Built on request.
 # On macOS it also runs the client relaunch round trip through MacSystem.cpp's splitCommandLine,
 # which is compiled for the client image only (DEDICATED=0) and links CoreFoundation for its alert.
 if(APPLE OR UNIX)

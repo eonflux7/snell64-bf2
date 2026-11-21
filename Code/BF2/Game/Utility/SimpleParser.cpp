@@ -2,7 +2,7 @@
 
 #include "SimpleParser.h"
 
-#include <cstring>      // strncpy, strlen
+#include <cstring>      // memchr
 #include <cctype>       // isspace
 #include <iostream>     // std::cout - the literal 0x8990720 in showHelp is _ZSt4cout, attested by
                         // the ELF symtab entry at 0x8048FAC (value 0x8990720, size 0x8C)
@@ -10,6 +10,21 @@
 
 namespace dice {
 namespace hfe {
+
+namespace {
+
+// Assigns the count characters of str that start at begin, ended at the first NUL among them: the
+// value that retail's strncpy into a stack buffer, its terminator and assign(buffer, strlen(buffer))
+// produce, without the buffer and its limit (retail fix in getKey).
+void assignValue(std::string* value, const std::string& str, std::string::size_type begin,
+                 std::string::size_type count)
+{
+    const char* text = str.c_str() + begin;
+    const char* nul = static_cast<const char*>(std::memchr(text, 0, count));
+    value->assign(text, nul ? static_cast<std::string::size_type>(nul - text) : count);
+}
+
+} // namespace
 
 // [INFERRED] Creates empty option maps with the requested prefix character.
 SimpleParser::SimpleParser(char optionPrefix)
@@ -54,8 +69,10 @@ bool SimpleParser::getKey(const std::string& str, int* keyId, std::string* value
     if (*keyId == -1)
         return false;
 
-    char buffer[256];       // : ebp-0x128. The strncpy lengths below are unclamped - a
-                            // value longer than 255 characters smashes the stack. dice bug, kept.
+    // [CHOSEN, not recovered] Retail fix "Option values longer than 255 characters no longer
+    // overrun the parser's buffer" (docs/retail-fixes.md). Retail copies the value with an
+    // unclamped strncpy into char[256] at ebp-0x128 (0x814A62B, 0x814A6D0; the Windows images
+    // alike) and writes the terminator after it; assignValue takes the value from str instead.
     std::string::size_type start = it->second.length() + 1;   // native string index
     if (str.c_str()[start] != '"')                            // : cmp ...,22h
     {
@@ -68,9 +85,7 @@ bool SimpleParser::getKey(const std::string& str, int* keyId, std::string* value
                     break;
             }
         }
-        strncpy(buffer, str.c_str() + start, end - start);
-        buffer[end - start] = 0;
-        value->assign(buffer, strlen(buffer));
+        assignValue(value, str, start, end - start);
         return true;
     }
 
@@ -78,9 +93,7 @@ bool SimpleParser::getKey(const std::string& str, int* keyId, std::string* value
     std::string::size_type endQuote = str.find('"', it->second.length() + 2);
     if (endQuote == std::string::npos)
         return false;   // note: *keyId keeps the found id on this failure path. Preserved.
-    strncpy(buffer, str.c_str() + start + 1, endQuote - start - 1);
-    buffer[endQuote - start - 1] = 0;
-    value->assign(buffer, strlen(buffer));
+    assignValue(value, str, start + 1, endQuote - start - 1);
     return true;
 }
 

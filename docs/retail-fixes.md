@@ -416,8 +416,8 @@ Each entry is a heading that names the fix, followed by these fields:
   with a quote character. The restart can still change the parse where an argument holds a quote
   character, which the split reads as `CommandLineToArgvW` does, or where an argument that holds an
   option also holds the whitespace of an empty value, such as `+password  +port 1` passed as one
-  argument. A value longer than 255 characters overflows the parser's buffer, as it does on retail;
-  the join lets a spaced value reach that length.
+  argument. A value longer than 255 characters arrives whole, by the fix "Option values longer
+  than 255 characters no longer overrun the parser's buffer".
   `bf2_command_line_join_check` compares the parse with retail's line through the recovered parser
   and, on macOS, the restart's round trip; not run on a server or client.
 - **Applies to:** Server; Linux, and macOS, whose server uses the same entry point. The helper also
@@ -429,6 +429,30 @@ Each entry is a heading that names the fix, followed by these fields:
   `Code/Tests/command_line_join_runtime.cpp`
 
 ## Client and server
+
+### Option values longer than 255 characters no longer overrun the parser's buffer
+
+- **Retail:** `SimpleParser::getKey` copies an option's value with `strncpy` into a 256-byte stack
+  buffer with no bound and writes the terminator after the copy, in the unquoted and the quoted arm
+  (Linux ia-32 server `0x814A4F0`: buffer at `ebp-0x128`, copies at `0x814A62B` and `0x814A6D0`;
+  `BF2.exe` `0x45CB80`: copies at `0x45CD4F` and `0x45CCCF`; `bf2_w32ded.exe` `0x43FB70`: copies
+  at `0x43FD6A` and `0x43FCDD`). A value longer than 255 characters writes past the buffer into the
+  rest of the frame: in the Linux image and `BF2.exe` into later locals, saved registers and the
+  return address; in `bf2_w32ded.exe` first into the stack cookie, which the function compares
+  before it returns (`0x75663F`; the mismatch path was not read). The parser reads the process
+  command line (`BF2Engine::parseParameters`, Linux ia-32 server `0x8131EC0`, `BF2.exe`
+  `0x409CA0`) and, in `BF2.exe`, the text of menu event 5 (`0x40BE55`), which the menu sends and
+  writes to `CommandLine.cmd` (`0x493B90`). Not reproduced on retail.
+- **OpenBF2:** `getKey` takes the value from the string itself, without the buffer. As on retail it
+  ends at the first NUL, so values of up to 255 characters give retail's result; longer values
+  arrive whole. The option search, the quoted arm's search for the closing quote and the failure
+  path that keeps the found option id are unchanged. `bf2_command_line_join_check` compares the
+  function with a model of the retail body for values of up to 255 characters and checks values of
+  256, 1000 and 4096 characters in both arms; not run in a server or client.
+- **Applies to:** Client and server; all platforms.
+- **Retail clients:** Only the process's own reading of its command line, and of the client's
+  menu-supplied command line, changes. Nothing on the wire changes.
+- **Source:** `Code/BF2/Game/Utility/SimpleParser.cpp`, `Code/Tests/command_line_join_runtime.cpp`
 
 ### Player actions received before the connection has a player are dropped (BF2NULL)
 

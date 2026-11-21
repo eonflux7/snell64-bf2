@@ -9,14 +9,21 @@
 // On macOS the check also runs the native clients' relaunch round trip: BF2Engine::restartBF2
 // hands the stored line to macos::relaunchExecutable, which splits it with splitCommandLine, and
 // the new process joins the pieces again. That second line must parse as the first.
+//
+// It also checks SimpleParser::getKey for retail fix "Option values longer than 255 characters no
+// longer overrun the parser's buffer" (docs/retail-fixes.md): values of up to 255 characters give
+// the result of retailGetKey, a model of the retail body, and longer values arrive whole.
 #include "../BF2/Game/Main/CommandLineJoin.h"
 #include "../BF2/Game/Utility/SimpleParser.h"
 #if defined(__APPLE__)
 #include "../BF2/Platform/macOS/MacSystem.h"
 #endif
 
+#include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <list>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -181,6 +188,207 @@ bool relaunchParsesAlike(const Args& args)
 }
 #endif
 
+typedef std::map<int, std::string> Names;
+
+// retailGetKey models the retail SimpleParser::getKey (Linux ia-32 server 0x814A4F0; BF2.exe
+// 0x45CB80 and bf2_w32ded.exe 0x43FB70 have the same body): strncpy of the value into a 256-byte
+// stack buffer, the terminator, then assign(buffer, strlen(buffer)). It is called only where the
+// copy fits that buffer, the values of up to 255 characters on which retail is defined.
+bool retailGetKey(const Names& names, const std::string& str, int* keyId, std::string* value)
+{
+    *keyId = -1;
+    Names::const_iterator it = names.begin();
+    for (; it != names.end(); ++it)
+    {
+        if (str.compare(0, it->second.length() + 1, it->second + " ") == 0)
+        {
+            *keyId = it->first;
+            break;
+        }
+    }
+    if (*keyId == -1)
+        return false;
+
+    char buffer[256];
+    std::string::size_type start = it->second.length() + 1;
+    std::string::size_type from, count;
+    if (str.c_str()[start] != '"')
+    {
+        std::string::size_type end = start;
+        if (start < str.length())
+        {
+            while (!isspace(str.c_str()[end]))
+            {
+                if (++end >= str.length())
+                    break;
+            }
+        }
+        from = start;
+        count = end - start;
+    }
+    else
+    {
+        std::string::size_type endQuote = str.find('"', it->second.length() + 2);
+        if (endQuote == std::string::npos)
+            return false;
+        from = start + 1;
+        count = endQuote - start - 1;
+    }
+    if (count > 255)
+    {
+        check(false, "retailGetKey called with a copy of more than 255 characters");
+        return false;
+    }
+    std::strncpy(buffer, str.c_str() + from, count);
+    buffer[count] = 0;
+    value->assign(buffer, std::strlen(buffer));
+    return true;
+}
+
+void registerOptions(dice::hfe::SimpleParser& parser, Names& names)
+{
+    const std::pair<int, const char*> options[] = {
+        std::make_pair(5, "password"), std::make_pair(66, "port"), std::make_pair(8, "config"),
+        std::make_pair(4, "playerName"), std::make_pair(58, "?"), std::make_pair(70, "p"),
+    };
+    for (std::size_t i = 0; i < sizeof(options) / sizeof(options[0]); ++i)
+    {
+        parser.add(options[i].first, options[i].second, "");
+        names.insert(std::make_pair(options[i].first, std::string(options[i].second)));
+    }
+}
+
+std::string pattern(std::size_t length)
+{
+    std::string out;
+    for (std::size_t i = 0; i < length; ++i)
+        out += static_cast<char>('a' + i % 26);
+    return out;
+}
+
+std::string number(std::size_t n)
+{
+    char text[24];
+    std::snprintf(text, sizeof(text), "%lu", static_cast<unsigned long>(n));
+    return text;
+}
+
+std::string idText(int id)
+{
+    char text[16];
+    std::snprintf(text, sizeof(text), "%d", id);
+    return text;
+}
+
+// One getKey call against the expected outcome. value starts as "unset" so that a call which must
+// leave it alone can be told apart.
+void expectGetKey(dice::hfe::SimpleParser& parser, const std::string& str, bool result, int keyId,
+                  const std::string& value, const std::string& label)
+{
+    int gotId = 1234;
+    std::string gotValue = "unset";
+    const bool gotResult = parser.getKey(str, &gotId, &gotValue);
+    check(gotResult == result && gotId == keyId && gotValue == value,
+          label + ": result " + (gotResult ? "true" : "false") + ", id " + idText(gotId)
+              + ", value of " + number(gotValue.size()) + " characters");
+}
+
+void checkParserValues()
+{
+    dice::hfe::SimpleParser parser('+');
+    Names names;
+    registerOptions(parser, names);
+
+    // Long values, unquoted and quoted, as getKey sees them from parseString (the text after the
+    // '+', with parseString's trailing space) and through parseString with an option after them.
+    const std::size_t lengths[] = { 255, 256, 1000, 4096 };
+    for (std::size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
+    {
+        const std::string value = pattern(lengths[i]);
+        const std::string n = number(lengths[i]);
+        expectGetKey(parser, "password " + value + " ", true, 5, value, n + " characters unquoted");
+        expectGetKey(parser, "password \"" + value + "\" ", true, 5, value,
+                     n + " characters quoted");
+        Keys keys;
+        check(parser.parseString("+password " + value + " +port 16568", keys)
+                  && show(keys) == "5=[" + value + "] 66=[16568]",
+              n + " characters unquoted, then +port: " + number(keys.size()) + " keys");
+        check(parser.parseString("+password \"" + value + "\" +port 16568", keys)
+                  && show(keys) == "5=[" + value + "] 66=[16568]",
+              n + " characters quoted, then +port: " + number(keys.size()) + " keys");
+
+        // Retail's strlen ends the value at an embedded NUL; the fix keeps that for long values.
+        std::string withNul = value;
+        withNul[withNul.size() - 10] = '\0';
+        const std::string cut = value.substr(0, value.size() - 10);
+        expectGetKey(parser, std::string("password ") + withNul + " ", true, 5, cut,
+                     n + " characters unquoted with a NUL 10 from the end");
+        expectGetKey(parser, std::string("password \"") + withNul + "\" ", true, 5, cut,
+                     n + " characters quoted with a NUL 10 from the end");
+
+        // The failure path: an unterminated quote returns false, keeps the found id and leaves
+        // the value alone.
+        expectGetKey(parser, "password \"" + value + " ", false, 5, "unset",
+                     n + " characters with an unterminated quote");
+    }
+    expectGetKey(parser, "passwordx 1 ", false, -1, "unset", "no option matches");
+    expectGetKey(parser, "password", false, -1, "unset", "option without the following space");
+    expectGetKey(parser, "password \"", false, 5, "unset", "only an opening quote");
+
+    // Every length from 0 to 255 in both arms, then a sweep over short strings, against the model.
+    unsigned compared = 0, differing = 0;
+    for (std::size_t length = 0; length <= 255; ++length)
+    {
+        const std::string value = pattern(length);
+        const std::string inputs[] = { "password " + value + " ", "password " + value,
+                                       "password \"" + value + "\" ", "p \"" + value + "\"" };
+        for (std::size_t k = 0; k < sizeof(inputs) / sizeof(inputs[0]); ++k)
+        {
+            int retailId = 1234, oursId = 1234;
+            std::string retailValue = "unset", oursValue = "unset";
+            const bool retailResult = retailGetKey(names, inputs[k], &retailId, &retailValue);
+            const bool oursResult = parser.getKey(inputs[k], &oursId, &oursValue);
+            ++compared;
+            if ((retailResult != oursResult || retailId != oursId || retailValue != oursValue
+                 || oursValue != value)
+                && ++differing <= 5)
+                check(false, "length " + number(length) + " input " + number(k)
+                                 + ": differs from the retail model");
+        }
+    }
+
+    const char* const heads[] = { "password ", "port ", "p ", "? ", "config", "playerName ",
+                                  "pass ", "", "p" };
+    const char alphabet[] = { 'a', 'b', ' ', '\t', '\n', '"', '\0', '+', '\xE9', '\r' };
+    unsigned seed = 4242;
+    for (int n = 0; n < 300000; ++n)
+    {
+        seed = seed * 1103515245u + 12345u;
+        std::string str = heads[(seed >> 16) % (sizeof(heads) / sizeof(heads[0]))];
+        seed = seed * 1103515245u + 12345u;
+        // At most 255 characters after the option name and its space: no copy exceeds 255.
+        const std::size_t tail = (seed >> 16) % 4 == 0 ? (seed >> 8) % 256 : (seed >> 16) % 12;
+        for (std::size_t c = 0; c < tail; ++c)
+        {
+            seed = seed * 1103515245u + 12345u;
+            const unsigned pick = (seed >> 16) % 16;
+            str += pick < sizeof(alphabet) ? alphabet[pick] : 'a';
+        }
+        int retailId = 1234, oursId = 1234;
+        std::string retailValue = "unset", oursValue = "unset";
+        const bool retailResult = retailGetKey(names, str, &retailId, &retailValue);
+        const bool oursResult = parser.getKey(str, &oursId, &oursValue);
+        ++compared;
+        if ((retailResult != oursResult || retailId != oursId || retailValue != oursValue)
+            && ++differing <= 5)
+            check(false, "sweep input of " + number(str.size()) + " characters differs from the "
+                             "retail model");
+    }
+    check(differing == 0, "getKey: every value of up to 255 characters as in the retail model");
+    std::printf("getKey %u inputs compared with the retail model, %u differing\n", compared,
+                differing);
+}
+
 } // namespace
 
 int main()
@@ -338,6 +546,8 @@ int main()
     check(relaunchViolations == 0, "relaunch sweep: the relaunched line parses as the first");
     std::printf("relaunch sweep %u inputs, %u violations\n", relaunchSwept, relaunchViolations);
 #endif
+
+    checkParserValues();
 
     std::printf("command line join %u/%u checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;
