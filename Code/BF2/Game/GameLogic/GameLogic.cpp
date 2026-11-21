@@ -6,6 +6,8 @@
 #include "../Main/Game.h"        // isDedicated - loadCallback's client/server split
 #if !DEDICATED
 #include "../VoipClient/BF2VoipClient.h"   // bf2VoipClient (ds:0x9A4DA0)
+#include "../AudioSettings.h"              // loadVoiceMessages' englishOnlyVoices read (+0x90)
+#include "../Main/BF2ClientSeams.h"        // g_audioSettings (ds:0x987384)
 #endif
 #include "GameLogicCollision.h"                        // doImpact's exact static forwarding target
 #include "GameLogicExplosion.h"                        // common explosion presentation forwarder
@@ -1332,10 +1334,19 @@ void GameLogic::stopPlayingVoMessages()
 }
 
 // Loads team and local-language voice definitions, falling back to English when the probe file is absent.
+// On the client, the englishOnlyVoices audio setting (or a missing AudioSettings singleton) makes
+// both team roots use that local language instead of the team languages.
 // Replaces the owned VoiceMessages instance, runs its configuration and finalizes it
 // through the sound engine, including the null engine on dedicated servers.
 void GameLogic::loadVoiceMessages()
 {
+#if !DEDICATED
+    // [PLATFORM] BF2.exe 0x4EDB4D-0x4EDB68 reads this first: the team languages are used only when
+    // the AudioSettings singleton exists and its englishOnlyVoices getter returns false. The
+    // dedicated bodies (ELF 0x80D4B60, bf2_w32ded.exe 0x466030) have no such read.
+    IAudioSettings* audio = static_cast<IAudioSettings*>(g_audioSettings);        // ds:0x987384
+    const bool teamVoices = audio && !audio->getEnglishOnlyVoices();              // +0x90
+#endif
     const std::string base("common/sound/");
     std::string language = settings->stringGet(std::string("GSLanguage"),
                                                std::string("English"));
@@ -1348,10 +1359,23 @@ void GameLogic::loadVoiceMessages()
             language = "English";                                                 // assign 0x80D4D1B
     }
 
+    // Both roots are copied before either append (ELF 0x80D4CE8/0x80D4CFA, PE 0x4EDC7C/0x4EDC8C).
     std::string team1Root = base;
-    team1Root += getTeamLanguage(1);                                              // virtual +0x1FC
     std::string team2Root = base;
-    team2Root += getTeamLanguage(2);
+#if !DEDICATED
+    // [PLATFORM] BF2.exe 0x4EDC92-0x4EDCDA: without team voices both roots take the local language
+    // chosen above, team 1 first.
+    if (!teamVoices)
+    {
+        team1Root += language;                                                    // 0x4EDCCA
+        team2Root += language;                                                    // 0x4EDCDA
+    }
+    else
+#endif
+    {
+        team1Root += getTeamLanguage(1);                                          // virtual +0x1FC
+        team2Root += getTeamLanguage(2);
+    }
     std::string voRoot = base;
     voRoot += language;
 
