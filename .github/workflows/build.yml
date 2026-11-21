@@ -13,7 +13,7 @@ permissions:
 
 env:
   LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
-  LINUX_SETUP_REVISION: 6ef19718f11d6a747571c224640de8624a120406 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+  LINUX_SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
 
 jobs:
   windows:
@@ -277,7 +277,7 @@ jobs:
     timeout-minutes: 120
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: 6ef19718f11d6a747571c224640de8624a120406 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+      SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
       BF2_RELEASE_RUN: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     defaults:
       run:
@@ -755,7 +755,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: 6ef19718f11d6a747571c224640de8624a120406 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+      SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements, the signing helper and the packager (for the build-info); the app
