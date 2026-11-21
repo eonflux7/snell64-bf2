@@ -21,10 +21,13 @@ fixes and are not listed here:
   operating systems, high-DPI or wide displays and newer hardware;
 - different defaults and changes of taste;
 - every change to an ABI, protocol or file-format contract;
-- hardening that changes no behavior retail can show: guards, bounds and initialization in code
-  that retail never executes or that bad input cannot reach.
+- guards, bounds and initialization in code that has no retail counterpart, such as the ports'
+  platform layers.
 
-The first three follow the issue workflow in the [Development guide](development.md).
+The first three follow the issue workflow in the [Development guide](development.md). In
+recovered code, a guard, bound or initialization that retail lacks is not covered by the last
+item: it is a retail fix, falls under the [memory-safety exception](macos-port.md#port-rules)
+of the native ports, or follows the issue workflow.
 
 ## Rule
 
