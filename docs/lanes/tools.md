@@ -409,4 +409,10 @@ the debug menu. Fails while `renderer.atmosphere` is 0 or before the first fit.
   at four tiles (screen centre, top centre, left and right of the middle row), in-scatter rgb |
   transmittance.
 
+- `[skycube]` (render milestone 11, task 7): live or not, build time, the irradiance's sky scale
+  and its upward value, the 7 `RaSkySH` rows; per mip each face's mean rgb (and bad texels); a PNG
+  `<NAME>-skycube.png` (faces +x −x +y −y +z −z across, mips down, upscaled, rgb scaled to its
+  maximum); irradiance / pi at 8 normals from `RaSkySH` against a cosine integral of the top mip,
+  with their ratio. `[brdf]`: the split-sum table's statistics, `<NAME>-brdf.png` and a grid.
+
 The managed tables are locked where they are; the atlas is read back from its render target.
