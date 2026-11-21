@@ -4,11 +4,13 @@
 // Two layers. The sky atmosphere (Rayleigh, Mie and ozone over a planet of Earth's size, in
 // kilometres) drives the sky; a ground haze (density falling exponentially with height, in metres)
 // drives aerial perspective. At load the model is fitted to the level's authored light:
-//   1. sunlight above the atmosphere = the authored sun (Lightmanager.staticSunColor, the sunlight
-//      at the ground) over the sky's transmittance at the sun's elevation, clamped to >= 0.1;
-//   2. the sky: Earth's air (a clear sky on every level; overcast is milestone 12's clouds), and
-//      one sky gain scaling the scattered light so the horizon's luminance meets the authored fog
-//      colour's, applied as gain^renderer.skyGainBlend;
+//   1. sunlight above the atmosphere = the sun at the ground over the sky's transmittance at the
+//      sun's elevation, clamped to >= 0.1. The sun at the ground is the one every lit surface
+//      takes: the authored sun (Lightmanager.staticSunColor) decoded as the shaders do,
+//      colour^2.2 x 2^2.2 (gamma and the x2 overbright), as irradiance / pi;
+//   2. the sky: Earth's air (a clear sky on every level; overcast is milestone 12's clouds),
+//      physical under that sun. The authored sky and fog colours set no brightness (owner,
+//      2026-11-21: physically correct, the look is adjusted in post);
 //   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
 //      (the horizon's at and below it), so terrain at fog end meets the sky without a seam.
 // The transmittance, multiple-scattering and sky-view tables are built here on the CPU after a fit
@@ -61,6 +63,8 @@ namespace {
 // ---- the model (mirrors RaAtmosphere.fx) ----
 
 const double kPi = 3.14159265358979;
+// 2^2.2: the authored x2 overbright, decoded with the colour's gamma (RA_LIGHTMAP_X2 in the shaders)
+const double kSunOverbright = 4.5948;
 const double kGroundRadius = 6360.0;   // km
 const double kTopRadius = 6460.0;      // km
 const double kRayleighHeight = 8.0;    // km
@@ -353,7 +357,7 @@ V3 skyInScatter(const SkyParams& p, const CpuTables& c, double r, const V3& dir,
 // Sky view (kSkyViewW x kSkyViewH; Hillaire 2020, section 5.3), seen from radius r: x the azimuth
 // from the sun, squared (0 toward it, 1 away); y the zenith angle, squared toward the horizon from
 // both sides (0 zenith, 0.5 horizon, 1 nadir); texel (x, y) at ((x + 0.5) / w, (y + 0.5) / h).
-// Radiance: the sky's in-scatter times the sunlight above the atmosphere and the sky gain.
+// Radiance: the sky's in-scatter times the sunlight above the atmosphere.
 void buildSkyView(const SkyParams& p, const CpuTables& c, double r, const V3& sun, const V3& scale,
                   int w, int h, std::vector<V3>& out)
 {
@@ -421,7 +425,6 @@ struct State
     V3 zenithModel, horizonModel, horizonTarget;
     double skyGain;          // horizon luminance: authored over the model's
     CpuTables tables;        // full size, for the textures
-    float appliedBlend;      // renderer.skyGainBlend the sky view was built with
     double fitMs;
     // GPU.
     IDirect3DTexture9* trans;
@@ -441,7 +444,6 @@ struct State
 
 State g = {};
 bool g_enabled = true;   // renderer.atmosphere
-float g_skyGainBlend = 0.5f;   // renderer.skyGainBlend
 float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end
 float g_hazeFalloff = 400.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
 bool g_viewDistanceCut = true; // renderer.viewDistance: the radial cut at fog end (task 5 A/B)
@@ -455,6 +457,13 @@ float hazeDensity()
 IDirect3DDevice9* device()
 {
     return g_rendererBase ? static_cast<RendDX9Base*>(g_rendererBase)->device : 0;
+}
+
+// The surfaces' sun from an authored channel: Ra_SunIrradiance in the shaders (gamma 2.2, the x2
+// overbright decoded with it).
+float surfaceSun(float authored)
+{
+    return static_cast<float>(std::pow(std::max(static_cast<double>(authored), 0.0), 2.2) * kSunOverbright);
 }
 
 bool gatherInputs(Inputs& in)
@@ -475,7 +484,7 @@ bool gatherInputs(Inputs& in)
     in.toSun[2] = -d.z / len;
     const Vec3& sun = lm->getStaticSunColor();
     const Vec3& skyColor = lm->getStaticSkyColor();
-    in.sun[0] = sun.x; in.sun[1] = sun.y; in.sun[2] = sun.z;
+    in.sun[0] = surfaceSun(sun.x); in.sun[1] = surfaceSun(sun.y); in.sun[2] = surfaceSun(sun.z);
     in.sky[0] = skyColor.x; in.sky[1] = skyColor.y; in.sky[2] = skyColor.z;
     postProductionGetFogColor255(in.fog);
     in.fogEnd = range[3] / range[0];
@@ -541,7 +550,7 @@ V3 sunAbove(const SkyParams& p, const FitContext& f)
               kPi * f.sunGround.z / std::max(t.z, 0.1));
 }
 
-// The zenith and the azimuth-averaged horizon, before the sky gain, with the parameters' own
+// The zenith and the azimuth-averaged horizon, with the parameters' own
 // sunlight above the atmosphere and transmittance, and the context's multiple scattering.
 void evaluate(const SkyParams& p, FitContext& f, V3& zenith, V3& horizon)
 {
@@ -562,9 +571,8 @@ void evaluate(const SkyParams& p, FitContext& f, V3& zenith, V3& horizon)
 
 // 2. The sky: Earth's air on every level, a clear sky (owner, 2026-11-20). The authored domes'
 // colours are mostly painted cloud and haze; fitted to them, the Rayleigh tint and density greyed
-// Kashan's sky and turned overcast Saaremaa's navy. Overcast is milestone 12's clouds. Only the
-// level's brightness is fitted, by the sky gain (fit, below): the authored dome and fog are
-// 1.7-2.9x brighter by day than a physical sky under the authored sun (and 10x darker at night).
+// Kashan's sky and turned overcast Saaremaa's navy. Overcast is milestone 12's clouds. Nothing
+// else is fitted: the sky is physical under the surfaces' sun (owner, 2026-11-21).
 SkyParams earthSky(const V3& albedo)
 {
     SkyParams p;
@@ -597,8 +605,7 @@ void fit()
     evaluate(g.sky, f, g.zenithModel, g.horizonModel);
     g.sunTop = f.sunTop;
     g.horizonTarget = horizonTarget;
-    // The sky gain: the horizon's luminance onto the fog colour's. Applied as gain^t
-    // (renderer.skyGainBlend): t = 0 physical, 1 the authored level.
+    // The authored horizon over the model's, for the tools: not applied.
     g.skyGain = luminance(horizonTarget) / std::max(luminance(g.horizonModel), 1e-9);
 
     // 3. The haze: its density follows fog end each frame (hazeDensity); its light is the sky's
@@ -616,10 +623,10 @@ void fit()
 
     std::fprintf(stderr,
         "[ATMOS] fit and tables %.0f ms: sun elevation %.1f deg, reference height %.1f m, fog end %.0f m\n"
-        "[ATMOS]   sky gain %.2f\n"
+        "[ATMOS]   authored horizon / model %.2f (not applied)\n"
         "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance)\n"
-        "[ATMOS]   zenith model %.4f %.4f %.4f (before the gain)\n"
-        "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f (before the gain)\n"
+        "[ATMOS]   zenith model %.4f %.4f %.4f\n"
+        "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f\n"
         "[ATMOS]   ground albedo %.3f %.3f %.3f\n",
         g.fitMs, elevation * 180.0 / kPi, g.refHeight, in.fogEnd,
         g.skyGain,
@@ -722,12 +729,6 @@ bool uploadTable(IDirect3DTexture9*& texture, const std::vector<V3>& data, unsig
     return true;
 }
 
-// The applied sky gain: gain^renderer.skyGainBlend.
-double appliedGain()
-{
-    return std::pow(g.skyGain, static_cast<double>(g_skyGainBlend));
-}
-
 void updateTables()
 {
     if (g.tablesDirty)
@@ -735,16 +736,15 @@ void updateTables()
         g.tablesDirty = !(uploadTable(g.trans, g.tables.trans, kTransmittanceW, kTransmittanceH)
                           && uploadTable(g.ms, g.tables.ms, kMultiScatterSize, kMultiScatterSize));
     }
-    if (g.skyViewDirty || g.appliedBlend != g_skyGainBlend)
+    if (g.skyViewDirty)
     {
         const double elevation = std::asin(std::min(std::max(static_cast<double>(g.inputs.toSun[1]), -1.0), 1.0));
         const double muS = std::sin(elevation);
         std::vector<V3> sky;
         buildSkyView(g.sky, g.tables, kGroundRadius + std::max(g.refHeight, 1.0) / 1000.0,
-                     v3(std::sqrt(std::max(0.0, 1.0 - muS * muS)), muS, 0.0), g.sunTop * appliedGain(),
+                     v3(std::sqrt(std::max(0.0, 1.0 - muS * muS)), muS, 0.0), g.sunTop,
                      kSkyViewW, kSkyViewH, sky);
         g.skyViewDirty = !uploadTable(g.skyView, sky, kSkyViewW, kSkyViewH);
-        g.appliedBlend = g_skyGainBlend;
         // The sky cube and irradiance (task 7) from this sky view.
         std::vector<float> rgb(sky.size() * 3);
         for (size_t i = 0; i < sky.size(); ++i)
@@ -763,7 +763,6 @@ void updateTables()
         {
             src.toSun[k] = g.inputs.toSun[k];
             src.sun[k] = g.inputs.sun[k];
-            src.sky[k] = g.inputs.sky[k];
             src.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
         }
         src.hazeDensity = hazeDensity();
@@ -802,7 +801,7 @@ void fillConstants(float c[16][4])
         { mieE, mieE, mieE, float(kMieG) },
         { float(kOzone[0]), float(kOzone[1]), float(kOzone[2]), float(std::max(g.refHeight, 1.0) / 1000.0) },
         { float(g.sunTop.x), float(g.sunTop.y), float(g.sunTop.z),
-          float(std::pow(g.skyGain, static_cast<double>(g_skyGainBlend))) },
+          1.0f },
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
         { hazeDensity(), 1.0f / g_hazeFalloff, float(g.refHeight), in.fogEnd },
@@ -915,11 +914,6 @@ void bindAtlas(IDirect3DTexture9* atlas)
 bool& rendererAtmosphereEnabled()
 {
     return g_enabled;
-}
-
-float& rendererSkyGainBlend()
-{
-    return g_skyGainBlend;
 }
 
 float& rendererHazeDepth()
@@ -1046,7 +1040,6 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.refHeight = static_cast<float>(g.refHeight);
     i.fogEnd = g.inputs.fogEnd;
     i.skyGain = static_cast<float>(g.skyGain);
-    i.skyGainApplied = static_cast<float>(std::pow(g.skyGain, static_cast<double>(g_skyGainBlend)));
     i.hazeDensity = hazeDensity();
     for (int k = 0; k < 3; ++k)
     {

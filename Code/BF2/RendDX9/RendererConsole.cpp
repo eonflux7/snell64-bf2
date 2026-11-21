@@ -1391,12 +1391,6 @@ BF2_CONSOLE_PROPERTY_FN_RANGED_T(softParticleDistance, float, true, getSoftParti
 bool getAtmosphere() { return rendererAtmosphereEnabled(); }
 void setAtmosphere(bool value) { rendererAtmosphereEnabled() = value; }
 BF2_CONSOLE_PROPERTY_FN(atmosphere, bool, true, getAtmosphere(), setAtmosphere, kRendererConsoleTag)
-// The share of the atmosphere's sky gain applied, in log space (render milestone 11): 0 a
-// physical sky under the authored sun, 1 the horizon at the authored fog colour's luminance.
-float getSkyGainBlend() { return rendererSkyGainBlend(); }
-void setSkyGainBlend(float value) { rendererSkyGainBlend() = value < 0.0f ? 0.0f : value > 1.0f ? 1.0f : value; }
-BF2_CONSOLE_PROPERTY_FN_RANGED_T(skyGainBlend, float, true, getSkyGainBlend(), setSkyGainBlend, 0.0f,
-                                 1.0f, kRendererConsoleTag)
 // The haze's shape (render milestone 11, tuned at the aerial-perspective A/B).
 float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 float getHazeDepth() { return rendererHazeDepth(); }
@@ -1411,11 +1405,6 @@ BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeFalloff, float, true, getHazeFalloff(), set
 bool getViewDistanceCut() { return rendererViewDistanceCut(); }
 void setViewDistanceCut(bool value) { rendererViewDistanceCut() = value; }
 BF2_CONSOLE_PROPERTY_FN(viewDistance, bool, true, getViewDistanceCut(), setViewDistanceCut, kRendererConsoleTag)
-// The shared lighting model's sky light and ambient specular (render milestone 11 task 8 A/B;
-// deleted at acceptance).
-bool getSkyIbl() { return rendererSkyIbl(); }
-void setSkyIbl(bool value) { rendererSkyIbl() = value; }
-BF2_CONSOLE_PROPERTY_FN(skyIbl, bool, true, getSkyIbl(), setSkyIbl, kRendererConsoleTag)
 
 } // anonymous namespace
 
@@ -1436,8 +1425,6 @@ const char* rendererVariableHelp(const char* name)
         { "hazeDepth", "Haze: optical depth at fog end on a level ray (higher: hazier near)" },
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
         { "viewDistance", "View distance (render milestone 11 A/B): geometry dithered out over the last 15 % before fog end, by distance from the camera" },
-        { "skyIbl", "Sky light (render milestone 11 A/B): surfaces lit by the sky from its direction, glossy ones reflecting it; off, the flat sky light" },
-        { "skyGainBlend", "How far the sky is brought to the level's authored brightness: 0 physical, 1 the fog colour at the horizon (log scale)" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

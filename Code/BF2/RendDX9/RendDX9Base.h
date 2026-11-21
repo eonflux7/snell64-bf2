@@ -823,9 +823,6 @@ void rendererSunShadowsRelease();
 // and the aerial-perspective atlas every frame, through Shaders/RaAtmosphere (contract 6).
 // renderer.atmosphere (A/B while milestone 11 is in development).
 bool& rendererAtmosphereEnabled();
-// The share of the sky gain applied, in log space: 0 a physical sky, 1 the authored level
-// (renderer.skyGainBlend).
-float& rendererSkyGainBlend();
 // The haze's shape (renderer.hazeDepth, renderer.hazeFalloff): its horizontal optical depth at fog
 // end and the height (m) over which its density falls by e.
 float& rendererHazeDepth();
@@ -867,7 +864,7 @@ struct AtmosphereInfo
     IDirect3DTexture9* skyView;         // 192 x 108
     IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
     float fitMs, refHeight, fogEnd, hazeDensity;
-    float skyGain, skyGainApplied;      // horizon gain, and gain^renderer.skyGainBlend
+    float skyGain;                      // the authored horizon over the model's (not applied)
     float sunTop[3];
     float zenithModel[3], horizonTarget[3], horizonModel[3];
     float groundAlbedo[3];
@@ -877,8 +874,7 @@ AtmosphereInfo rendererAtmosphereInfo();
 // roughness m / 5), the sky's irradiance as SH9 and the split-sum BRDF table, built on the CPU
 // with the sky view into managed textures. Each frame the cube is bound to the reserved sampler
 // kSkyCubeSampler (trilinear, clamp), the table to kSkyBrdfSampler (bilinear, clamp), and the
-// irradiance to the pixel registers kSkyShRegister.. (RaSkySH, 7 float4s; [6].w 1 while live and
-// renderer.skyIbl is on: lit shaders then take their sky light and ambient specular from them).
+// irradiance to the pixel registers kSkyShRegister.. (RaSkySH, 7 float4s; [6].w 1 while live).
 const unsigned int kSkyCubeSampler = 10;
 const unsigned int kSkyBrdfSampler = 11;
 struct SkyCubeSource
@@ -887,7 +883,7 @@ struct SkyCubeSource
     unsigned int skyViewW, skyViewH;
     double groundRadiusKm, altitudeKm;   // the radius the sky view is seen from, as the table
     float toSun[3];                // world, unit
-    float sun[3], sky[3];          // Lightmanager.staticSunColor, staticSkyColor
+    float sun[3];                  // the surfaces' sun (irradiance / pi)
     float groundAlbedo[3];         // linear
     double hazeDensity;            // 1/m at the reference height
 };
@@ -895,15 +891,13 @@ void rendererSkyCubeBuild(const SkyCubeSource& source);
 // Binds the cube, the table and RaSkySH; with `use` false (or before a build) unbinds them and
 // zeroes RaSkySH.
 void rendererSkyCubeFrame(bool use);
-// renderer.skyIbl (task 8 A/B): the shared lighting model's sky light; RaSkySH[6].w.
-bool& rendererSkyIbl();
 struct SkyCubeInfo
 {
     bool live;
     IDirect3DCubeTexture9* cube;
     IDirect3DTexture9* brdf;
     unsigned int cubeSize, cubeMips, brdfSize;
-    float buildMs, shScale;
+    float buildMs;
     float sh[7][4];
     float irradianceUp[3];
 };

@@ -2,18 +2,17 @@
 // docs/lanes/render.md#11-atmosphere-sky-ibl-water-reflections). Not part of retail BF2.
 //
 // Built on the CPU, like the atmosphere's tables, whenever the sky view is (Atmosphere.cpp: at the
-// fit and when renderer.skyGainBlend changes), into managed textures that survive device resets:
+// fit), into managed textures that survive device resets:
 //   - the sky cube, kCubeSize per face, A16B16G16R16F: above the horizon the sky view's radiance
 //     (the model's clear sky, no sun disc: the sun's highlight is the direct light's), below it the
-//     ground, the colormaps' mean colour lit by the authored sun and sky, under the haze toward the
+//     ground, the colormaps' mean colour lit by the sun and this sky, under the haze toward the
 //     horizon. Prefiltered for GGX: mip m holds roughness m / (kCubeMips - 1) (perceptual, alpha its
 //     square), by importance sampling with the source's mip chosen per sample (filtered importance
 //     sampling, Krivanek and Colbert 2008), so a few samples per texel do not alias;
 //   - the sky's irradiance at a normal, as 9 spherical-harmonic coefficients per channel taken from
 //     the cube's top mip and convolved with the cosine lobe (Ramamoorthi and Hanrahan 2001), divided
-//     by pi (the radiance of a white diffuse surface: the unit of the authored sky colour); the
-//     sky's part scaled so its upward value keeps the authored sky colour's luminance, the
-//     ground's (lit in authored units already) as it is;
+//     by pi (the radiance of a white diffuse surface: the shaders' irradiance unit), unscaled: the
+//     model's sky under the surfaces' sun, as drawn;
 //   - the split-sum BRDF table (Karis 2013), kBrdfSize square: x the cosine between the normal and
 //     the view, y the perceptual roughness; r the scale and g the bias on F0 (Smith GGX, k = a / 2).
 //     It does not depend on the level and is built once.
@@ -208,13 +207,11 @@ struct State
     bool brdfBuilt;
     bool live;                // the cube and the irradiance are built
     float sh[7][4];           // RaSkySH, packed (contract 10)
-    float shScale;            // the irradiance's scale onto the authored sky luminance
-    float irradianceUp[3];    // E(up) / pi after the scale
+    float irradianceUp[3];    // E(up) / pi
     float buildMs;
 };
 
 State g = {};
-bool g_skyIbl = true;   // renderer.skyIbl: the shared lighting model's sky light (task 8 A/B)
 
 IDirect3DDevice9* device()
 {
@@ -304,6 +301,30 @@ struct Radiance
         return ground * clear + horizonOrSky * (1.0f - clear);
     }
 };
+
+// The sky's irradiance / pi on an up-facing surface (the cosine-weighted mean of the sky view's
+// radiance over the upper hemisphere), which lights the ground below the horizon.
+F3 skyIrradianceUp(const Radiance& radiance)
+{
+    const int kZenith = 32, kAzimuth = 64;
+    F3 e = f3(0, 0, 0);
+    double weight = 0.0;
+    for (int i = 0; i < kZenith; ++i)
+    {
+        const double theta = (i + 0.5) * 0.5 * kPi / kZenith;
+        const double w = std::cos(theta) * std::sin(theta);   // cos x the solid angle's sin
+        for (int j = 0; j < kAzimuth; ++j)
+        {
+            const double phi = (j + 0.5) * 2.0 * kPi / kAzimuth;
+            const F3 d = f3(static_cast<float>(std::sin(theta) * std::cos(phi)), static_cast<float>(std::cos(theta)),
+                            static_cast<float>(std::sin(theta) * std::sin(phi)));
+            e = e + radiance.sky(d) * static_cast<float>(w);
+            weight += w;
+        }
+    }
+    // E / pi = (1 / pi) * integral(L cos) = sum(L w) / sum(w): the cosine integral's own norm is pi
+    return weight > 0.0 ? e * static_cast<float>(1.0 / weight) : e;
+}
 
 // 2x2 box down to 1 texel per face.
 void buildChain(std::vector<CubeMip>& chain)
@@ -561,9 +582,10 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
     radiance.zenithHorizon = kPi - radiance.beta;
     radiance.sunHorizontal = f3(src.toSun[0], 0.0f, src.toSun[2]);
     const float sunCos = std::max(src.toSun[1], 0.0f);
-    radiance.ground = f3(src.groundAlbedo[0] * (src.sun[0] * sunCos + src.sky[0]),
-                         src.groundAlbedo[1] * (src.sun[1] * sunCos + src.sky[1]),
-                         src.groundAlbedo[2] * (src.sun[2] * sunCos + src.sky[2]));
+    const F3 skyUp = skyIrradianceUp(radiance);
+    radiance.ground = f3(src.groundAlbedo[0] * (src.sun[0] * sunCos + skyUp.x),
+                         src.groundAlbedo[1] * (src.sun[1] * sunCos + skyUp.y),
+                         src.groundAlbedo[2] * (src.sun[2] * sunCos + skyUp.z));
 
     // The radiance at the top mip, then its box chain for the prefilter's sources.
     std::vector<CubeMip> chain(1);
@@ -579,17 +601,13 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
     for (unsigned int level = 0; level < kCubeMips; ++level)
         prefilter(chain, level, mips[level]);
 
-    // The irradiance: the sky's part scaled so its upward value keeps the authored sky colour's
-    // luminance; the ground's (already lit by the authored sun and sky) as it is.
+    // The irradiance, sky and ground together, as drawn.
     F3 c[9], ground[9];
     projectSh(chain[0], c, ground);
     convolveSh(c);
     convolveSh(ground);
-    const float upLum = luminance(evalSh(c, f3(0, 1, 0)));
-    const float skyLum = luminance(f3(src.sky[0], src.sky[1], src.sky[2]));
-    g.shScale = upLum > 1e-9f ? skyLum / upLum : 0.0f;
     for (int i = 0; i < 9; ++i)
-        c[i] = c[i] * g.shScale + ground[i];
+        c[i] = c[i] + ground[i];
     const F3 up = evalSh(c, f3(0, 1, 0));
     g.irradianceUp[0] = up.x;
     g.irradianceUp[1] = up.y;
@@ -600,8 +618,8 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&freq);
     g.buildMs = freq.QuadPart ? static_cast<float>(1000.0 * (t1.QuadPart - t0.QuadPart) / freq.QuadPart) : 0.0f;
-    std::fprintf(stderr, "[SKYCUBE] %s in %.0f ms: irradiance scale %.3f, up %.4f %.4f %.4f, ground %.4f %.4f %.4f\n",
-                 g.live ? "built" : "FAILED", g.buildMs, g.shScale, up.x, up.y, up.z,
+    std::fprintf(stderr, "[SKYCUBE] %s in %.0f ms: irradiance up %.4f %.4f %.4f, ground %.4f %.4f %.4f\n",
+                 g.live ? "built" : "FAILED", g.buildMs, up.x, up.y, up.z,
                  radiance.ground.x, radiance.ground.y, radiance.ground.z);
 }
 
@@ -611,19 +629,9 @@ void rendererSkyCubeFrame(bool use)
         return;
     static const float kOff[7][4] = {};
     const bool live = use && g.live;
-    // Contract 11: [6].w says whether lit shaders take their sky light from it (renderer.skyIbl);
-    // the cube, the table and the coefficients stay bound for the other readers either way.
-    float sh[7][4];
-    std::memcpy(sh, live ? &g.sh[0][0] : &kOff[0][0], sizeof(sh));
-    sh[6][3] = live && g_skyIbl ? 1.0f : 0.0f;
-    stateManagerSetSkySh(&sh[0][0]);
+    stateManagerSetSkySh(live ? &g.sh[0][0] : &kOff[0][0]);
     bindSampler(kSkyCubeSampler, live ? g.cube : 0, true);
     bindSampler(kSkyBrdfSampler, live && g.brdfBuilt ? g.brdf : 0, false);
-}
-
-bool& rendererSkyIbl()
-{
-    return g_skyIbl;
 }
 
 SkyCubeInfo rendererSkyCubeInfo()
@@ -637,7 +645,6 @@ SkyCubeInfo rendererSkyCubeInfo()
     i.cubeMips = kCubeMips;
     i.brdfSize = kBrdfSize;
     i.buildMs = g.buildMs;
-    i.shScale = g.shScale;
     std::memcpy(i.sh, g.sh, sizeof(i.sh));
     std::memcpy(i.irradianceUp, g.irradianceUp, sizeof(i.irradianceUp));
     return i;

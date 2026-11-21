@@ -703,7 +703,6 @@ void drawAtmosphereTab()
         return;
     }
     drawVariableTable("##atmosvars", "", "atmosphere", false);   // full names: no prefix
-    drawVariableTable("##skygain", "", "skyGainBlend", false);
     drawVariableTable("##haze", "", "haze", false);
     const AtmosphereInfo a = rendererAtmosphereInfo();
     if (!a.fitted)
@@ -712,11 +711,11 @@ void drawAtmosphereTab()
     {
         ImGui::Text("fit %.0f ms, reference height %.1f m, fog end %.0f m", a.fitMs, a.refHeight,
                     a.fogEnd);
-        ImGui::Text("%-18s %.2f, applied %.2f", "sky gain", a.skyGain, a.skyGainApplied);
+        ImGui::Text("%-18s %.2f (not applied)", "authored / model", a.skyGain);
         atmosphereRgb("sun above", a.sunTop);
         atmosphereRgb("zenith model", a.zenithModel);
         atmosphereRgb("horizon target", a.horizonTarget);
-        atmosphereRgb("horizon model", a.horizonModel);   // before the gain
+        atmosphereRgb("horizon model", a.horizonModel);
         atmosphereRgb("ground albedo", a.groundAlbedo);
         ImGui::Text("%-18s %.3e /m", "haze density", a.hazeDensity);
         ImGui::Text("atlas %s: vertex fetch %s, filtered %s", a.atlasFloat32 ? "A32B32G32R32F" : "A16B16G16R16F",

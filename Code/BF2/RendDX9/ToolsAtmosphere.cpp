@@ -271,8 +271,8 @@ bool writeSkyCube(FILE* f, const std::string& root)
 {
     const SkyCubeInfo c = rendererSkyCubeInfo();
     std::fprintf(f, "[skycube] %s; built in %.0f ms; %u per face, %u mips (mip m roughness m / %u); "
-                    "irradiance scale %.4f, up %.4f %.4f %.4f (authored sky luminance)\n",
-                 c.live ? "live" : "NOT LIVE", c.buildMs, c.cubeSize, c.cubeMips, c.cubeMips - 1, c.shScale,
+                    "irradiance up %.4f %.4f %.4f\n",
+                 c.live ? "live" : "NOT LIVE", c.buildMs, c.cubeSize, c.cubeMips, c.cubeMips - 1,
                  c.irradianceUp[0], c.irradianceUp[1], c.irradianceUp[2]);
     for (int r = 0; r < 7; ++r)
         std::fprintf(f, "[skycube] RaSkySH[%d] %.5f %.5f %.5f %.5f\n", r, c.sh[r][0], c.sh[r][1], c.sh[r][2], c.sh[r][3]);
@@ -351,9 +351,8 @@ bool writeSkyCube(FILE* f, const std::string& root)
                             continue;
                         const float w = cosine * cubeSolidAngle(x, y, c.cubeSize);
                         const float* const p = top[face].at(x, y);
-                        const double scaleHere = d[1] >= 0.0f ? c.shScale : 1.0;   // the sky's part only
                         for (int k = 0; k < 3; ++k)
-                            e[k] += p[k] * w * scaleHere;
+                            e[k] += p[k] * w;
                     }
             float sh[3];
             evalSkySh(c.sh, kDirs[i], sh);
@@ -412,12 +411,11 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     }
     std::fprintf(f, "# tools.atmosphere (render milestone 11): the fit and its tables as drawn\n");
     std::fprintf(f, "[fit] %.0f ms; reference height %.1f m; fog end %.0f m\n", a.fitMs, a.refHeight, a.fogEnd);
-    std::fprintf(f, "[fit] sky gain %.4f, applied %.4f (renderer.skyGainBlend %.2f)\n", a.skyGain,
-                 a.skyGainApplied, rendererSkyGainBlend());
+    std::fprintf(f, "[fit] authored horizon / model %.4f (not applied)\n", a.skyGain);
     std::fprintf(f, "[fit] sun above the atmosphere %.4f %.4f %.4f (irradiance)\n", a.sunTop[0], a.sunTop[1], a.sunTop[2]);
-    std::fprintf(f, "[fit] zenith model %.4f %.4f %.4f (before the gain)\n",
+    std::fprintf(f, "[fit] zenith model %.4f %.4f %.4f\n",
                  a.zenithModel[0], a.zenithModel[1], a.zenithModel[2]);
-    std::fprintf(f, "[fit] horizon target %.4f %.4f %.4f, model %.4f %.4f %.4f (before the gain)\n",
+    std::fprintf(f, "[fit] horizon target %.4f %.4f %.4f, model %.4f %.4f %.4f\n",
                  a.horizonTarget[0], a.horizonTarget[1], a.horizonTarget[2], a.horizonModel[0],
                  a.horizonModel[1], a.horizonModel[2]);
     std::fprintf(f, "[fit] ground albedo %.4f %.4f %.4f\n", a.groundAlbedo[0], a.groundAlbedo[1], a.groundAlbedo[2]);
