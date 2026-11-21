@@ -1317,7 +1317,8 @@ void GameLogic::setTeamLanguage(int team, const std::string& language)
         m_teamLanguage[team - 1] = language;                   // std::string::assign, 0x80D7688
 }
 
-// getVoiceMessages - ELF 0x80D81F0, 14 B / PE 0x465980: `mov eax, [this+108h]`.
+// getVoiceMessages - ELF 0x80D81F0, 14 B: `mov eax, [this+108h]`; bf2_w32ded.exe 0x465980:
+// `mov eax, [ecx+1B8h]`.
 VoiceMessages* GameLogic::getVoiceMessages() const
 {
     return m_voiceMessages;
@@ -1341,9 +1342,9 @@ void GameLogic::stopPlayingVoMessages()
 void GameLogic::loadVoiceMessages()
 {
 #if !DEDICATED
-    // [PLATFORM] BF2.exe 0x4EDB4D-0x4EDB68 reads this first: the team languages are used only when
-    // the AudioSettings singleton exists and its englishOnlyVoices getter returns false. The
-    // dedicated bodies (ELF 0x80D4B60, bf2_w32ded.exe 0x466030) have no such read.
+    // Client image only: BF2.exe 0x4EDB4D-0x4EDB68 reads this first, and the team languages are
+    // used only when the AudioSettings singleton exists and its englishOnlyVoices getter returns
+    // false. The dedicated images (bf2_w32ded.exe 0x466030, ELF 0x80D4B60) have no such read.
     IAudioSettings* audio = static_cast<IAudioSettings*>(g_audioSettings);        // ds:0x987384
     const bool teamVoices = audio && !audio->getEnglishOnlyVoices();              // +0x90
 #endif
@@ -1352,19 +1353,19 @@ void GameLogic::loadVoiceMessages()
                                                std::string("English"));
 
     {
-        std::string probe = base + language;                                      // operator+ 0x80D4C5D
-        probe += "/Help_VO/HUD_HELP_BATTLERECORDER_controlsQ.ogg";                // append 0x80D4C9E
+        std::string probe = base + language;                                      // operator+ 0x80D4C43
+        probe += "/Help_VO/HUD_HELP_BATTLERECORDER_controlsQ.ogg";                // append 0x80D4C79
         io::FileInfo info;
         if (!io::fileManager->getFileInfo(probe, info))                           // +0x38
-            language = "English";                                                 // assign 0x80D4D1B
+            language = "English";                                                 // assign 0x80D5226
     }
 
     // Both roots are copied before either append (ELF 0x80D4CE8/0x80D4CFA, PE 0x4EDC7C/0x4EDC8C).
     std::string team1Root = base;
     std::string team2Root = base;
 #if !DEDICATED
-    // [PLATFORM] BF2.exe 0x4EDC92-0x4EDCDA: without team voices both roots take the local language
-    // chosen above, team 1 first.
+    // Client image only (BF2.exe 0x4EDC92-0x4EDCDA): without team voices both roots take the local
+    // language chosen above, team 1 first.
     if (!teamVoices)
     {
         team1Root += language;                                                    // 0x4EDCCA
@@ -1379,7 +1380,8 @@ void GameLogic::loadVoiceMessages()
     std::string voRoot = base;
     voRoot += language;
 
-    VoiceMessages* messages = new VoiceMessages(team1Root, team2Root, voRoot);   // new(0x20C8), 0x80D4D8A
+    // operator new(0x20C8) at 0x80D4D74, the constructor at 0x80D4D93.
+    VoiceMessages* messages = new VoiceMessages(team1Root, team2Root, voRoot);
     if (messages != m_voiceMessages)
     {
         if (m_voiceMessages)

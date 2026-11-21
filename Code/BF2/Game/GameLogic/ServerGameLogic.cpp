@@ -1924,9 +1924,9 @@ void ServerGameLogic::handlePickup(world::IObject* item, world::IPlayer* player,
     }
 }
 
-// Requests a team change, notifies Python, and sends a correction if the player
-// setter refused it. Null players return false. Keep repeated player-id reads on
-// the correction path.
+// Requests a team change, notifies Python, and sends a correction when the player's
+// team afterwards differs from the request. Null players return false. Keep repeated
+// player-id reads on the correction path.
 bool ServerGameLogic::selectTeam(world::IPlayer* player, int team)
 {
     if (!player)
@@ -1937,14 +1937,16 @@ bool ServerGameLogic::selectTeam(world::IPlayer* player, int team)
     if (team < 0 || team > 2)
         return false;
 
-    player->setTeam(team, false);                                  // vt - the validating setter
+    // Player::setTeam (ELF 0x80F3410) returns early only when the team is unchanged and
+    // otherwise stores any value; it refuses nothing.
+    player->setTeam(team, false);                                  // vt
 
     {
         python::PyRef args = python::buildArgs(player, m_shouldUpdateTicketSystem);   // +0x28C
         python::pythonHost()->handleEvent(static_cast<ScriptEvent>(7), args.get());
     }
 
-    if (team != player->getTeam())                                  // vt +0xE8 - the change was refused
+    if (team != player->getTeam())                                  // vt +0xE8 - changed after the setter
     {
         int payload[2];
         payload[0] = player->getId();                               // getId, the first of three

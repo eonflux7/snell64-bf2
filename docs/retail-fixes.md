@@ -523,7 +523,9 @@ Each entry is a heading that names the fix, followed by these fields:
   unchecked; stock levels register kits 0 to 6 per team. At the next spawn
   `ServerGameLogic::spawnPlayer` finds no kit for the team and index and raises the Error "TBM:
   Unable to create the requested kit!" (`0x8100370`); an emitted Error ends the process. Not
-  reproduced. The Windows server images were not read.
+  reproduced. `bf2_w32ded.exe` stores the kit with no check as well (`selectKitAndUnlockLevel`
+  `0x4543E0`, the vtable slot after `selectTeam` as in the Linux image); its request masking and
+  `spawnPlayer` were not read.
 - **OpenBF2:** `selectKitAndUnlockLevel` stores nothing and returns false unless the player's team
   is 0 to 2 and the kit is registered for that team, in the same kit map `spawnPlayer` reads; the
   previous kit and unlock level stay. Accepted requests are stored as in retail.
@@ -555,9 +557,11 @@ Each entry is a heading that names the fix, followed by these fields:
   `HudKitSelection::selectTeam` (`BF2.exe` `0x7A2180`), which sends neither -1 nor the current
   team, and the stock spawn screen asks for teams 1 and 2 (`spawnManager.setPlayerTeam 1` and `2`
   in `HudElementsSpawn.con`). Another value takes a modified client or that console command typed
-  with it, and every refused value brings a retail server to one of the Errors above, at the next
-  player update or spawn attempt. Whether a player can enter that command in the retail console
-  was not checked.
+  with it. Every refused value makes a retail server raise one of the Errors above at the next
+  player update or spawn attempt; the Error ends the process only when it is emitted
+  (`Debug::~Debug`, Linux ia-32 server `0x83C0580`, aborts only on the paths that emit the
+  message), and whether a retail server's default filter state emits these Errors was not checked.
+  Whether a player can enter that command in the retail console was not checked.
 - **Source:** `Code/BF2/Game/GameLogic/ServerGameLogic.cpp`,
   `Code/Tests/gamelogic_registries_runtime.cpp`
 

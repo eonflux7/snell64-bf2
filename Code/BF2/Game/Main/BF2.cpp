@@ -950,8 +950,12 @@ int main(int argc, char** argv)
 
     dice::hfe::g_system = new dice::hfe::System();       // operator new(0x30) == 48 bytes on Win32
 
-    // Join argv[1..] into the single command-line string the engine expects (as WinMain would hand
-    // it), quoting a value that the C runtime handed over without its quotes (CommandLineJoin.h).
+    // Join argv[1..] with single spaces into the single command-line string the engine expects
+    // (CommandLineJoin.h). While neither the argument nor an earlier one holds a quote character,
+    // an argument with text after whitespace and no option token is quoted, and an empty or blank
+    // argument, unless it is the only one, becomes ""; every other argument is copied unchanged.
+    // The result is not always WinMain's raw line: a spaced argument that holds an option token,
+    // or that follows an argument with a quote character, stays unquoted.
     const std::string commandLine = dice::hfe::commandLine::joinArgs(argc, argv);
 
     dice::hfe::BF2* bf2 = new dice::hfe::BF2();
