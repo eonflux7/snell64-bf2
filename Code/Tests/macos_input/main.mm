@@ -1357,32 +1357,88 @@ void testLaunchActivation()
     check(stats().pending && fallback() && host.hasFocus() && dockResets() == 1 && retries() == 0,
           "an unrelated application at the request, this process in front at the look inside createWindow, the next "
           "look 10.5 s later: the system's state is used and the activation reset through the Dock");
-    // The front can also come free late by the bystander quitting: nobody in front counts alike.
-    start(editor);
-    after(9.0);
-    sys.frontPid = 0;
-    after(0.6);
-    after(0.6);
-    after(0.6);                                 // 10.8 s after the request, 1.2 s after the front came free
-    check(stats().pending && retries() == 2 && dockResets() == 1,
-          "nobody in front 9.6 s after the request: two requests and the Dock reset follow");
 
-    // For a front that comes free, the ten seconds count once per period. A front that goes back
-    // to the bystander and returns to this process does not start them again.
+    // A period that waited behind an unrelated application counts its ten seconds once more from
+    // the first look that finds the front free. In the starts above that look is the first look
+    // itself, or follows it so closely that the ten seconds of the first look cover everything
+    // checked; the second count decides nothing there. It decides when the front comes free late
+    // in those ten seconds: the requests, the system-state fallback and the Dock reset would
+    // otherwise get what is left of them, here 2 s. The first look comes 1.0 s after the request
+    // and finds the editor in front; this process is in front for the system, inactive for
+    // AppKit, from the look 9.0 s after the request.
     start(editor);
-    after(3.0);
+    after(1.0);                                 // the first look: ten seconds from here
     sys.frontPid = self;
-    after(0.1);                                 // free 3.1 s after the request: ten seconds from here
-    sys.frontPid = editor;
-    after(1.0);
-    after(8.0);                                 // 12.1 s after the request, 9.0 s after the front came free
-    check(stats().pending && retries() == 0 && dockResets() == 0,
-          "the bystander in front again: the wait lasts until ten seconds after the front first came free");
-    sys.frontPid = self;
+    after(8.0);                                 // 9.0 s after the request: the front is free
+    check(stats().pending && retries() == 1 && dockResets() == 0 && !fallback(),
+          "this process in front 8.0 s after the first look: the request is repeated");
     after(0.6);
-    check(stats().pending && retries() == 1, "this process in front a second time: the request is repeated");
+    after(0.6);                                 // 10.2 s after the request
+    check(retries() == 2 && dockResets() == 1 && fallback() && host.hasFocus(),
+          "front free 8.0 s after the first look: a second later the system's state is used and the "
+          "activation reset through the Dock");
+    sys.frontPid = dock;
+    after(0.35);
+    check(stats().pending && retries() == 3, "front free 8.0 s after the first look: the request after the reset is made");
+    sys.frontPid = self;                        // refused: in front for the system again, AppKit inactive
+    after(0.6);                                 // 11.15 s after the request, 10.15 s after the first look
+    check(stats().pending && retries() == 4,
+          "ten seconds after the first look the period goes on: they count once more from the look that "
+          "found the front free");
+    after(7.7);                                 // 18.85 s after the request, 9.85 s after the front came free
+    check(stats().pending && retries() == 5 && dockResets() == 1,
+          "the period still runs 9.85 s after the look that found the front free");
+    after(0.2);                                 // 10.05 s after the front came free
+    check(!stats().pending && retries() == 5 && fallback() && host.hasFocus(),
+          "and ends ten seconds after that look, the system's state still holding the focus");
+    // The front also comes free when the unrelated application quits, which leaves nobody in
+    // front, and when the user goes to the client's parent: both count alike. Each of these
+    // starts follows one that has used its second count, so they also show that this count is
+    // once per period and not once per process: a new first request brings it back.
+    {
+        struct Free { int front; const char* goesOn; const char* reset; };
+        const Free frees[] = {
+            { 0, "nobody in front 9.5 s after the first look: the requests go on past the ten seconds of the "
+                 "first look, in a start that follows one which used its second count",
+                 "nobody in front: the Dock reset follows a second after the front came free" },
+            { script, "the parent in front 9.5 s after the first look: the requests go on past the ten seconds "
+                      "of the first look, again after a start that used its second count",
+                      "the parent in front: the Dock reset follows a second after the front came free" },
+        };
+        for (const Free& free : frees)
+        {
+            start(editor);
+            after(1.0);                         // the first look: ten seconds from here
+            sys.frontPid = free.front;
+            after(9.5);                         // 10.5 s after the request: the front is free
+            after(0.6);                         // 10.1 s after the first look
+            check(stats().pending && retries() == 2 && dockResets() == 0, free.goesOn);
+            after(0.6);                         // 1.2 s after the front came free
+            check(stats().pending && retries() == 2 && dockResets() == 1, free.reset);
+        }
+    }
+
+    // The count for a front that comes free is made once per period. A front that goes back to
+    // the unrelated application and returns to this process does not start the ten seconds a
+    // third time. While the unrelated application is in front again, the wait lasts until ten
+    // seconds after the front first came free, here 3 s longer than the ten seconds of the first
+    // look.
+    start(editor);
+    after(1.0);                                 // the first look: ten seconds from here
+    sys.frontPid = self;
+    after(3.0);                                 // free 4.0 s after the request: ten seconds once more from here
+    sys.frontPid = editor;
+    after(0.1);
+    after(7.4);                                 // 11.5 s after the request: 10.5 s after the first look,
+                                                // 7.5 s after the front came free
+    check(stats().pending && retries() == 1 && dockResets() == 0,
+          "the unrelated application in front again: the wait goes on past the ten seconds of the first look, "
+          "until ten seconds after the front first came free");
+    sys.frontPid = self;
+    after(2.1);                                 // 9.6 s after the front first came free
+    check(stats().pending && retries() == 2, "this process in front a second time: the request is repeated");
     after(0.5);                                 // 10.1 s after the front first came free
-    check(!stats().pending && retries() == 1 && dockResets() == 0,
+    check(!stats().pending && retries() == 2 && dockResets() == 0,
           "but the ten seconds are not counted a third time: the period ends");
 
     // The Dock reset puts the Dock in front until this process asks again, so no period ends
