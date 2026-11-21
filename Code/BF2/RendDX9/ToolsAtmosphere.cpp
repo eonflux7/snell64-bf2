@@ -351,17 +351,16 @@ bool writeSkyCube(FILE* f, const std::string& root)
                             continue;
                         const float w = cosine * cubeSolidAngle(x, y, c.cubeSize);
                         const float* const p = top[face].at(x, y);
+                        const double scaleHere = d[1] >= 0.0f ? c.shScale : 1.0;   // the sky's part only
                         for (int k = 0; k < 3; ++k)
-                            e[k] += p[k] * w;
+                            e[k] += p[k] * w * scaleHere;
                     }
             float sh[3];
             evalSkySh(c.sh, kDirs[i], sh);
             std::fprintf(f, "[skycube]  %-10s %.4f %.4f %.4f | %.4f %.4f %.4f | %.3f %.3f %.3f\n", kNames[i],
-                         sh[0], sh[1], sh[2], e[0] / 3.14159265 * c.shScale, e[1] / 3.14159265 * c.shScale,
-                         e[2] / 3.14159265 * c.shScale,
-                         sh[0] / std::max(e[0] / 3.14159265 * c.shScale, 1e-9),
-                         sh[1] / std::max(e[1] / 3.14159265 * c.shScale, 1e-9),
-                         sh[2] / std::max(e[2] / 3.14159265 * c.shScale, 1e-9));
+                         sh[0], sh[1], sh[2], e[0] / 3.14159265, e[1] / 3.14159265, e[2] / 3.14159265,
+                         sh[0] / std::max(e[0] / 3.14159265, 1e-9), sh[1] / std::max(e[1] / 3.14159265, 1e-9),
+                         sh[2] / std::max(e[2] / 3.14159265, 1e-9));
         }
     }
 

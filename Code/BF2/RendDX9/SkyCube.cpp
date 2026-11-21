@@ -11,8 +11,9 @@
 //     sampling, Krivanek and Colbert 2008), so a few samples per texel do not alias;
 //   - the sky's irradiance at a normal, as 9 spherical-harmonic coefficients per channel taken from
 //     the cube's top mip and convolved with the cosine lobe (Ramamoorthi and Hanrahan 2001), divided
-//     by pi (the radiance of a white diffuse surface: the unit of the authored sky colour) and
-//     scaled so its upward value keeps the authored sky colour's luminance;
+//     by pi (the radiance of a white diffuse surface: the unit of the authored sky colour); the
+//     sky's part scaled so its upward value keeps the authored sky colour's luminance, the
+//     ground's (lit in authored units already) as it is;
 //   - the split-sum BRDF table (Karis 2013), kBrdfSize square: x the cosine between the normal and
 //     the view, y the perceptual roughness; r the scale and g the bias on F0 (Smith GGX, k = a / 2).
 //     It does not depend on the level and is built once.
@@ -377,11 +378,12 @@ void prefilter(const std::vector<CubeMip>& chain, unsigned int level, CubeMip& o
             }
 }
 
-// The 9 SH coefficients of the radiance (rgb), from the top mip.
-void projectSh(const CubeMip& mip, F3 c[9])
+// The 9 SH coefficients of the radiance (rgb), from the top mip: the sky (above the horizon) and
+// the ground (below it) apart, since only the sky is scaled.
+void projectSh(const CubeMip& mip, F3 sky[9], F3 ground[9])
 {
     for (int i = 0; i < 9; ++i)
-        c[i] = f3(0, 0, 0);
+        sky[i] = ground[i] = f3(0, 0, 0);
     for (int face = 0; face < 6; ++face)
         for (unsigned int y = 0; y < mip.size; ++y)
             for (unsigned int x = 0; x < mip.size; ++x)
@@ -393,6 +395,7 @@ void projectSh(const CubeMip& mip, F3 c[9])
                     0.488603f * d.y, 0.488603f * d.z, 0.488603f * d.x,
                     1.092548f * d.x * d.y, 1.092548f * d.y * d.z, 0.315392f * (3.0f * d.z * d.z - 1.0f),
                     1.092548f * d.x * d.z, 0.546274f * (d.x * d.x - d.y * d.y) };
+                F3* const c = d.y >= 0.0f ? sky : ground;
                 for (int i = 0; i < 9; ++i)
                     c[i] = c[i] + l * basis[i];
             }
@@ -575,15 +578,17 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
     for (unsigned int level = 0; level < kCubeMips; ++level)
         prefilter(chain, level, mips[level]);
 
-    // The irradiance, scaled so its upward value keeps the authored sky colour's luminance.
-    F3 c[9];
-    projectSh(chain[0], c);
+    // The irradiance: the sky's part scaled so its upward value keeps the authored sky colour's
+    // luminance; the ground's (already lit by the authored sun and sky) as it is.
+    F3 c[9], ground[9];
+    projectSh(chain[0], c, ground);
     convolveSh(c);
+    convolveSh(ground);
     const float upLum = luminance(evalSh(c, f3(0, 1, 0)));
     const float skyLum = luminance(f3(src.sky[0], src.sky[1], src.sky[2]));
     g.shScale = upLum > 1e-9f ? skyLum / upLum : 0.0f;
     for (int i = 0; i < 9; ++i)
-        c[i] = c[i] * g.shScale;
+        c[i] = c[i] * g.shScale + ground[i];
     const F3 up = evalSh(c, f3(0, 1, 0));
     g.irradianceUp[0] = up.x;
     g.irradianceUp[1] = up.y;
