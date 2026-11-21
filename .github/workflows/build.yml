@@ -13,7 +13,7 @@ permissions:
 
 env:
   LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
-  LINUX_SETUP_REVISION: c580f96ffacf2740e972875c2b9d4e7ce3d70802 # v0.4.0 plus setup stamp test fix
+  LINUX_SETUP_REVISION: 76d284f4a137419d5e66cf7b295bc70c051a24ef # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS
 
 jobs:
   windows:
@@ -635,7 +635,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: c580f96ffacf2740e972875c2b9d4e7ce3d70802 # v0.4.0 plus setup stamp test fix
+      SETUP_REVISION: 76d284f4a137419d5e66cf7b295bc70c051a24ef # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements, the signing helper and the packager (for the build-info); the app
@@ -682,12 +682,17 @@ jobs:
           path: out/openbf2-setup
           persist-credentials: false
 
-      # The setup app uses header-only Boost.Asio (1.86 or newer); find_package(Boost CONFIG) finds
-      # Homebrew's copy, nothing is compiled from Boost.
-      - name: Install the Boost headers
+      # The setup app's toolchain, pinned in its ci/versions.env and checked against those hashes: the
+      # Boost headers (header-only Asio), a universal static SDL3 (audio only) and the official universal
+      # Qt (Widgets, Network). build-release.sh takes SETUP_BOOST_ROOT, SETUP_SDL3_ROOT and SETUP_QT_ROOT
+      # from the environment; macdeployqt puts the Qt frameworks and plugins into the bundle, and the
+      # setup's sign-bundle.sh signs them with the app.
+      - name: Fetch the setup toolchain
         run: |
-          brew install boost
-          brew list --versions boost
+          options=$(bash out/openbf2-setup/ci/fetch-dependencies.sh "$RUNNER_TEMP/setup-deps")
+          for option in $options; do
+            echo "${option#-D}" >> "$GITHUB_ENV"
+          done
 
       - name: Prepare the Rust toolchain
         run: |
