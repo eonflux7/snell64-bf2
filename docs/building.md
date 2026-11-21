@@ -638,10 +638,10 @@ The option:
   `+onlineProviderConfig "C:\Users\Jane Doe\AppData\Local\OpenBF2\Setup\Provider-BF2Hub.json"`.
   Option and path joined into one argument do not work (the entry point would quote both
   together, and the parser would read a wrong path).
-- Limits of the retail command-line parser, which reads every option value: the path must be
-  at most 255 bytes (a longer value overruns the parser's buffer, a retail defect kept), it must
-  not contain a double quote, and on Windows it must be representable in the system's ANSI code
-  page (the client's command line is ANSI).
+- Limits of the command-line parser, which reads every option value: the path must not contain
+  a double quote, and on Windows it must be representable in the system's ANSI code page (the
+  client's command line is ANSI). Its length is not limited (retail fix "Option values longer
+  than 255 characters no longer overrun the parser's buffer" in [Retail fixes](retail-fixes.md)).
 - Mod restart: when the client restarts itself to activate a mod (with or without joining a
   server), the new command line carries ` +onlineProviderConfig <path>` with the same path, in
   double quotes when it contains white space. The restarted client reads the file again, so the

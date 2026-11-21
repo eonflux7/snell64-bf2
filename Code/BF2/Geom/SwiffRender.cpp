@@ -426,16 +426,15 @@ void registryClear(SwiffTextureRegistry& reg)
             reg.slots[i] = 0;
         }
     }
-    // [CHOSEN, not recovered] Keep native container storage empty after cleanup.
-    // PE 0x101B9B49 writes EBX into its three storage words; when the final slot
-    // was nonnull EBX is its freed record, and 0x101B9B68 can free it again.
-    // Preserve the existing native omission of that invalid storage/double free.
+    // Free the slot array and leave the storage empty: retail zeroes its three storage words
+    // after the free.
     reg.slots.~vector();
     new (&reg.slots) std::vector<SwiffTextureRecord*>();
 }
 
-// PE 0x101B9B60. Clear all records (registryClear), then free the array a second time and zero its
-// three storage words; the native omission above covers that second free.
+// PE 0x101B9B60. Clear all records (registryClear). Retail then frees the slot array only when its
+// storage is not empty and zeroes the storage; registryClear has emptied it, so neither does
+// anything.
 void registryDestroy(SwiffTextureRegistry& reg)
 {
     registryClear(reg);
@@ -1895,8 +1894,8 @@ void RD9_THUNK sr_drawLineStrip(void* self RD9_THUNK_EDX, const short* verts, un
     diffuse[3] = (float)s->style[2].rgba[3] * 0.0039215689f;
     paramSetValue(s->paramDiffuse, diffuse, 0);
 
-    // unk_1025E9E0's stand-in. [CHOSEN, not recovered] PE 0x101547B0 has no
-    // bounds check; keep the existing native omission of its possible overrun.
+    // unk_1025E9E0's stand-in. [CHOSEN, not recovered] Retail fix "The Swiff line-strip draw is
+    // bounded to its scratch array" (docs/retail-fixes.md): PE 0x101547B0 has no bounds check.
     // The shipped static's extent is unread; ours is sized to
     // the ring convention (10002 vertices) and the count is clamped to it rather than overrun.
     static float scratch[3 * 0x2712];

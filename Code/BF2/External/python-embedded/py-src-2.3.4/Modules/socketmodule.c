@@ -3027,7 +3027,8 @@ socket_inet_ntop(PyObject *self, PyObject *args)
 #ifdef MS_WINDOWS
 	memset((void *) &ip[0], '\0', sizeof(ip) + 1);
 #else
-	/* [CHOSEN, not recovered] Bound initialization to the actual POSIX buffer. */
+	/* [CHOSEN, not recovered] Retail fix "socket.inet_ntop no longer writes one byte past
+	   its buffer" (docs/retail-fixes.md): zero only the actual POSIX buffer. */
 	memset((void *) &ip[0], '\0', sizeof(ip));
 #endif
 

@@ -588,10 +588,11 @@ void VoipServerConnection::Receive()
 // which aborts the process. The datagram is unauthenticated and remote, so any UDP packet ending in
 // 0x68 whose total length is not 11 kills the server - a remote denial of service.
 //
-// [CHOSEN, not recovered] A non-10 length is dropped silently instead of aborting. Such a datagram
-// cannot be a challenge, so ignoring it preserves every legitimate outcome while removing the DoS.
-// It is deliberately not logged: a diagnostic per malformed datagram would itself be a log-flood
-// vector. This is an intentional departure from retail, not recovered behavior.
+// [CHOSEN, not recovered] Retail fix "Wrong-length voice challenge datagram is dropped instead of
+// ending the server" (docs/retail-fixes.md). A non-10 length is dropped silently instead of
+// aborting. Such a datagram cannot be a challenge, so ignoring it preserves every legitimate
+// outcome while removing the DoS. It is deliberately not logged: a diagnostic per malformed
+// datagram would itself be a log-flood vector.
 void VoipServerConnection::HandlePacketChallengeString(char* data, int length)
 {
     if (length != 10)

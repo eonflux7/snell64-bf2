@@ -124,8 +124,10 @@ bool PlayerProfile::activateCharacterProfile(const std::string& name)
 }
 
 // 7C0510: activates the first character by name.
-// [CHOSEN, not recovered] With no characters retail reads the map head's unconstructed value; an
-// empty name is passed here instead, which finds nothing and clears the active character.
+// [CHOSEN, not recovered] Retail fix "Activating a profile without characters does not read an
+// unconstructed value" (docs/retail-fixes.md). With no characters retail reads the map head's
+// unconstructed value; an empty name is passed here instead, which finds nothing and clears the
+// active character.
 void PlayerProfile::activateFirstCharacterProfile()
 {
     activateCharacterProfile(m_characters.empty() ? std::string() : m_characters.begin()->second->getName());

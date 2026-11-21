@@ -496,8 +496,10 @@ bool VoipMixer::selectMicrophoneRecordingSource()
 
     const DWORD channels = (control.fdwControl & MIXERCONTROL_CONTROLF_UNIFORM) ? 1u : m_waveInDestination->cChannels;
     const DWORD items = control.cMultipleItems;
-    // [CHOSEN, not recovered] Sized items * channels: retail allocates `items` slots, which WINMM
-    // overruns for a non-uniform MUX on a multi-channel line. Retail does not check this allocation.
+    // [CHOSEN, not recovered] Retail fix "Microphone source selection sizes its value buffer by
+    // items and channels" (docs/retail-fixes.md). Sized items * channels: retail allocates `items`
+    // slots, which WINMM overruns for a non-uniform MUX on a multi-channel line. Retail does not
+    // check this allocation.
     const DWORD slots = items * (channels ? channels : 1u);
     MIXERCONTROLDETAILS_BOOLEAN* selected = new (std::nothrow) MIXERCONTROLDETAILS_BOOLEAN[slots ? slots : 1u];
     if (!selected)

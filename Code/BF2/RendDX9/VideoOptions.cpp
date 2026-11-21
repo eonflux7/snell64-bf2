@@ -944,10 +944,12 @@ videoOptions_getDynamicOptionList(void* self RD9_THUNK_EDX, int index)
         s_nativeOptionList[slot].push_back(std::string(s->c_str()));
     return s_nativeOptionList[slot];
 }
-// [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/4: the replacement for a dynamic-option
-// value the lists do not hold (a profile resolution or refresh rate the display no longer offers),
-// so setDynamicOption selects the closest supported entry instead of stopping. Returns the entry
-// index, or -1 when there is nothing to choose from (empty list, unreadable entries).
+// [CHOSEN, not recovered] Retail fix "Unsupported stored video mode falls back to the closest
+// supported one" (docs/retail-fixes.md), https://github.com/kr4uzi/OpenBF2/issues/4: the
+// replacement for a dynamic-option value the lists do not hold (a profile resolution or refresh
+// rate the display no longer offers), so setDynamicOption selects the closest supported entry
+// instead of stopping. Returns the entry index, or -1 when there is nothing to choose from (empty
+// list, unreadable entries).
 // Antialiasing keeps the current selection, otherwise the first entry. A resolution prefers the same
 // size (only the refresh rate is off), otherwise the closest size; on equal distance the lower refresh
 // rate wins. A value without a size falls back to the desktop mode; a size without a rate uses the
@@ -1064,8 +1066,10 @@ bool RD9_THUNK videoOptions_setDynamicOption(void* self RD9_THUNK_EDX, int index
     }
     if (found < 0)
     {
-        // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/4: select the closest supported entry
-        // instead. Retail stops here (below), which kills a fullscreen client without a message.
+        // [CHOSEN, not recovered] Retail fix "Unsupported stored video mode falls back to the
+        // closest supported one" (docs/retail-fixes.md),
+        // https://github.com/kr4uzi/OpenBF2/issues/4: select the closest supported entry instead.
+        // Retail stops here (below), which kills a fullscreen client without a message.
         int replacement = -1;
 #if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
         if (index == 1 && isEngineDefaultResolution(needle))

@@ -165,7 +165,9 @@ bool PlayerActionManager::processRcvdPlayerActions(int count)
     if (!count)
         return false;
 
-    // [CHOSEN, not recovered] BF2NULL fix, https://github.com/B2BF/OpenBF2/issues/27.
+    // [CHOSEN, not recovered] Retail fix "Player actions received before the connection has a
+    // player are dropped (BF2NULL)" (docs/retail-fixes.md),
+    // https://github.com/B2BF/OpenBF2/issues/27.
     // Retail dereferences m_player unguarded here (PE 0x616F9F, the advisory's faulting
     // instruction). A connection has no player until its ClientInfo creates one, or at all
     // when that creation is refused, so a client that sends an action block in that window

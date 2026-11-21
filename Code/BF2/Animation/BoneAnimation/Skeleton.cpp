@@ -174,8 +174,9 @@ Skeleton::Skeleton(const std::string& name, bool* loaded, hfe::io::IStream* stre
         unsigned short nameLength = 0;
         stream->read(&nameLength, 2);
 
-        // divergence, and the only one in this body: the ELF reads straight into a 256-byte stack
-        // buffer with no bound on the file's 16-bit length. Bounded here - see the block comment.
+        // [CHOSEN, not recovered] Retail fix "The skeleton loader keeps a bone name inside its
+        // 256-byte buffer" (docs/retail-fixes.md), the only divergence in this body: the ELF reads
+        // straight into a 256-byte stack buffer with no bound on the file's 16-bit length.
         char nameBuffer[256];
         const unsigned int toRead = nameLength < sizeof(nameBuffer) - 1
                                         ? nameLength : sizeof(nameBuffer) - 1;

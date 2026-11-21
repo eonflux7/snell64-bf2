@@ -383,7 +383,8 @@ bool BF2VoipClient::handleIncoming(std::uint8_t* packet, int length, std::uint16
 {
     if (!m_active || !m_playbackDevice)
         return false;
-    // [CHOSEN, not recovered] Reject truncated trailers and incomplete codec frames.
+    // [CHOSEN, not recovered] Retail fix "Incoming voice datagrams shorter than their trailer are
+    // rejected" (docs/retail-fixes.md). Reject truncated trailers and incomplete codec frames.
     // https://github.com/kr4uzi/OpenBF2/issues/26
     if (length <= 4 || m_encodedFrameSize <= 0 || (length - 4) % m_encodedFrameSize != 0)
         return false;

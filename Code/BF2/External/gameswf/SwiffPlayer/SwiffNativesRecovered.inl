@@ -667,8 +667,8 @@ void as_multiplay_deleteDemoBookmark(const gameswf::fn_call& fn)
 
 // sub_10054940 "addFavouriteServer": the busy cursor, GeneralSettings, the player host; the row id
 // "%s %d %d" (0x100D99BC: address, query port, host port; the same unbounded %s as joinServer,
-// bounded here the same way [CHOSEN, not recovered]). A favourite already at (address, query port)
-// (+0x134 findFavouriteServer) answers false. Otherwise the current list's +0x3C getRecord(address,
+// bounded here the same way). A favourite already at (address, query port) (+0x134
+// findFavouriteServer) answers false. Otherwise the current list's +0x3C getRecord(address,
 // queryPort, false, false): none answers false; a record is added as +0x11C addFavouriteServer(
 // entry.address, entry.queryPort, entry.hostName) and the answer is true.
 void as_multiplay_addFavouriteServer(const gameswf::fn_call& fn)
@@ -680,6 +680,8 @@ void as_multiplay_addFavouriteServer(const gameswf::fn_call& fn)
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     const std::string id(fn.arg(0).to_string());
     std::string address;
+    // [CHOSEN, not recovered] Retail fix "Menu natives split list and server-row ids with bounded
+    // reads" (docs/retail-fixes.md).
     char buf[260] = {0};
     int queryPort = 0, hostPort = 0;
     ::sscanf(id.c_str(), "%259s %d %d", buf, &queryPort, &hostPort);
@@ -1814,8 +1816,9 @@ static IHapticSettings* hapticSettings()
 // unk_100F3870: the three threshold names (static initialiser 0x100D5D40). The setters search the
 // three (`cmp edi, 54h`); the getters' loop bound is 0x16C, thirteen 28-byte slots, so a name that is
 // none of the three walks into the adjacent DLL globals (0x100F38C4..) in the shipped image.
-// [CHOSEN, not recovered] The port searches the three for both and answers -1 for anything else,
-// which is what the setters do.
+// [CHOSEN, not recovered] Retail fix "Haptic threshold getters search only the three threshold
+// names" (docs/retail-fixes.md). The port searches the three for both and answers -1 for anything
+// else, which is what the setters do.
 static int hapticThresholdLevel(const std::string& key)
 {
     static const char* const kNames[3] = {

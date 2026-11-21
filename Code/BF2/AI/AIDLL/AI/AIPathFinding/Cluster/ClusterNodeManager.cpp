@@ -65,9 +65,11 @@ ClusterNodeManager::ClusterNodeManager()
     m_ocDataHash->m_nodeManager = this;
 }
 
-// ELF 0x3201E0 (D2; D1 0x320370). Frees the node pool, the record pool, every hashed record and its node, the hash
-// and the goal copy. Retail reads each hashed record's chain link after deleting it; the link is
-// read first here ([CHOSEN], the same walk without the use after free).
+// ELF 0x3201E0 (D2; D1 0x320370). Frees the node pool, the record pool, every hashed record and its
+// node, the hash and the goal copy. Retail reads each hashed record's chain link after deleting it;
+// the link is read first here, the same walk without the use after free. [CHOSEN, not recovered]
+// Retail fix "The ClusterNodeManager destructor reads the chain link before deleting the record"
+// (docs/retail-fixes.md).
 ClusterNodeManager::~ClusterNodeManager()
 {
     while (m_freeNodes != 0)

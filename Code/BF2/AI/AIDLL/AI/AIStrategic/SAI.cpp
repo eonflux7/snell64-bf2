@@ -1230,8 +1230,9 @@ int SAI::releaseSquadsFromObject(int object, int side)
 // ELF 0x32D6D0: the unit leaves the object's assigned set and SAI's occupied set, then
 // m_bots[*it]->free(false) runs - with the iterator removeAssigned has already advanced, so
 // the image frees the *next* assigned unit (`movl (%esi),%eax` reloads it after the call).
-// [CHOSEN, not recovered] When the released unit was the last one, the image reads the old
-// libstdc++ header node's stale value as a bot index; here that second call is skipped.
+// [CHOSEN, not recovered] Retail fix "SAI::releaseUnitFromObject skips the second free at the end
+// of the set" (docs/retail-fixes.md). When the released unit was the last one, the image reads the
+// old libstdc++ header node's stale value as a bot index; here that second call is skipped.
 // The side argument is unused; the image answers 1.
 bool SAI::releaseUnitFromObject(int object, std::set<int>::iterator& it, int)
 {

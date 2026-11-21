@@ -28,7 +28,8 @@ Mutex::Mutex()
     // build dice used those agreed; on another they need not. Written as sizeof() here because a
     // hardcoded 24 would be silently wrong on any platform whose mutex is larger.
     pthread_mutex_t* p = static_cast<pthread_mutex_t*>(::operator new(sizeof(pthread_mutex_t)));
-    // [CHOSEN, not recovered] Recursive: a deliberate divergence from the Linux retail image in favour
+    // [CHOSEN, not recovered] Retail fix "POSIX mutexes are recursive" (docs/retail-fixes.md).
+    // Recursive: a deliberate divergence from the Linux retail image in favour
     // of the Windows retail behaviour. The ELF passes null attributes (0x83D2CC0), a normal glibc
     // mutex; the shared code was written against Windows' recursive CRITICAL_SECTION and relocks on
     // one thread: CBF2VoipServer::Shutdown holds mMutex and calls ReleaseAllInstances,

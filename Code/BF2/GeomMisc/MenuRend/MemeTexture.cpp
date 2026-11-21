@@ -888,8 +888,10 @@ void MemeTexture::beginShape(unsigned char clearValue)
 
 
 // Combines canvas pixels and saved alpha according to the operation flags; the last pixel is unchanged.
-// PE 0x10088AA0. [CHOSEN, not recovered] Omits the shipped walk's final step at index -1: it
-// writes the word before the locked bits, which the native backends' page-aligned buffers fault on.
+// PE 0x10088AA0. [CHOSEN, not recovered] Retail fix "MemeTexture::applyCanvas no longer writes
+// before the locked pixels" (docs/retail-fixes.md). Omits the shipped walk's final step at
+// index -1: it writes the word before the locked bits, which the native backends' page-aligned
+// buffers fault on.
 void MemeTexture::applyCanvas(short mode)
 {
     ::dice::hfe::dx9rend::EngineTexture* tex =

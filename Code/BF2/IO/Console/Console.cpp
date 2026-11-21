@@ -1735,7 +1735,9 @@ bool OldConsole::run(const std::string& filePath,
     return true;
 }
 
-// [CHOSEN, not recovered] The short-read failure path frees its file buffer, avoiding the original leak.
+// [CHOSEN, not recovered] Retail fix "Console run and include free the script buffer on a short
+// read" (docs/retail-fixes.md). The short-read failure paths of run and include free their file
+// buffer, avoiding the original leak.
 
 // Executes file in the caller's scope and access level, exposing arguments as console variables.
 // Relative resolution uses m_workingPath; names without any dot receive .inc. Working-file state

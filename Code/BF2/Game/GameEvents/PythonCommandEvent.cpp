@@ -119,8 +119,9 @@ bool PythonCommandEvent::executeServer(int /*connectionId*/)
     return true;
 }
 
-// [CHOSEN, not recovered] Stores at most MaxArgs values and clamps the stored count.
-// Skips excess serialized arguments so following events retain their wire alignment.
+// [CHOSEN, not recovered] Retail fix "Game event readers keep wire lengths and counts inside their
+// buffers" (docs/retail-fixes.md). Stores at most MaxArgs values and clamps the stored count. Skips
+// excess serialized arguments so following events retain their wire alignment.
 bool PythonCommandEvent::deSerialize(io::BitStream* stream)
 {
     int commandId = 0;

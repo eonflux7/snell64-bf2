@@ -271,8 +271,9 @@ void Terrain::updateWaterConstants()
         // `fsubr`). The 3D water shaders offset their texture by WaterScroll * WaterCycleTime and
         // WaterCycleTime * 10 + 0.7 * u + 1.13 * v, so the wrap makes the surface jump every
         // waterAnimSpeed / 2 seconds.
-        // [CHOSEN, not recovered] B2BF/OpenBF2 issue 69: the cycle runs on unwrapped, at the same
-        // rate, from the double-precision copy of GlobalTime. It wraps only every
+        // [CHOSEN, not recovered] Retail fix "3D water animates continuously instead of jumping at
+        // every cycle" (docs/retail-fixes.md), B2BF/OpenBF2 issue 69: the cycle runs on unwrapped,
+        // at the same rate, from the double-precision copy of GlobalTime. It wraps only every
         // kWater3DCyclePeriod cycles to keep the float constant precise in long sessions; at that
         // period every texture offset jumps by a whole number for scroll values with one decimal,
         // which covers the stock levels. The 2D arm below stays retail: it uses the constant as a
@@ -1745,7 +1746,8 @@ void Terrain::drawWaterGrid(float seaLevel)
 void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightmap)
 {
     namespace Ra = dx9rend::Ra;
-    // [CHOSEN, not recovered] Skip excess cells instead of overrunning the ring
+    // [CHOSEN, not recovered] Retail fix "Water cells beyond the 256-entry parameter ring are
+    // skipped" (docs/retail-fixes.md): skip excess cells instead of overrunning the ring
     // (issue #33), following marekzajac97/BF2-HUD-fix. Those cells remain undrawn.
     if (m_waterObjectRingCursor >= 256)
         return;

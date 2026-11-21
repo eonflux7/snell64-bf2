@@ -2842,6 +2842,30 @@ if(APPLE OR UNIX)
     endif()
 endif()
 
+# [TEMP] The argv join of the console entry points against the recovered SimpleParser, and
+# SimpleParser::getKey's values against a model of the retail body
+# (Code/Tests/command_line_join_runtime.cpp); retail fixes in docs/retail-fixes.md. Built on request.
+# On macOS it also runs the client relaunch round trip through MacSystem.cpp's splitCommandLine,
+# which is compiled for the client image only (DEDICATED=0) and links CoreFoundation for its alert.
+if(APPLE OR UNIX)
+    add_executable(bf2_command_line_join_check EXCLUDE_FROM_ALL
+        Code/Tests/command_line_join_runtime.cpp
+        "${BF2_ROOT}/Game/Utility/SimpleParser.cpp")
+    bf2_configure_cpp_target(bf2_command_line_join_check)
+    bf2_set_platform_compat(bf2_command_line_join_check)
+    if(APPLE)
+        target_sources(bf2_command_line_join_check PRIVATE
+            "${BF2_ROOT}/Platform/macOS/MacSystem.cpp")
+        target_link_libraries(bf2_command_line_join_check PRIVATE "-framework CoreFoundation")
+        bf2_set_image(bf2_command_line_join_check 0)
+    else()
+        bf2_set_image(bf2_command_line_join_check 1)
+    endif()
+    if(BUILD_TESTING)
+        add_test(NAME bf2_command_line_join_check COMMAND bf2_command_line_join_check)
+    endif()
+endif()
+
 # [TEMP] CBF2VoipServer::Shutdown under one dice::hfe::Mutex (Code/Tests/voip_server_shutdown_runtime.cpp):
 # the relock through ReleaseAllInstances must not hang. Built on request; UDP port 55197 only.
 if(APPLE)

@@ -292,9 +292,11 @@ void effectManagerResetEffects();
 }
 extern void* g_renderEntryPool;
 extern void* g_raShaderConstants;
-// [CHOSEN, not recovered] The 3D water clock (B2BF/OpenBF2 issue 69): GlobalTime (+0x94) kept in
-// double precision. Every GlobalTime accumulation in this file adds the same frame time to it, so
-// Terrain::updateWaterConstants runs the 3D water at the retail rate without the float's rounding.
+// [CHOSEN, not recovered] Retail fix "3D water animates continuously instead of jumping at every
+// cycle" (docs/retail-fixes.md). The 3D water clock (B2BF/OpenBF2 issue 69): GlobalTime (+0x94)
+// kept in double precision. Every GlobalTime accumulation in this file adds the same frame time to
+// it, so Terrain::updateWaterConstants runs the 3D water at the retail rate without the float's
+// rounding.
 double g_waterClock = 0.0;
 extern void* g_renderTargetSystem;
 // QueryManager.cpp - the GPU-throttle fences.
@@ -2975,10 +2977,12 @@ bool Renderer::renderFrame(double time, float deltaTime)
             if (isMultisampleActive())                                             // 0x10030AE7
                 static_cast<RendDX9Base*>(g_rendererBase)->device->SetDepthStencilSurface(
                     savedDepthStencil);
-            // [CHOSEN, not recovered] Not in the shipped body: one leaked reference per frame
-            // drawn with multisampling kept the depth-stencil surface, and with it the device,
-            // referenced, so the final device release at shutdown (rendererReleaseD3DDevice,
-            // RendDX9Init.cpp:738) failed after any level had been drawn with antialiasing.
+            // [CHOSEN, not recovered] Retail fix "Depth-stencil surface saved for the multisampled
+            // overlay passes is released" (docs/retail-fixes.md). Not in the shipped body: one
+            // leaked reference per frame drawn with multisampling kept the depth-stencil surface,
+            // and with it the device, referenced, so the final device release at shutdown
+            // (rendererReleaseD3DDevice, RendDX9Init.cpp:738) failed after any level had been drawn
+            // with antialiasing.
             if (savedDepthStencil)
                 savedDepthStencil->Release();
 

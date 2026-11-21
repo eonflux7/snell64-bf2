@@ -479,8 +479,9 @@ void Effect::snapshotParameterValues()
          node != m_parameters.end(); ++node)
     {
         D3DXHANDLE handle = ::renddx9abi::d3dxHandle(node->second->getD3DXParam());
-        // [CHOSEN, not recovered] zeroed: retail reads Bytes from an uninitialised description
-        // when GetParameterDesc fails (an unbound handle).
+        // [CHOSEN, not recovered] Retail fix "The effect parameter snapshot zeroes its description
+        // before the query" (docs/retail-fixes.md): retail reads Bytes from an uninitialised
+        // description when GetParameterDesc fails (an unbound handle).
         D3DXPARAMETER_DESC desc;
         ::memset(&desc, 0, sizeof(desc));
         m_d3dxEffect->GetParameterDesc(handle, &desc);                  // +0x10

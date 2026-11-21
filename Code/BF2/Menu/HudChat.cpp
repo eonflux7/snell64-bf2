@@ -94,7 +94,8 @@ void HudChat::addGameMessage(std::wstring text, world::IPlayer* player, int team
 }
 // BF2.exe 0x79F3E0 null-tests the player only around the ignore query (0x79F3EF) and then
 // calls its getName unconditionally (0x79F442).
-// [CHOSEN, not recovered] A message without a player is dropped instead of crashing.
+// [CHOSEN, not recovered] Retail fix "HudChat::addPlayerMessage drops a chat message that has no
+// player" (docs/retail-fixes.md).
 void HudChat::addPlayerMessage(std::wstring text, world::IPlayer* player, int)
 {
     if (!player) return;

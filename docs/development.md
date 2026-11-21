@@ -37,6 +37,14 @@ before implementation begins. An issue title or a link added after the work is c
 does not satisfy this requirement. AI may assist with implementation and validation of
 the discussed approach under the human ownership rules above.
 
+A retail fix is the exception. A change that corrects incorrect retail behavior needs no
+separate issue when it is a client fix, or a server fix that stays backwards compatible for
+unmodified retail clients. Add its entry to [Retail fixes](retail-fixes.md) in the same
+change; that guide defines incorrect behavior, backwards compatibility and the entry format.
+Beside the code, use `[CHOSEN, not recovered]` and name the entry in place of an issue.
+Server fixes that a retail client would notice, improvements, features and contract changes
+keep the issue workflow.
+
 Link the issue in the change description or documentation. Add the link beside the code
 when a future reader needs it to understand a deliberate departure from retail behavior.
 Use `[CHOSEN, not recovered]` for intentional policy and describe the new behavior plainly;
@@ -56,7 +64,8 @@ symbolized Linux ELF and Windows PE where available. Mangled names establish par
 types and constness; callers and return-value use help establish return types. Keep the
 observed ordering, ownership, side effects, signedness, repeated virtual calls, and missing
 guards in a recovery change. Intentional fixes to those behaviors follow the linked issue's
-discussed approach. A plausible rewrite is not evidence of the shipped implementation.
+discussed approach or, for a retail fix, the rule above. A plausible rewrite is not evidence
+of the shipped implementation.
 
 Public signatures, inheritance, virtual order, class layout, serialized widths, event IDs,
 and protocol transitions are compatibility contracts. Verify retail layouts with MSVC x86;
@@ -184,7 +193,8 @@ would hide a new production implementation. Keep generated build logs and extrac
 files in your own build directory.
 
 A useful review records the behavior changed, its PE/ELF evidence for recovery or the linked
-issue and intentional design change, tests and outcomes, unexercised paths, and remaining
+issue and intentional design change (for a retail fix, its entry in
+[Retail fixes](retail-fixes.md)), tests and outcomes, unexercised paths, and remaining
 named frontiers relevant to the change. Distinguish startup, listening, loading, joining,
 and playable behavior. Do not stage or commit shared work unless asked.
 An agent reports its local changes and verification results; the human author handles

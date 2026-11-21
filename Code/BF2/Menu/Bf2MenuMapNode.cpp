@@ -738,11 +738,12 @@ Bf2MenuMapNode::Bf2MenuMapNode(System* system, const char* name, int, int, int, 
     m_field8a0 = m_system->loadTexture("Ingame/GeneralIcons/empty.tga", true);                           // +8A0
     m_field694 = 0.5f;                               // +694
     m_expandedMap = false; m_field690 = false;       // +68E/+690 (78181C/781822)
-    // [CHOSEN, not recovered]: memory-safety deviation. The shipped constructor (0x7801AB..0x780206)
-    // never writes +0x68D, but update (0x77C330) reads it at 0x77C48F / 0x77C7E9 before its first
-    // write at 0x77D383. Retail runs on whatever the heap holds there (Memory.dll does not zero user
-    // blocks; fresh Windows pages are zero); on macOS it came back non-zero and the first spawn
-    // screen kept the map at its mini size with no DONE/SUICIDE row. Zero it.
+    // [CHOSEN, not recovered] Retail fix "The spawn map node initializes the flag its update reads
+    // first" (docs/retail-fixes.md). The shipped constructor (0x7801AB..0x780206) never writes
+    // +0x68D, but update (0x77C330) reads it at 0x77C48F / 0x77C7E9 before its first write at
+    // 0x77D383. Retail runs on whatever the heap holds there (Memory.dll does not zero user blocks;
+    // fresh Windows pages are zero); on macOS it came back non-zero and the first spawn screen kept
+    // the map at its mini size with no DONE/SUICIDE row. Zero it.
     m_field68d = false;                              // +68D
     m_commanderMode = false; m_squadMode = false;
     m_field776 = true;                               // +776
@@ -1981,8 +1982,9 @@ void Bf2MenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
                                   const Rect* adjusted, const Rect* bounds,
                                   const Color* color, RenderContext* context)
 {
-    // Retail, not a deviation: BF2.exe 0x7746ED tests the texture argument (test ebx,ebx) and
-    // returns on jle (0x77488B), a signed <= 0 test of the 32-bit handle.
+    // [CHOSEN, not recovered] Retail fix "Map icons are drawn for texture handles with the top bit
+    // set" (docs/retail-fixes.md): retail also returns when the handle is negative as a signed
+    // 32-bit value.
     if (texture == 0) return;
     position.x -= static_cast<float>(std::floor(position.x + 0.5f));
     position.y -= static_cast<float>(std::floor(position.y + 0.5f));
