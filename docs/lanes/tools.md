@@ -56,6 +56,19 @@ camera hands it back when it stops (`view.fly 0`, F8); started from a view, it s
 keeps the camera there, ready for `view.save`. `view.leave` always hands the camera back and
 restores `renderer.drawHud`.
 
+Engine points the tool relies on:
+- Hook: `BF2Render::render` (`Game/Main/BF2Render.cpp`), after `setFarPlane` and before the
+  `renderFrame` loop; everything that culls, picks LODs, streams or sets up cascades reads the view
+  after it. On the spawn screen the camera is the player's `MultiPlayerFreeCamera`; with no player
+  nothing sets the view, so the override does not depend on one.
+- `RenderView::setViewMatrix` takes camera-to-world (rows right, up, forward, position; y up,
+  left-handed); `setFov` is vertical, radians; `setAdjustedFov` widens for widescreen.
+- HUD and spawn menu are both gated by `renderer.drawHud`.
+- Pause: `ServerGameLogic::setPause` (game status 4) stops triggers, objects and physics and pauses
+  particles; it has no console binding. Renderer time is one input, `renderFrame`'s `time`, so a
+  freeze passes 0 there while a view is active.
+- `renderer.dumpScreen` reads the back buffer at end of scene, after the HUD and before ImGui.
+
 **A view** is a name, position, yaw, pitch, FOV, and options:
 - `run` lines, executed on entering the view (debug mode, a forced cascade, a time of day). Before
   a line sets a console variable, the tool records the variable's value and restores it on leaving
@@ -68,9 +81,9 @@ restores `renderer.drawHud`.
 **A set** is an ordered list of views with a dwell time each. Each map has one view file,
 `<mod>/settings/eon64-views/<map>.txt`, where `<map>` is the level's folder name. A view applies to
 every game mode and layer of the map; the mode and layer a shot was taken on are in its stamp.
+Lines starting with `#` are comments. `muttrah_city_2.txt`:
 
 ```
-# views for muttrah_city_2
 view market   pos=812.4,62.0,-311.9 yaw=134.5 pitch=-8 fov=75 | rooftop alpha fences
   run renderer.sunShadowDebug 1
 view airfield pos=-1203.0,48.5,902.2 yaw=12.0 pitch=-3

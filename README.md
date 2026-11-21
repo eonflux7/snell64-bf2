@@ -15,13 +15,14 @@ This is a work in progress. A successful build is not a playable game; where eac
   [compat.md](docs/lanes/compat.md).
 - **Replaces the renderer.** BF2's forward, gamma-space, lightmap-lit renderer becomes a linear HDR
   pipeline. Done: reversed-Z, a depth prepass, cascaded sun shadows, linear particle lighting, 4x
-  MSAA with LOD crossfades. Planned: draw submission without D3DX's per-draw overhead, single-pass
-  terrain, a shared atmosphere with sky reflections, bloom with auto-exposure, GTAO. See
+  MSAA with LOD crossfades, draw submission without D3DX's per-draw overhead (instanced),
+  single-pass terrain. In progress: a physical sky and aerial perspective with a radial view
+  distance. Planned: sky reflections, clouds, bloom with auto-exposure, GTAO. See
   [render.md](docs/lanes/render.md).
 - **Loads faster.** A PR map load, menu to spawn screen, went from about 190 s to 14 s (effect
   caches, worker compiles, file prefetch). See [perf-load.md](docs/lanes/perf-load.md).
 - **Has in-game tools.** An ImGui debug menu, performance overlay and console
-  ([ui.md](docs/lanes/ui.md)); a view tool for repeatable screenshots and benchmarks is under way
+  ([ui.md](docs/lanes/ui.md)); console-driven views, screenshots, camera paths and benchmarks
   ([tools.md](docs/lanes/tools.md)).
 - **Fixes engine bugs** found along the way (crashes, x64 hazards), as standalone commits that can
   be offered to OpenBF2. See [fix.md](docs/lanes/fix.md).

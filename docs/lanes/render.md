@@ -92,7 +92,7 @@ That is the grade's, not this milestone's.
 
 ### 8. Anti-aliasing
 
-Fixed 4x MSAA is the one method; what MSAA alone misses is handled where it starts. The passes are
+Fixed 4x MSAA is the one method (no TAA, upscalers or post-process AA; owner); what MSAA alone misses is handled where it starts. The passes are
 in [Frame](#frame), the sampler rules in the [shader contract](#shader-contract).
 - Sampler policy: material samplers 16x anisotropic, data samplers point or linear; the
   caps-dependent filter defines are gone (`28487a35`).
@@ -119,7 +119,6 @@ in [Frame](#frame), the sampler rules in the [shader contract](#shader-contract)
 Limits: shading once per pixel leaves glossy surfaces sparkling (specular AA is milestone 11). The
 default video profile still picks 8x antialiasing while the scene runs 4x. `Ra_LodDitherClip` runs
 in every lit shader even at (0, 1), costing early depth rejection where there was no clip before.
-GPU timings: [perf-frame.md](perf-frame.md#after-render-milestone-8).
 
 ### 10. Terrain in one pass
 
@@ -195,7 +194,8 @@ Design:
   roughness; its irradiance as 9 spherical-harmonic coefficients, taken at load.
 - **Sky light.** Every receiver's sky term is the irradiance at its normal times its occlusion:
   statics and terrain the lightmap's sky visibility, vehicles and soldiers the hemi map,
-  first-person models the sky visibility under the camera. The irradiance is scaled so its upward
+  first-person models the sky visibility under the camera (the terrain lightmap's sky channel
+  copied to memory at load, read under the camera, smoothed over about 0.3 s). The irradiance is scaled so its upward
   value keeps the luminance of the authored sky colour: each level keeps its balance, and only the
   direction and colour change.
 - **Lighting model.** Direct sun specular and ambient specular from the same roughness and F0 (GGX,
@@ -249,8 +249,8 @@ Decisions (owner, 2026-11-20):
 - The authored sun colour (`Lightmanager.staticSunColor`) stays the sunlight at the ground, and lit
   surfaces keep using it. The model works backwards from it to the sunlight above the atmosphere,
   so the sky, the sun disc and the haze agree with it.
-- The authored fog end stays the visibility limit (PR's view distance; the far plane and culling
-  follow it): aerial perspective reaches full haze there.
+- The authored fog end stays the visibility limit (PR's view distance): objects end there by the
+  radial dither (see View distance); the haze does not reach full there.
 - The authored dome and fog are brighter than a physical sky under the authored sun (by day the
   horizon needs 2.7x on Muttrah City, 3.1x on Saaremaa, 5.1x on Fallujah West; 0.11x at night),
   and a full physical fit (Rayleigh and Mie densities free) ran to its bounds on Fallujah West. The
@@ -301,11 +301,36 @@ D3D9 limits: there is no compute and no rendering into volume textures. The load
 built on the CPU (pixel passes were tried first: loops the game's D3DX compiler leaves as loops
 came out wrong under DXVK, the multiple-scattering table 10x low); per-frame passes unroll their
 loops. The aerial-perspective volume is a 2D atlas of depth slices, blended between
-neighbouring slices by hand; particles read it per vertex, so its format must allow vertex texture
-fetch (checked in task 2). Frame resources read by every lit shader get reserved samplers like s13
-and s15: the atlas, the sky cube, and the split-sum BRDF table if task 1 finds a third free slot
-(otherwise an analytic fit). The water scene texture and the sky's transmittance table are effect
-parameters. Each task that adds to what the shaders may rely on raises the contract version (6 on).
+neighbouring slices by hand; every reader (particles included) samples it per pixel, and
+`A16B16G16R16F` also passes vertex texture fetch. Frame resources read by every lit shader get
+reserved samplers like s13 and s15: the atlas (s9), the sky cube and the split-sum BRDF table (two
+of s10–s12, s14). The water scene texture and the sky's transmittance table are effect
+parameters. Each task that adds to what the shaders may rely on raises the contract version (6 on);
+the shader side of tasks 2–5 is contracts 6–9 in the [shader contract](#shader-contract).
+
+Built so far, engine side (tasks 2–5, 2026-11-20):
+- **Tables** (task 2): the fit and the three tables take about 250 ms at load; `tools.atmosphere`
+  dumps them against the CPU model ([tools.md](tools.md#atmosphere)).
+- **Sky** (task 3): `RaSky` in the dome's place; the dome mesh draws only with
+  `renderer.atmosphere 0`, and is deleted with its techniques at acceptance, when the sky moves to an
+  effect of its own. Not checked yet: under water, thermals. Banding in the dark blue and the
+  sun's glare are milestone 13's (dither, bloom).
+- **Aerial perspective** (task 4): `Ra_ApplyFog` replaced in the 18 effects that fog; retail fog
+  kept under water, in first person and in thermals. Haze shape `renderer.hazeDepth` 1,
+  `renderer.hazeFalloff` 400. The fog queues (`RSMTFogPass`, `RSMTFogTransparentPass`) are deleted:
+  nothing added to slots 14 and 15 (the enqueue router fills 0–7, direct adds 8–11, 16–27 and 31).
+- **View distance** (task 5, A/B `renderer.viewDistance`): the world view's projection is
+  unbounded (reversed float depth); its frustum stays at the view distance, so objects cull as
+  before. With the cut on, a scenery frustum (`rendererSubmitCullFrustum`, built from the current
+  view at each call) reaches 40 km for the terrain culler, the surrounding ring (tested as a box;
+  retail's edge-crossing test missed slots), static meshes (culled by `renderer.contributionCull`),
+  road chunks and overgrowth cells (overgrowth to `Overgrowth.viewDistance`). Water draws over the
+  whole map, then the sea in rings of cells to the horizon in each direction whose surrounding slot
+  ends in open, sunlit sea. Bundled and skinned meshes past the cut are not submitted.
+- **Left** (owner's look, 2026-11-20: good on Saaremaa, Kashan Desert, Burning Sands, The Falklands): the far ground ring (land past the ring
+  shows sky); below the horizon the sky repeats its horizon row, flat (seen from the air until the
+  ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets
+  and anti-air; device resets with the cut on; the cost of statics, roads and terrain to 40 km.
 
 ### 12. Clouds
 
@@ -436,6 +461,10 @@ In draw order, for the main world view:
 
 Depth is reversed throughout (near 1, far 0) except in shadow-map depth buffers.
 
+When deleting a retail pass, check what state it leaves bound for the passes after it: the
+LightManager shadow pass bound the scene depth and RT0, and deleting it broke the scene until
+`dc97ef7b`.
+
 ## GPU pass timers
 
 `BF2_GPU_TIMERS` ([dev.md](dev.md)) and the performance overlay ([ui.md](ui.md)) time the frame
@@ -468,7 +497,8 @@ A span includes the GPU's idle time while the CPU is the bottleneck; that usuall
 
 ## Sun shadows
 
-`SunShadows.cpp`. Casters come from a **submission context**: each mesh type's normal submission
+`SunShadows.cpp`. The cascades replace retail's per-caster dynamic shadows, which are gone (owner).
+Casters come from a **submission context**: each mesh type's normal submission
 takes its cull volume and queue target from a pass context, so the shadow pass re-runs submission
 against the cascade volume into a caster list (`rendererShadowCasters`). Camera queues are not
 reused, because meshes cull per material against the camera. Casters draw with each Ra effect's

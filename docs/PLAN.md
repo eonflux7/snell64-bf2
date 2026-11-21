@@ -32,41 +32,33 @@ pass timers ([render.md](lanes/render.md#gpu-pass-timers)) and the debug overlay
 against the previous milestone's baseline; a regression stands only if the owner accepts it
 explicitly, and is recorded with the milestone in [render.md](lanes/render.md).
 
-Order: draw submission comes before terrain and the atmosphere, so the new terrain draw is written
-once on the new path and the parameters milestones 11–14 add cost nothing per draw. Terrain comes
-before the atmosphere, so aerial perspective and sky reflections are written once into a single
-terrain pass. Bloom and auto-exposure depend only on the HDR scene and can move earlier if night
-layers need them sooner.
+Bloom and auto-exposure depend only on the HDR scene and can move earlier if night layers need
+them sooner.
 
-Not planned: converting the assets to a PBR material set. The existing maps are interpreted as PBR
-inputs (milestone 11) instead.
+Not planned: converting the assets to a PBR material set (the existing maps are interpreted as PBR
+inputs in milestone 11). Deferred until milestones 8–13 are done (owner, 2026-11-18): a Vulkan
+backend or DXVK interop for per-sample MSAA reads and custom resolves.
 
 ## `tools`
 
-Design: [lanes/tools.md](#tools).
+Design: [lanes/tools.md](lanes/tools.md#milestones).
 
 | Milestone | Commit scope | Status |
 |---|---|---|
-| 1. Views | `tools(view)` | Tasks 1–5 built; 6–8 after render milestone 9 |
-| 2. Unattended runs and regression | `tools(run)` | After render milestone 9 |
-| 3. Benchmark path | `tools(bench)` | Current, cut (no history file or acceptance check yet) |
-| 4. Renderer inspection (alongside render milestone 9) | `tools(inspect)` | Planned |
-| 5. Repeatability and map coverage (after render milestone 9) | `tools(bench)` | Planned |
+| 1. Views | `tools(view)` | Tasks 1–5 built; 6–8 (settle, stamping, determinism) planned |
+| 2. Unattended runs and regression | `tools(run)` | Planned |
+| 3. Benchmark path | `tools(bench)` | Built, cut: no history file or acceptance check |
+| 4. Renderer inspection | `tools(inspect)` | Planned; `tools.survey` and `tools.atmosphere` built ahead of it |
+| 5. Repeatability and map coverage | `tools(bench)` | Planned |
 | 6. Soldier mode and capture | `tools(soldier)` | Planned |
 
-Scope (owner, 2026-11-19): milestones 1–3 hold only what render milestone 9 needs: views,
-screenshots stamped with both commits, unattended runs with a diff and contact sheet, and one
-real-time benchmark path per map with a per-frame CSV. Bookmarks, bit-identical shots, the
-fixed-step clock, path editing in the Views tab, the hitch log and the perf map wait for
-milestone 5. Starting set: about 5 views and one benchmark path each on Muttrah City and Saaremaa.
-
-The lane comes before render milestone 9 (owner, 2026-11-19): views and shots (milestone 1, tasks
-1–5), then the benchmark path (milestone 3, cut as in [STATUS.md](STATUS.md)); the rest of
-milestones 1–3 waits until after render milestone 9.
+The lane is paused (owner, 2026-11-19): milestones 1 and 3 were cut to what render milestone 9
+needed. The rest is picked up when a render task needs it. Bookmarks, bit-identical shots, the
+fixed-step clock, path editing in the Views tab, the hitch log and the perf map are milestone 5.
 
 ## `ui`
 
-Design: [lanes/ui.md](#ui).
+Design: [lanes/ui.md](lanes/ui.md#milestones).
 
 | Milestone | Commit scope | Status |
 |---|---|---|

@@ -17,12 +17,12 @@ Every change belongs to exactly one lane.
 |---|---|---|
 | `fix` | A bug in the engine (crash, wrong behaviour, x64 hazard) | Smallest correct change. Match retail where the evidence exists; say so when it was not checked. Committed on its own and independent of other lanes' code |
 | `compat` | What PR's content, scripts or launcher need from the engine | Specified by what PR does, never by guesswork about rhooks internals. No visual changes |
-| `render` | The renderer: a new design, not retail | Clean rewrites, no retail constraint. No legacy path kept beside its replacement once the milestone is accepted |
+| `render` | The renderer: a new design, not retail | Propose the modern technique first, with its cost, and name the retail piece it drops; retail assets are inputs (colours to fit), not the drawn result. Clean rewrites, no workaround kept "for now": a missing hook is built. No legacy path kept beside its replacement once the milestone is accepted |
 | `perf` | Load and frame time: threading, caching, avoiding repeated work, cheaper algorithms | Changes what work costs, never what it produces: the loaded state matches the old path's, and frames draw the same |
 | `build` | Toolchain, CMake/Ninja, build scripts, ABI checks | Never changes runtime behaviour |
 | `dev` | Diagnostics and developer hooks (traces, autohost, file monitor) | Off by default; when unset, behaviour and cost are unchanged |
 | `ui` | In-game UI on Dear ImGui: debug menu, performance overlay, console | Replaces the retail UI it supersedes. Hidden UI costs nothing. Never owns a setting: widgets change console variables. PR-specific content is read from files outside this tree |
-| `tools` | The in-game test harness: views, camera paths, unattended runs, benchmarks, renderer inspection | Console first: every action is a console command or variable, results are files. Idle costs nothing. View files and debug shading modes live outside this tree |
+| `tools` | The in-game test harness: views, camera paths, unattended runs, benchmarks, renderer inspection | Console first: every action is a console command or variable, results are files. Idle costs nothing. View files and debug shading modes live outside this tree. A new renderer feature gets a `tools.*` dump to check it by; agents do not drive the ImGui menu |
 
 A change that seems to need two lanes is two commits. A `fix` found during other work (for example
 the StateManager MRT slot overflow, found in `render` work) is committed on its own, first.
@@ -71,6 +71,9 @@ its section in the lane's document is rewritten as built, its row in `PLAN.md` s
   change is done when a traced load reaches the spawn screen with the same effects, meshes and
   textures as the old path. Say exactly what was exercised: built, ABI-checked, loaded, in game,
   which map, which flags.
+- Checks per milestone task: a visual A/B on the map already loaded, at a view that exercises the
+  change (draw stats show the new path drawing). No GPU timer runs or thermals A/B unless asked.
+  Three maps (Muttrah City, Fallujah West, Saaremaa) and recorded benches only at acceptance.
 
 ## Commits
 
@@ -134,6 +137,8 @@ the same comment. A marker is a pointer, not a justification.
 
 - Read `docs/STATUS.md` first, then only the sections the task needs (`grep -n '^#' FILE` gives
   the outline). Do not read whole documents by default.
+- `STATUS.md` holds state, not history: a finished task is one line, its facts go to the lane's
+  document, the story to the commit message.
 - Update the relevant document in the same commit as the change it describes. Each fact lives in
   one place; elsewhere, link to it.
 - `docs/archive/` holds reconstruction notes and evidence that source comments cite. It is
