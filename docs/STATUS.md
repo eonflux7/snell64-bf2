@@ -30,10 +30,9 @@ survey's sun azimuth + 180°.
 
 Tasks:
 1. Survey (`tools.survey`) and reference views. Done.
-2. Atmosphere model and tables. Built; checked by an agent with `tools.atmosphere`; the
-   owner has not opened the Atmosphere tab yet.
-3. Sky and sun (`RaSky`). Done (owner: "looks good"). Under water and thermals not checked
-   (deferred by the owner).
+2. Atmosphere model and tables. Built; checked by an agent with `tools.atmosphere`.
+3. Sky and sun (`RaSky`). Done (owner: "looks good"). Under water and thermals deferred by the
+   owner.
 4. Aerial perspective. Done (owner, Kashan Desert).
 5. View distance. Built; the owner's look on four maps: good. Left items: render.md's "Built so
    far".
@@ -58,14 +57,20 @@ Tasks:
     accepted by the owner; GPU pass times; old paths and variables deleted; milestone 11's
     section in render.md rewritten as built.
 
+## Awaiting the owner's look
+
+Built and checked by an agent; an entry goes when the owner has seen it.
+
+- Atmosphere tab (`tools.atmosphere`, milestone 11 task 2).
+- Device reset crash in the first frame (stale `RaShadowViewProj` handle): fixed in `717b2671`,
+  24 resets without a crash (agent, Muttrah City).
+- Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
+  Saaremaa.
+- `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`).
+
 ## Open issues
 
-- Device reset crash in the first frame (stale `RaShadowViewProj` handle): fixed in `717b2671`,
-  24 resets without a crash (agent, Muttrah City); not yet seen by the owner.
-- Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
-  Saaremaa, not yet seen by the owner.
 - The default video profile picks 8x antialiasing while the scene runs 4x. Settle on fixed 4x (a
   single-sample HUD back buffer, the scene's own 4x depth; touches device init and reset).
 - Cached static casters (owner idea, 2026-11-19): keep the far cascades' static casters while the
   snapped cascade holds still, draw moving objects over a copy. Not planned yet.
-- `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`) built, not yet seen by the owner.

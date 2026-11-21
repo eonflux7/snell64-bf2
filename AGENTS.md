@@ -17,7 +17,7 @@ Every change belongs to exactly one lane.
 |---|---|---|
 | `fix` | A bug in the engine (crash, wrong behaviour, x64 hazard) | Smallest correct change. Match retail where the evidence exists; say so when it was not checked. Committed on its own and independent of other lanes' code |
 | `compat` | What PR's content, scripts or launcher need from the engine | Specified by what PR does, never by guesswork about rhooks internals. No visual changes |
-| `render` | The renderer: a new design, not retail | Propose the modern technique first, with its cost, and name the retail piece it drops; retail assets are inputs (colours to fit), not the drawn result. Clean rewrites, no workaround kept "for now": a missing hook is built. No legacy path kept beside its replacement once the milestone is accepted |
+| `render` | The renderer: a new design, not retail | Propose the modern technique first, with its cost, and name the retail piece it drops; retail assets are inputs (colours to fit), not the drawn result. Clean rewrites, no workaround kept "for now": a missing hook is built. Rewrite only for a big groundwork, visual or perf win, not for its own sake. No legacy path kept beside its replacement once the milestone is accepted |
 | `perf` | Load and frame time: threading, caching, avoiding repeated work, cheaper algorithms | Changes what work costs, never what it produces: the loaded state matches the old path's, and frames draw the same |
 | `build` | Toolchain, CMake/Ninja, build scripts, ABI checks | Never changes runtime behaviour |
 | `dev` | Diagnostics and developer hooks (traces, autohost, file monitor) | Off by default; when unset, behaviour and cost are unchanged |
