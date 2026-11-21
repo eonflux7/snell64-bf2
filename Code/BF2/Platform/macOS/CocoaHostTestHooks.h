@@ -6,6 +6,8 @@
 #if defined(__APPLE__) && defined(OPENBF2_HOST_TEST_SEAMS)
 #include "../Host/ClientHost.h"
 
+#include <functional>
+
 namespace dice { namespace hfe { namespace macos {
 
 class CocoaHostTestHooks
@@ -52,12 +54,19 @@ public:
     enum FocusCallback { WindowBecameKey, WindowResignedKey, AppBecameActive, AppResignedActive };
     static void focusCallbackForTest(host::ClientHost& host, FocusCallback callback);
     // The focus part of pumpEvents: the launch activation, then the reconciliation. One call is
-    // one look of the host at the activation period. `insideCreateWindow` makes it the look that
-    // createWindow runs right after the first request: the period's ten seconds do not count
-    // from that one but from the next look, as from the first frame's pump in the client.
-    static void pumpFocusForTest(host::ClientHost& host, bool insideCreateWindow = false);
+    // one look of the host at the activation period, made after createWindow has returned, as a
+    // frame's pump makes it in the client. It runs the member the pump runs.
+    static void pumpFocusForTest(host::ClientHost& host);
+    // The look that createWindow makes right after the first request, made in createWindow's
+    // place: an activation period's ten seconds do not count from this look but from the next
+    // one, the first frame's in the client. The host is told that createWindow runs by the
+    // object createWindow itself holds for that, so the test sets no flag of its own. `events`,
+    // when given, is called first and delivers what that run of the pump finds in the queue
+    // (injectEventForTest), as the pump routes the queue before it looks.
+    static void lookInsideCreateWindowForTest(host::ClientHost& host,
+                                              const std::function<void()>& events = nullptr);
     // The first activation request, as createWindow makes it when the game window is shown.
-    // createWindow then looks once (pumpFocusForTest with insideCreateWindow).
+    // createWindow then looks once (lookInsideCreateWindowForTest).
     static void beginActivationForTest(host::ClientHost& host);
     // The host reads the restart marker (RestartInFront.h) from the environment once per process,
     // at its first activation request. This makes it read again at the next one, as a process
@@ -75,6 +84,16 @@ public:
         int  ignoringOthers;    // those of them that ignore other applications
         int  retries;           // repeated requests made (every half second, and on a click)
         int  dockResets;        // times the Dock was activated to reset a pending activation
+        // Of the running period (read it only while `pending`): no later look starts its ten
+        // seconds. A look after the one inside createWindow has started them, or a click outside
+        // createWindow did in its place. False from the first request until then, so false for
+        // a period that is still running when createWindow returns.
+        bool lookCounted;
+        // Looks made in this process so far, by the client's pump or through these hooks, and
+        // those of them made while createWindow ran. When a process's first createWindow
+        // returns the two are equal and not 0.
+        unsigned looks;
+        unsigned looksInsideCreateWindow;
     };
     static ActivationStats activationStatsForTest(const host::ClientHost& host);
     struct FocusRepairStats

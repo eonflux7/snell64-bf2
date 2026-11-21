@@ -932,10 +932,11 @@ void testLaunchActivation()
         base = stats();
         Hooks::beginActivationForTest(host);
     };
-    // The look inside createWindow, which follows the first request at once.
+    // The look inside createWindow, which follows the first request at once. The host is told
+    // that createWindow runs by the object createWindow itself holds, not by this test.
     const auto lookInsideCreateWindow = [&]()
     {
-        Hooks::pumpFocusForTest(host, true);
+        Hooks::lookInsideCreateWindowForTest(host);
         sys.windowKey = Hooks::focusRepairStatsForTest(host).windowKey;
     };
     // A start, as createWindow makes it: the first request and its own look. Every `after` that
@@ -1155,6 +1156,28 @@ void testLaunchActivation()
     check(retries() == 1 && dockResets() == 1, "lookup denied: the parent is still the launcher");
     sys.ancestryDenied = false;
 
+    // createWindow looks once, right after the first request, and the host does not take that
+    // look for the start of a period's ten seconds: it marks the time createWindow runs. No
+    // window is created here, so the look is made in createWindow's place
+    // (lookInsideCreateWindowForTest), marked by the object that createWindow holds for this.
+    // The checks therefore run the client's own lines for the mark. What they cannot see is
+    // that createWindow holds that object; macos_host_test, which opens a real window, checks it.
+    {
+        request(terminal);
+        const Hooks::ActivationStats atRequest = stats();
+        lookInsideCreateWindow();
+        check(stats().looks == atRequest.looks + 1 &&
+              stats().looksInsideCreateWindow == atRequest.looksInsideCreateWindow + 1,
+              "the look made in createWindow's place is one look, counted as made inside createWindow");
+        check(stats().pending && !stats().lookCounted,
+              "the look inside createWindow does not start the period's ten seconds");
+        after(6.5);
+        check(stats().looks == atRequest.looks + 2 &&
+              stats().looksInsideCreateWindow == atRequest.looksInsideCreateWindow + 1,
+              "the look after it is one more look, and not one made inside createWindow");
+        check(stats().pending && stats().lookCounted, "the first look after createWindow starts the ten seconds");
+    }
+
     // The host is not pumped while the engine initialises: its first look at a start after the
     // one inside createWindow comes six to seven seconds after the first request on the Intel
     // test machine and later on a slower one. A period's ten seconds count from that look, so the
@@ -1245,6 +1268,29 @@ void testLaunchActivation()
     after(0.2);                                 // 10.05 s after the first look
     check(!stats().pending && retries() == 5 && dockResets() == 1,
           "first look 6.5 s after the request: the period ends ten seconds after that look");
+    // The pump inside createWindow can itself deliver a click into the new window. A click that
+    // ends a wait behind an unrelated application counts the ten seconds from the click, and
+    // when it arrives in a frame's pump no look counts them again. This one arrives inside
+    // createWindow, with the engine's initialisation still ahead: the first look after
+    // createWindow counts them from itself, or a first frame 10.5 s later would end the period
+    // that the click began, before its Dock reset.
+    request(editor);
+    Hooks::lookInsideCreateWindowForTest(host, [&] { click(); });
+    sys.windowKey = Hooks::focusRepairStatsForTest(host).windowKey;
+    check(stats().pending && retries() == 1 && dockResets() == 0 && !stats().lookCounted,
+          "a click delivered by the look inside createWindow: it requests at once, and the ten seconds are "
+          "still to be counted from the first look after createWindow");
+    after(10.5);
+    check(stats().pending && stats().lookCounted && retries() == 1 && dockResets() == 1,
+          "the first look 10.5 s after that click: the period goes on and the activation is reset through the Dock");
+    sys.frontPid = dock;
+    after(0.35);
+    sys.frontPid = editor;                      // refused: the application clicked away from is in front again
+    after(9.5);                                 // 9.85 s after the first look
+    check(stats().pending && retries() == 3,
+          "the period that the click inside createWindow began still runs 9.85 s after the first look");
+    after(0.2);                                 // 10.05 s after the first look
+    check(!stats().pending && retries() == 3 && dockResets() == 1, "and ends ten seconds after that look");
 
     // A start behind a bystander (here Terminal, the lookup denied) whose one request left this
     // process frontmost for the system and inactive for AppKit is repaired in full however late

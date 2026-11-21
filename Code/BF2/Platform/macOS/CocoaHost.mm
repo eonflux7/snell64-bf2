@@ -242,7 +242,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     double activationCountFrom = 0.0;
     bool   activationLookCounted = false;
     bool   activationRecounted = false;
-    bool   creationLook = false;       // createWindow's own pump is running: the look inside it
+    bool   creationLook = false;       // createWindow is running: a look made now is the one inside
+                                       // it (InsideCreateWindow sets and clears this, nothing else)
+    // Totals for the tests (CocoaHostTestHooks::activationStatsForTest): every look made (look),
+    // and those of them made while createWindow ran.
+    unsigned int looks = 0;
+    unsigned int looksInsideCreateWindow = 0;
     // [CHOSEN, not recovered] Whose front the repeated requests may take, as pids; 0: nobody's.
     // Launcher: the application in front at the first request when it is this process's parent
     // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
@@ -713,6 +718,23 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     {
         return std::find(activationClickPids.begin(), activationClickPids.end(), pid) != activationClickPids.end();
     }
+
+    // [CHOSEN, not recovered] Marks the time createWindow runs (creationLook). createWindow holds
+    // one of these for as long as it runs, so the pump it runs is the look inside createWindow
+    // wherever in the function that pump is made, and however often. The headless test never
+    // calls createWindow, which needs a window; it holds one of these around the look it makes
+    // in createWindow's place (CocoaHostTestHooks::lookInsideCreateWindowForTest). The two lines
+    // that set and clear the mark are therefore the ones its checks run. What no headless check
+    // covers is that createWindow holds one: the test that opens a real window checks that
+    // (Code/Tests/macos_host).
+    struct InsideCreateWindow
+    {
+        explicit InsideCreateWindow(Impl& host) : impl(host) { impl.creationLook = true; }
+        ~InsideCreateWindow() { impl.creationLook = false; }
+        InsideCreateWindow(const InsideCreateWindow&) = delete;
+        InsideCreateWindow& operator=(const InsideCreateWindow&) = delete;
+        Impl& impl;
+    };
 
     // [CHOSEN, not recovered] The first look at a period after the one inside createWindow: its
     // ten seconds count from here, whoever is in front (activationCountFrom). Once per period.
@@ -1717,6 +1739,19 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
+    // One look: the focus part of one run of the pump, the launch activation first and then the
+    // reconciliation. The pump makes it once per run, after it has routed the queued events, and
+    // the headless test makes it in the pump's place (CocoaHostTestHooks::pumpFocusForTest), so
+    // both run these lines. The two totals are for the tests.
+    void look()
+    {
+        ++looks;
+        if (creationLook)
+            ++looksInsideCreateWindow;
+        updateActivation();
+        reconcileFocus();
+    }
+
     bool pump(double timeout)
     {
         if (!appInitialized)
@@ -1739,8 +1774,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                 until = [NSDate distantPast];
             }
             [NSApp updateWindows];
-            updateActivation();
-            reconcileFocus();
+            look();
             updateCursorImage();
         }
         drainRawMouse();
@@ -2041,6 +2075,12 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
 {
     if (!initApplication() || m_impl->window)
         return false;
+    // [CHOSEN, not recovered] From here to the return the host is inside createWindow. The pump
+    // at the end of this function is therefore the look inside createWindow: it follows the
+    // first activation request at once and is the last one before the engine has initialised,
+    // so the activation period's ten seconds count from the look after it, not from this one
+    // (Impl::countFromFirstLook). Keep this ahead of everything that can pump.
+    const Impl::InsideCreateWindow insideCreateWindow(*m_impl);
     @autoreleasepool
     {
         NSScreen* screen = [NSScreen mainScreen];
@@ -2104,12 +2144,8 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
         [window makeKeyAndOrderFront:nil];
         [window makeFirstResponder:view];
     }
-    // [CHOSEN, not recovered] The look inside createWindow. It follows the first request at once
-    // and is the last one before the engine has initialised, so the activation period's ten
-    // seconds count from the look after it, not from this one (Impl::countFromFirstLook).
-    m_impl->creationLook = true;
-    pumpEvents();                                // deliver the activation before returning
-    m_impl->creationLook = false;
+    pumpEvents();                                // the look inside createWindow (insideCreateWindow
+                                                 // above): deliver the activation before returning
     m_impl->syncFocus();
     return true;
 }
@@ -2627,12 +2663,18 @@ void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallb
     }
 }
 
-void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host, bool insideCreateWindow)
+void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host)
 {
-    host.m_impl->creationLook = insideCreateWindow;   // as createWindow sets it around its pump
-    host.m_impl->updateActivation();            // pump's order
-    host.m_impl->reconcileFocus();
-    host.m_impl->creationLook = false;
+    host.m_impl->look();                        // the lines the pump runs
+}
+
+void CocoaHostTestHooks::lookInsideCreateWindowForTest(host::ClientHost& host, const std::function<void()>& events)
+{
+    // What createWindow holds while it runs; nothing here writes the mark itself.
+    const host::ClientHost::Impl::InsideCreateWindow insideCreateWindow(*host.m_impl);
+    if (events)
+        events();                               // pump's order: the queued events are routed first
+    host.m_impl->look();
 }
 
 CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest(const host::ClientHost& host)
@@ -2664,6 +2706,9 @@ CocoaHostTestHooks::ActivationStats CocoaHostTestHooks::activationStatsForTest(c
     stats.ignoringOthers = host.m_impl->testSystem.activationIgnoringOthers;
     stats.retries    = host.m_impl->testSystem.activationRetries;
     stats.dockResets = host.m_impl->testSystem.dockResets;
+    stats.lookCounted = host.m_impl->activationLookCounted;
+    stats.looks      = host.m_impl->looks;
+    stats.looksInsideCreateWindow = host.m_impl->looksInsideCreateWindow;
     return stats;
 }
 

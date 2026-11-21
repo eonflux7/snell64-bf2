@@ -233,6 +233,29 @@ int main(int argc, char** argv)
     desc.width = 800; desc.height = 600; desc.x = 50; desc.y = 50;
     desc.fullscreen = false; desc.hideCursor = false;
     if (!host.createWindow(desc)) { std::printf("FAIL createWindow\n"); return 1; }
+    // createWindow runs the pump once before it returns, and the host must take that run for
+    // "the look inside createWindow": an activation period's ten seconds count from the first
+    // look after it, the first frame's, and not from this one. The headless test (macos_input)
+    // makes that look through a test hook and never calls createWindow, so the two call sites in
+    // the host are checked only here: createWindow marks the time it runs, and the pump makes
+    // its look through the member that counts it. No pump runs before createWindow in this
+    // program, so every look so far must be one made inside it, and there must be one. A period
+    // that is still running must not have had its ten seconds started. A request that was
+    // granted inside createWindow leaves no period running; the two totals still decide then.
+    {
+        const CocoaHostTestHooks::ActivationStats activation = CocoaHostTestHooks::activationStatsForTest(host);
+        std::printf("[activation] createWindow made %u look(s), %u of them marked as inside createWindow; "
+                    "activation period %s\n", activation.looks, activation.looksInsideCreateWindow,
+                    !activation.pending ? "not running"
+                                        : activation.lookCounted ? "running, its ten seconds started"
+                                                                 : "running, its ten seconds not started");
+        if (activation.looks == 0 || activation.looksInsideCreateWindow != activation.looks ||
+            (activation.pending && activation.lookCounted))
+        {
+            std::printf("FAIL createWindow: its own pump was not taken for the look inside createWindow\n");
+            return 1;
+        }
+    }
     CALayer* layer = (__bridge CALayer*)CocoaHostTestHooks::metalLayer(host);
     std::printf("[window] created view=%p layer=%s drawable=%dx%d\n", CocoaHostTestHooks::nativeView(host),
                 layer ? object_getClassName(layer) : "null", host.clientWidth(), host.clientHeight());

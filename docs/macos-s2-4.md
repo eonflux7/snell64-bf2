@@ -126,7 +126,13 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
     still ends, ten seconds after that look. Counted from the request, such a start ended at
     its first frame with `[host] application not activated; click the game window or switch
     to it`. The log marks the look: `[host] first look N ms after the first request; the ten
-    seconds count from here`.
+    seconds count from here`. The host tells the look inside `createWindow` from the others by
+    a mark that `createWindow` holds for as long as it runs (`Impl::InsideCreateWindow`), so a
+    run of the pump made anywhere in that function is never the one the ten seconds count
+    from. A click into the new window that this run of the pump itself delivers is treated like
+    any other click (see *Later changes of the front*), with one difference. Where a click
+    starts the ten seconds, they count from the click, and after a click in a frame's pump no
+    later look counts them again; after this click the first look after `createWindow` does.
   - *Whose front the requests take.* The repeated requests and the Dock reset take the front
     only from the launcher, and when nobody or the client itself is in front. The launcher is
     the application in front at the first request when it is the client's parent or another
@@ -475,6 +481,18 @@ host and devices with a control-map fixture that answers only what the mouse dev
 (axis scale 1, sensitivity 1, no inversion). It opens the window through the host, runs the
 engine's update protocol, posts synthetic events to its own queue (never system-wide), logs
 DIK codes, mouse axes and buttons, and ends by pressing the close button programmatically.
+
+Right after `createWindow` returns it also checks that the host took the pump inside
+`createWindow` for the look inside `createWindow` (see Activation): every look made so far
+was made while `createWindow` ran, there was at least one, and an activation period that is
+still running has not had its ten seconds started. It prints one `[activation] ...` line with
+those values and fails with `FAIL createWindow: its own pump was not taken for the look inside
+createWindow` otherwise. The activation rules themselves are checked without a window by
+`Code/Tests/macos_input`, which makes that look through a test hook, marked by the object
+`createWindow` holds. That test never calls `createWindow`, so two call sites in the host are
+covered by this program alone: `createWindow` holding the mark, and the pump making its look
+through the member that counts it. This check was added after the result below was recorded.
+It has been compiled and not yet run, because the program opens a window.
 
 ```sh
 cd Code/Tests/macos_host
