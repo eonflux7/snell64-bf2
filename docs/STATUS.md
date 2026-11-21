@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5 built) | Milestone 11 task 6, light shafts | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
+| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5 built) | Milestone 11 task 7, sky cube | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -18,7 +18,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 Design, decisions and what is built: [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections).
 One A/B console variable per part while in development (`renderer.atmosphere`,
-`renderer.viewDistance`, `renderer.lightShafts`, `renderer.skyIbl`, `renderer.waterSsr`); all
+`renderer.viewDistance`, `renderer.skyIbl`, `renderer.waterSsr`); all
 deleted with the old paths at acceptance. The owner judges each A/B by eye against the plan's
 "what should change" list; a task that works but does not look better is not done. Every task that
 adds a frame resource is tried across device resets (`renderer.vsync` toggled while it draws).
@@ -36,9 +36,7 @@ Tasks:
 4. Aerial perspective. Done (owner, Kashan Desert).
 5. View distance. Built; the owner's look on four maps: good. Left items: render.md's "Built so
    far".
-6. Light shafts: the atlas's in-scatter shadowed per slice by the cascades;
-   `renderer.lightShafts`. Look for: shafts in the street view and through trees. Dropped at
-   acceptance if they do not pay for their cost.
+6. Light shafts. Dropped for now (owner, 2026-11-21); not part of milestone 11's acceptance.
 7. Sky cube: at load and after a device reset; prefiltered GGX, SH9 irradiance, split-sum BRDF
    table, all on reserved samplers. Retail environment maps deleted at acceptance where nothing
    else reads them.

@@ -160,8 +160,6 @@ reference views. What should change on screen, and so what to look at:
   own way: paint and glass sharp, metal tinted, fabric and concrete matte. A surface's sun highlight
   and its sky reflection agree, since both come from one roughness and F0. Glossy edges do not
   sparkle in motion.
-- **Light shafts.** Sunlight in the haze is shadowed by the cascades, so shafts show between
-  buildings and through trees.
 - **Water.** It reflects the buildings, terrain and sky around it, and the sky where a reflected ray
   leaves the screen.
 
