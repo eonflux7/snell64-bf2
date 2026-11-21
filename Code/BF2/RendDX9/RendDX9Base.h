@@ -807,7 +807,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 10
+#define RA_CONTRACT_VERSION 11
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -877,7 +877,8 @@ AtmosphereInfo rendererAtmosphereInfo();
 // roughness m / 5), the sky's irradiance as SH9 and the split-sum BRDF table, built on the CPU
 // with the sky view into managed textures. Each frame the cube is bound to the reserved sampler
 // kSkyCubeSampler (trilinear, clamp), the table to kSkyBrdfSampler (bilinear, clamp), and the
-// irradiance to the pixel registers kSkyShRegister.. (RaSkySH, 7 float4s; [6].w 1 while live).
+// irradiance to the pixel registers kSkyShRegister.. (RaSkySH, 7 float4s; [6].w 1 while live and
+// renderer.skyIbl is on: lit shaders then take their sky light and ambient specular from them).
 const unsigned int kSkyCubeSampler = 10;
 const unsigned int kSkyBrdfSampler = 11;
 struct SkyCubeSource
@@ -894,6 +895,8 @@ void rendererSkyCubeBuild(const SkyCubeSource& source);
 // Binds the cube, the table and RaSkySH; with `use` false (or before a build) unbinds them and
 // zeroes RaSkySH.
 void rendererSkyCubeFrame(bool use);
+// renderer.skyIbl (task 8 A/B): the shared lighting model's sky light; RaSkySH[6].w.
+bool& rendererSkyIbl();
 struct SkyCubeInfo
 {
     bool live;

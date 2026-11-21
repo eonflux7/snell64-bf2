@@ -214,6 +214,7 @@ struct State
 };
 
 State g = {};
+bool g_skyIbl = true;   // renderer.skyIbl: the shared lighting model's sky light (task 8 A/B)
 
 IDirect3DDevice9* device()
 {
@@ -610,9 +611,19 @@ void rendererSkyCubeFrame(bool use)
         return;
     static const float kOff[7][4] = {};
     const bool live = use && g.live;
-    stateManagerSetSkySh(live ? &g.sh[0][0] : &kOff[0][0]);
+    // Contract 11: [6].w says whether lit shaders take their sky light from it (renderer.skyIbl);
+    // the cube, the table and the coefficients stay bound for the other readers either way.
+    float sh[7][4];
+    std::memcpy(sh, live ? &g.sh[0][0] : &kOff[0][0], sizeof(sh));
+    sh[6][3] = live && g_skyIbl ? 1.0f : 0.0f;
+    stateManagerSetSkySh(&sh[0][0]);
     bindSampler(kSkyCubeSampler, live ? g.cube : 0, true);
     bindSampler(kSkyBrdfSampler, live && g.brdfBuilt ? g.brdf : 0, false);
+}
+
+bool& rendererSkyIbl()
+{
+    return g_skyIbl;
 }
 
 SkyCubeInfo rendererSkyCubeInfo()
