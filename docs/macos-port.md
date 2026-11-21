@@ -1380,7 +1380,7 @@ Win32 call sites, all `[CHOSEN, not recovered]`:
 | --- | --- | --- |
 | `BF2Engine.cpp` mainLoop | `ShowCursor` | `CocoaHost::showCursor` (same counter) |
 | `BF2Engine::browseModHomepage` | `ShowWindow(SW_MINIMIZE)`, `ShellExecuteA(url)` | `CocoaHost::minimize`, `openURL` |
-| `BF2Engine::restartBF2` (and `activateMod`) | `GetModuleFileNameA` + `ShellExecuteA(exe, args)` | `macos::relaunchExecutable`: `_NSGetExecutablePath`, the command line split as `CommandLineToArgvW` splits it, `posix_spawn` in the current directory and environment (`Platform/macOS/MacSystem`) |
+| `BF2Engine::restartBF2` (and `activateMod`) | `GetModuleFileNameA` + `ShellExecuteA(exe, args)` | `macos::relaunchExecutable`: `_NSGetExecutablePath`, the command line split as `CommandLineToArgvW` splits it, `posix_spawn` in the current directory and environment (`Platform/macOS/MacSystem`). [CHOSEN] On macOS the new instance's environment gets `BF2_RESTARTED_IN_FRONT=1` when the game is the active application, and loses that variable otherwise ([macos-s2-4.md](macos-s2-4.md), Activation) |
 | `HudAmmo.cpp`, `HudInformationAdapter.cpp`, `HudVehicleInformation.cpp` | `MessageBoxA` | `macos::showMessageBox`: a blocking `CFUserNotificationDisplayAlert` with one OK button, Windows-1252 text |
 | `BF2HudManagerSpotted.cpp` | `RegOpenKeyExA` (the Battlefield 2142 install probe) | key presence in `Registry.con`; see [macOS write paths](macos-write-paths.md#registrycon-syntax) |
 | `SwiffHost.cpp` | Winsock 1.1 (`WSAStartup`/`WSACleanup`, `gethostbyname`, `inet_addr`, `inet_ntoa`) | BSD sockets, no startup call. The address word is `uint32_t` (Winsock's 32-bit `u_long`): an LP64 `unsigned long` would read eight bytes from the four-byte `h_addr_list` entry. |

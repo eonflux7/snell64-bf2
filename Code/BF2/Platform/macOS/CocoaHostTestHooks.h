@@ -55,6 +55,10 @@ public:
     // The first activation request, as createWindow makes it when the game window is shown.
     // createWindow then looks once (pumpFocusForTest with insideCreateWindow).
     static void beginActivationForTest(host::ClientHost& host);
+    // The host reads the restart marker (RestartInFront.h) from the environment once per process,
+    // at its first activation request. This makes it read again at the next one, as a process
+    // that has just started would.
+    static void forgetRestartMarkerForTest(host::ClientHost& host);
     // A first request either ignores other applications or is cooperative, that is, it yields to
     // an active application on every macOS version. Before macOS 14 the two are
     // activateIgnoringOtherApps:YES and activateIgnoringOtherApps:NO; from macOS 14 on both are

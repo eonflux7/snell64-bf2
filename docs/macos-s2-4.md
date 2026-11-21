@@ -145,12 +145,29 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
     the background while the user works elsewhere waits for a click into its window or a
     switch to it. The same holds when the process lookup fails, and for a client whose chain
     to the launching application is broken: tmux or screen, SSH, a launchd job, a script that
-    has ended, and a client that restarted itself (mod activation), whose first instance has
-    exited. While the client waits, the host asks nothing and only looks at who is in front,
+    has ended, and a client that restarted itself while it was in the background (see below).
+    While the client waits, the host asks nothing and only looks at who is in front,
     for ten seconds from its first look. When it finds the client itself (that one request
     can leave it frontmost for the system and inactive for AppKit), the client's parent or
     nobody there, the repeated requests and the Dock reset start, and the ten seconds count
     once more from that look, once per start.
+  - *A game that restarts itself.* Activating a mod makes the client start a new instance of
+    itself and quit (`BF2Engine::restartBF2`, `relaunchExecutable`). Once the first instance
+    has exited, the new one's parent is launchd and the application that the system puts in
+    front is unrelated to it, so by the rules above the restarted game would wait behind that
+    application. A first instance that is the active application at the moment it restarts
+    therefore hands its place on: it sets `BF2_RESTARTED_IN_FRONT=1` in the new instance's
+    environment (`RestartInFront.h`). The new instance reads the variable once, at its first
+    activation request, and then treats its start like a launcher start: the application in
+    front at that request counts as the launcher, whatever it is. When the first instance
+    itself is still in front then (it is the new one's parent, a launcher by the ordinary
+    rule), or nobody is, the application found in front once the first instance has exited
+    takes that role instead; the client itself in front then means that no application does.
+    The variable is written into the new instance's environment at every restart: set when the
+    game is active, removed when it restarts in the background or runs under an input script
+    that forces focus. A later generation therefore never inherits it, and the first
+    instance's own environment is not changed. A game window that the same process creates
+    again later starts by the ordinary rules. Linux and Windows are unchanged.
   - *Later changes of the front.* An application the user goes to after the first request
     ends the requests. A click into the inactive game window starts them again, against
     whatever is in front then, with the ten seconds counted from the click. Every application
@@ -441,7 +458,7 @@ client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptio
    | --- | --- | --- |
    | `BF2Engine.cpp` main loop | `ShowCursor(FALSE/TRUE)` | `showCursor(false/true)` (same counter semantics) |
    | `BF2Engine::browseModHomepage` | `ShowWindow(SW_MINIMIZE)`, `ShellExecuteA("open", url)` | `minimize()`, `openURL(url)` (true on success) |
-   | `BF2Engine::restartBF2`, `activateMod` | `GetModuleFileNameA`, `ShellExecuteA(exe, args)` | `_NSGetExecutablePath` + `posix_spawn`; not provided by the host |
+   | `BF2Engine::restartBF2`, `activateMod` | `GetModuleFileNameA`, `ShellExecuteA(exe, args)` | `_NSGetExecutablePath` + `posix_spawn`; not provided by the host. [CHOSEN] On macOS the new instance's environment carries `BF2_RESTARTED_IN_FRONT=1` when the game is the active application (see Activation) |
    | `MainMenuLogic.cpp`, `BetweenRoundsLogic.cpp` | `ShowCursor`, `SetCursor(host->getCursor(i))`, `SetCursor(0)` | `showCursor`, `setCursorShape(HostCursorArrow/Busy)`, `setCursorHiddenInView(true)` |
    | `MainMenuLogic::handleClipboardShortcut` | `GetAsyncKeyState`, `OpenClipboard`/`GetClipboardData`/`SetClipboardData(CF_TEXT)` | `modifierFlags()` (Control or Command as Ctrl, Option as Alt), `getClipboardText`/`setClipboardText` |
    | `BetweenRoundsLogic.cpp menuScanCodeToChar` | `ToAsciiEx(MapVirtualKeyEx(scan))` | `ClientHost::keyCharacter(dik, modifierFlags())`; the Cocoa backend performs its own layout conversion |

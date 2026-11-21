@@ -40,7 +40,8 @@ enum ProcessAncestry
 // cannot. The chain ends at launchd (pid 1), which adopts a process whose parent has exited: an
 // application behind such a gap (a tmux or screen server, a launcher script that has ended, the
 // first instance of a client that restarted itself) is not found. launchd itself and the kernel
-// (pid 0) are nobody's launcher.
+// (pid 0) are nobody's launcher. A client that restarted itself is told by its first instance
+// whether it may take the front (RestartInFront.h); this walk has no part in that.
 template <class ParentOf>
 ProcessAncestry processAncestry(pid_t candidate, pid_t parent, ParentOf parentOf)
 {

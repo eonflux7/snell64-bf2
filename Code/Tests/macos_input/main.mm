@@ -6,7 +6,8 @@
 // interfaces report against the DirectInput semantics of the recovered DX8 devices
 // (KeyboardDevice.cpp, MouseDevice.cpp). The host's focus repair and its launch activation run
 // against a simulated AppKit state (CocoaHostTestHooks::setSystemFocusForTest): the activation's
-// requests and Dock resets are counted, none is made. [RETIRE-WHEN: macos-client-window]
+// requests and Dock resets are counted, none is made. The restart marker is set and removed in
+// this process's own environment. [RETIRE-WHEN: macos-client-window]
 
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
@@ -19,11 +20,13 @@
 #include "../../BF2/Platform/macOS/MacKeyMap.h"
 #include "../../BF2/Platform/macOS/MacRawMouse.h"
 #include "../../BF2/Platform/macOS/ProcessAncestry.h"
+#include "../../BF2/Platform/macOS/RestartInFront.h"
 #include "../native_host/WindowMessageRecorder.h"
 #include "../../BF2/Core/Ids.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <atomic>
 #include <string>
@@ -1470,10 +1473,187 @@ void testLaunchActivation()
     after(0.2);
     check(!stats().pending, "an application the user went to without a click still ends the period");
 
+    // A game that restarts itself (the player activates a mod): the first instance starts the new
+    // one and quits. When it was the active application at that moment it says so in the new
+    // instance's environment (RestartInFront.h), and the new instance is entitled to the front:
+    // the application that the system put in front in the first instance's place counts as the
+    // launcher. Here the first instance has exited: launchd (pid 1) is this process's parent.
+    const char* const marker = macos::kRestartedInFrontVariable;
+    const int startParent = sys.parentPid, startAncestor = sys.ancestors[0];
+    sys.parentPid = 1;
+    sys.ancestors[0] = 0;
+    // The host read the environment at this process's first activation request, at the top of
+    // this test: a marker that appears afterwards changes nothing.
+    setenv(marker, "1", 1);
+    start(editor);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 0,
+          "the restart marker set after this process's first request is not read: the unrelated application is a bystander");
+    // As a process that has just started: the marker is read at the first request.
+    Hooks::forgetRestartMarkerForTest(host);
+    start(editor);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 1 && retries() == 0,
+          "restarted in front, an unrelated application in front: the first request ignores other applications, "
+          "as for a launcher");
+    after(0.6);
+    after(0.6);
+    check(retries() == 1 && dockResets() == 1,
+          "restarted in front: the request is repeated and the activation reset through the Dock, as for a launcher");
+    sys.frontPid = dock;
+    after(0.35);
+    sys.frontPid = editor;                      // refused: the unrelated application is in front again
+    after(0.6);
+    check(stats().pending && retries() == 3, "restarted in front: the requests go on against that application");
+    sys.frontPid = browser;
+    after(0.2);
+    check(!stats().pending, "restarted in front: an application the user goes to still ends the requests");
+    // Read once: a game window that the same process shows again starts like any other.
+    start(editor);
+    after(0.6);
+    after(0.6);
+    after(1.0);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 0 && retries() == 0 && dockResets() == 0,
+          "the marker is read once: at the next first request of the same process the unrelated application is a bystander");
+    // Only the value 1 is the marker.
+    setenv(marker, "0", 1);
+    Hooks::forgetRestartMarkerForTest(host);
+    start(editor);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 0,
+          "the variable with the value 0: the unrelated application is a bystander");
+    // Without the marker: a game that restarted in the background, and every other start whose
+    // parent has exited.
+    unsetenv(marker);
+    Hooks::forgetRestartMarkerForTest(host);
+    start(editor);
+    after(0.6);
+    after(0.6);
+    after(1.0);
+    check(stats().pending && requests() == 1 && ignoringOthers() == 0 && retries() == 0 && dockResets() == 0,
+          "restarted without the marker, an unrelated application in front: a bystander with its one cooperative request");
+
+    // The new instance can make its first request while the first one is still running and in
+    // front. The first instance is then the parent, a launcher like any other. Once it has
+    // exited, the application found in front took its place, and for a game restarted in front
+    // that application counts as the launcher.
+    const int firstInstance = 4242;
+    const auto restartedBy = [&](bool inFront)
+    {
+        if (inFront)
+            setenv(marker, "1", 1);
+        else
+            unsetenv(marker);
+        Hooks::forgetRestartMarkerForTest(host);
+        sys.parentPid = firstInstance;
+        start(firstInstance);
+    };
+    restartedBy(true);
+    check(stats().pending && ignoringOthers() == 1,
+          "restarted in front, the first instance still in front: it is the parent, a launcher");
+    sys.parentPid = 1;                          // the first instance has exited
+    sys.frontPid = browser;                     // and the system put the browser in front
+    after(6.5);
+    check(stats().pending && dockResets() == 1,
+          "restarted in front: the application in front once the first instance has exited counts as the launcher");
+    sys.frontPid = dock;
+    after(0.35);
+    sys.frontPid = browser;
+    after(0.6);
+    check(stats().pending && retries() == 2, "and loses the front to the repeated requests");
+    sys.frontPid = editor;
+    after(0.2);
+    check(!stats().pending,
+          "one application follows the first instance: another one the user goes to ends the requests");
+    // The same restart from the background: no marker, and the period ends.
+    restartedBy(false);
+    sys.parentPid = 1;
+    sys.frontPid = browser;
+    after(6.5);
+    check(!stats().pending && retries() == 0 && dockResets() == 0,
+          "restarted in the background: the application in front after the first instance ends the requests");
+    // The first instance still runs while another application is in front: the user went there.
+    restartedBy(true);
+    sys.frontPid = browser;
+    after(6.5);
+    check(!stats().pending && retries() == 0 && dockResets() == 0,
+          "restarted in front, the first instance still running: an application the user went to ends the requests");
+    // The system puts this process itself in front: no other application follows the first one.
+    restartedBy(true);
+    sys.parentPid = 1;
+    sys.frontPid = self;
+    after(6.5);
+    check(stats().pending && fallback() && dockResets() == 1,
+          "restarted in front, this process in front after the first instance: repaired like any start");
+    check(macos::clientHoldsFront(),
+          "while the host uses the system's state the application counts as active: a restart from here is in front");
+    sys.frontPid = browser;
+    after(0.2);
+    check(!stats().pending, "and an application the user goes to afterwards ends the requests");
+    // Nobody is in front at the first request: the system has not named the first instance's
+    // successor yet.
+    setenv(marker, "1", 1);
+    Hooks::forgetRestartMarkerForTest(host);
+    sys.parentPid = 1;
+    start(0);
+    sys.frontPid = browser;
+    after(6.5);
+    check(stats().pending && dockResets() == 1,
+          "restarted in front, nobody in front at the first request: the application in front at the next look "
+          "counts as the launcher");
+    sys.frontPid = editor;
+    after(0.2);
+    check(!stats().pending, "and another application after that one ends the requests");
+    unsetenv(marker);
+    Hooks::forgetRestartMarkerForTest(host);
+    sys.parentPid = startParent;
+    sys.ancestors[0] = startAncestor;
+
     // End the simulation with no period running, and focus as the other tests force it.
     finish();
     check(!stats().pending && !fallback() && !host.hasFocus(), "the last period is over");
     Hooks::setSystemFocusForTest(host, 0);
+    setFocus(true);
+    settle();
+}
+
+// RestartInFront.h: what a game that restarts itself hands to the new instance. The first instance
+// builds the new one's environment (MacSystem.cpp, relaunchExecutable) and decides from the
+// host's focus state whether it holds the front. What the host makes of the marker is checked
+// with the launch activation above.
+void testRestartInFront()
+{
+    begin("restart in front: the marker in the new instance's environment");
+    using namespace macos;
+    typedef std::vector<std::string> Env;
+    check(std::string(kRestartedInFrontVariable) == "BF2_RESTARTED_IN_FRONT", "the variable is BF2_RESTARTED_IN_FRONT");
+    check(restartedInFront("1"), "the value 1 marks a restart in front");
+    check(!restartedInFront(nullptr) && !restartedInFront("") && !restartedInFront("0") &&
+          !restartedInFront("11") && !restartedInFront("true"),
+          "no variable and any other value do not");
+    // A first instance that a person started: no marker in its environment.
+    const char* const plain[] = { "HOME=/Users/player", "BF2_HOST_TRACE=1", nullptr };
+    check(restartEnvironment(plain, true) == Env({ "HOME=/Users/player", "BF2_HOST_TRACE=1", "BF2_RESTARTED_IN_FRONT=1" }),
+          "restarted in front: the environment is passed on with the marker added");
+    check(restartEnvironment(plain, false) == Env({ "HOME=/Users/player", "BF2_HOST_TRACE=1" }),
+          "restarted in the background: the environment is passed on as it is");
+    // A second generation: this instance was itself restarted in front and carries the marker.
+    const char* const marked[] = { "BF2_RESTARTED_IN_FRONT=1", "HOME=/Users/player", "BF2_RESTARTED_IN_FRONT_X=1",
+                                   nullptr };
+    check(restartEnvironment(marked, false) == Env({ "HOME=/Users/player", "BF2_RESTARTED_IN_FRONT_X=1" }),
+          "a marked instance that restarts in the background: its marker is not passed on, other variables are");
+    check(restartEnvironment(marked, true) ==
+              Env({ "HOME=/Users/player", "BF2_RESTARTED_IN_FRONT_X=1", "BF2_RESTARTED_IN_FRONT=1" }),
+          "a marked instance that restarts in front: the marker is passed on once");
+    check(restartEnvironment(nullptr, true) == Env({ "BF2_RESTARTED_IN_FRONT=1" }) &&
+          restartEnvironment(nullptr, false).empty(),
+          "no environment at all: the marker alone, or nothing");
+    // Whether this process holds the front follows the application's state as the host reports
+    // it to the engine.
+    ClientHost& host = ClientHost::instance();
+    CocoaHostTestHooks::overrideFocusForTest(host, true, true);
+    check(clientHoldsFront(), "the application active: this process holds the front");
+    CocoaHostTestHooks::overrideFocusForTest(host, false, true);
+    check(clientHoldsFront(), "the application active while another window has the keyboard: it still does");
+    CocoaHostTestHooks::overrideFocusForTest(host, false, false);
+    check(!clientHoldsFront(), "the application inactive: it does not");
     setFocus(true);
     settle();
 }
@@ -1555,6 +1735,7 @@ int main(int argc, char** argv)
         testFocusRepair();
         testProcessAncestry();
         testLaunchActivation();
+        testRestartInFront();
         testCursorScale();
 
         host.removeListener(&log);

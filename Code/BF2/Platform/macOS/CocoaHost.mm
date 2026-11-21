@@ -16,6 +16,7 @@
 #include "MacKeyMap.h"
 #include "MacRawMouse.h"
 #include "ProcessAncestry.h"                // [CHOSEN] the launcher of this process (activation)
+#include "RestartInFront.h"                 // [CHOSEN] a game that restarted itself (activation)
 #include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
 #include "../Host/CursorFile.h"
 #include "CursorScale.h"                 // [CHOSEN] the cursor's size on screen
@@ -258,6 +259,17 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     pid_t  activationLauncherPid = 0;
     pid_t  activationBystanderPid = 0;
     std::vector<pid_t> activationClickPids;
+    // [CHOSEN, not recovered] A game that restarted itself (RestartInFront.h). The instance that
+    // started this process was the active application at that moment and says so in the
+    // environment. This process is then entitled to the front: the application that takes the
+    // front over from the first instance counts as the launcher, whatever it is. That is the
+    // application in front at the first request. When the first instance itself is still in
+    // front then, or nobody is, it is the application found in front once the first instance has
+    // exited (activationHeirOpen: not found yet). The entitlement belongs to this process's first
+    // showing of its game window: the environment is read once, by the first beginActivation
+    // (restartMarkerRead), so a window created again later starts like any other.
+    bool   restartMarkerRead = false;
+    bool   activationHeirOpen = false;
     // Since when the requests have been free to take the front (focusNow()); 0 while the
     // bystander holds it. The system-state fallback and the Dock reset wait one second from
     // here, so a period that waited behind a bystander still gives AppKit that second once the
@@ -520,13 +532,28 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
+    // [CHOSEN, not recovered] Reads the restart marker (RestartInFront.h), once per process: the
+    // first call answers whether the instance that started this process was the active
+    // application then, every later call answers no.
+    bool takeRestartMarker()
+    {
+        if (restartMarkerRead)
+            return false;
+        restartMarkerRead = true;
+        return macos::restartedInFront(std::getenv(macos::kRestartedInFrontVariable));
+    }
+
     // The first request, made when the game window is shown, and the decision whose front the
     // repeated requests may take: the application in front now is the launcher when it is this
     // process's parent or another ancestor, and a bystander otherwise. A bystander's request is
     // the cooperative one; a launcher, nobody and this process itself get the request that
-    // ignores other applications (requestActivation).
+    // ignores other applications (requestActivation). A game that restarted itself while it was
+    // the active application has no bystander: the application in front counts as its launcher.
     void beginActivation()
     {
+        // The marker is for the first showing of the game window, whether or not that showing
+        // has to ask for activation.
+        const bool restarted = takeRestartMarker();
         if (!activationRuns() || nsAppActive())
             return;
         const double now = focusNow();
@@ -536,6 +563,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         activationLookCounted = activationRecounted = false;
         activationLauncherPid = activationBystanderPid = 0;
         activationClickPids.clear();
+        activationHeirOpen = false;
         dockResetAt = dockAskedAt = 0.0;
         const char* relation = "nobody is in front";
         if (front.pid == getpid())
@@ -558,13 +586,26 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                 relation = "ancestry unknown as the process lookup failed, taken as not an ancestor";
                 break;
             }
+            if (restarted && activationBystanderPid)
+            {
+                // Whatever application is in front where the first instance was counts as the
+                // launcher: its ancestry does not matter.
+                activationLauncherPid = front.pid;
+                activationBystanderPid = 0;
+                relation = "not an ancestor, in front in place of the instance that restarted the game";
+            }
         }
+        // The first instance is still in front, or nobody is yet: which application follows it
+        // shows at a later look (updateActivation).
+        if (restarted && (front.pid == 0 || (front.pid != getpid() && front.pid == parentPid())))
+            activationHeirOpen = true;
         activationFreeSince = activationBystanderPid ? 0.0 : now;
-        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, %s; parent pid %d)%s\n",
+        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, %s; parent pid %d)%s%s\n",
                      front.name.UTF8String ?: (front.pid ? "?" : "none"), static_cast<int>(front.pid),
                      relation, static_cast<int>(parentPid()),
                      activationBystanderPid ? " - one cooperative request, no retries or Dock reset while it stays in front"
-                                            : "");
+                                            : "",
+                     restarted ? " - restarted by an instance of the game that was the active application" : "");
         requestActivation(activationBystanderPid == 0);
     }
 
@@ -634,6 +675,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         {
             activationLauncherPid = activationBystanderPid = 0;
             activationClickPids.clear();
+            activationHeirOpen = false;
             activationRecounted = false;
             dockResetAt = dockAskedAt = 0.0;
         }
@@ -715,11 +757,28 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         // with it.
         const FrontApp front = frontApplication();
         const pid_t self = getpid();
+        // The Dock is in front because this period's reset put it there.
+        const bool dockInFront = dockResetAt > 0.0 && front.isDock;
+        // [CHOSEN, not recovered] A restarted game whose first instance, or nobody, was in front
+        // at the first request: once that instance has exited (launchd is this process's parent
+        // then), the application the system names in front took its place and counts as the
+        // launcher. Decided once per period. This process in front then means that no other
+        // application followed the first instance.
+        if (activationHeirOpen && parentPid() <= 1 && front.pid != 0 && !dockInFront &&
+            front.pid != activationLauncherPid)
+        {
+            activationHeirOpen = false;
+            if (front.pid != self)
+            {
+                activationLauncherPid = front.pid;
+                std::fprintf(stderr, "[host] %s (pid %d) is in front in place of the instance that restarted the game; "
+                             "it counts as the launcher\n",
+                             front.name.UTF8String ?: "?", static_cast<int>(front.pid));
+            }
+        }
         const bool mayTakeFront = front.pid == 0 || front.pid == self || front.pid == parentPid() ||
                                   (activationLauncherPid && front.pid == activationLauncherPid) ||
                                   clickedAway(front.pid);
-        // The Dock is in front because this period's reset put it there.
-        const bool dockInFront = dockResetAt > 0.0 && front.isDock;
         if (!mayTakeFront && !dockInFront)
         {
             if (!activationBystanderPid || front.pid != activationBystanderPid)
@@ -2491,6 +2550,17 @@ unsigned int ClientHost::tickCountMs()
 
 } // namespace host
 
+namespace macos {
+
+// RestartInFront.h. The host's own focus state as the engine sees it, minus forced focus.
+bool clientHoldsFront()
+{
+    const host::ClientHost::Impl* impl = s_hostImpl;
+    return impl && impl->appActive && !impl->scriptedFocus;
+}
+
+} // namespace macos
+
 #if defined(OPENBF2_HOST_TEST_SEAMS)
 namespace macos {
 
@@ -2576,6 +2646,11 @@ CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest
 void CocoaHostTestHooks::beginActivationForTest(host::ClientHost& host)
 {
     host.m_impl->beginActivation();
+}
+
+void CocoaHostTestHooks::forgetRestartMarkerForTest(host::ClientHost& host)
+{
+    host.m_impl->restartMarkerRead = false;
 }
 
 CocoaHostTestHooks::ActivationStats CocoaHostTestHooks::activationStatsForTest(const host::ClientHost& host)
