@@ -426,16 +426,15 @@ void registryClear(SwiffTextureRegistry& reg)
             reg.slots[i] = 0;
         }
     }
-    // [CHOSEN, not recovered] Keep native container storage empty after cleanup.
-    // PE 0x101B9B49 writes EBX into its three storage words; when the final slot
-    // was nonnull EBX is its freed record, and 0x101B9B68 can free it again.
-    // Preserve the existing native omission of that invalid storage/double free.
+    // Free the slot array and leave the storage empty: retail zeroes its three storage words
+    // after the free.
     reg.slots.~vector();
     new (&reg.slots) std::vector<SwiffTextureRecord*>();
 }
 
-// PE 0x101B9B60. Clear all records (registryClear), then free the array a second time and zero its
-// three storage words; the native omission above covers that second free.
+// PE 0x101B9B60. Clear all records (registryClear). Retail then frees the slot array only when its
+// storage is not empty and zeroes the storage; registryClear has emptied it, so neither does
+// anything.
 void registryDestroy(SwiffTextureRegistry& reg)
 {
     registryClear(reg);

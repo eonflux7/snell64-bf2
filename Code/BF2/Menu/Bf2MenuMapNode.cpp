@@ -1981,8 +1981,9 @@ void Bf2MenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
                                   const Rect* adjusted, const Rect* bounds,
                                   const Color* color, RenderContext* context)
 {
-    // Retail, not a deviation: BF2.exe 0x7746ED tests the texture argument (test ebx,ebx) and
-    // returns on jle (0x77488B), a signed <= 0 test of the 32-bit handle.
+    // [CHOSEN, not recovered] Retail fix "Map icons are drawn for texture handles with the top bit
+    // set" (docs/retail-fixes.md): retail also returns when the handle is negative as a signed
+    // 32-bit value.
     if (texture == 0) return;
     position.x -= static_cast<float>(std::floor(position.x + 0.5f));
     position.y -= static_cast<float>(std::floor(position.y + 0.5f));
