@@ -12,6 +12,7 @@ contribution workflow and validation requirements.
 | Toolchains, targets, and build checks | [Building](building.md) |
 | Engine images, source layout and lifecycle | [Engine architecture](architecture.md) |
 | Recovery prerequisites, contribution rules and validation | [Development guide](development.md) |
+| Fixes of incorrect retail behavior, and the rule for adding one | [Retail fixes](retail-fixes.md) |
 | Editor console commands and script undo | [Editor console guide](editor-console.md) |
 | macOS port status, port rules and the client/Metal frontier | [macOS port](macos-port.md) |
 | CD keys without the registry: `Registry.con` and the Windows `Registry.dat` contract | [Client registry file](registry-file.md) |

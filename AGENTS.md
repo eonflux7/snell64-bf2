@@ -58,7 +58,17 @@ success alone do not establish working gameplay.
 
 - Fidelity is the default for reconstructed code. A non-retail fix, improvement or feature is
   allowed only when a linked issue already contains discussion of the proposed approach before
-  implementation begins. This workflow also applies to editor-only features and fixes.
+  implementation begins. This workflow also applies to editor-only features and fixes. Retail
+  fixes, described next, are the one exception.
+- **Retail fixes need no separate issue.** A change that corrects incorrect retail behavior is
+  exempt from the issue requirement when it is a client fix, or a server fix that stays backwards
+  compatible for unmodified retail clients. Add its entry to
+  [docs/retail-fixes.md](docs/retail-fixes.md) in the same change: the retail behavior with its
+  evidence, the corrected behavior and, for a server fix, why retail clients are unaffected. That
+  guide defines incorrect behavior and backwards compatibility. Mark the code
+  `[CHOSEN, not recovered]` and name the entry in place of an issue. A server fix that is not
+  backwards compatible for retail clients, every improvement or feature, and every change to an
+  ABI, protocol or file-format contract still follow the issue workflow.
 - AI assistance is allowed for these changes. Agents may implement and validate the issue-discussed
   design; the human author retains the submission and review responsibilities above.
 - Link the issue in the change description or documentation, and in source comments where needed
@@ -109,7 +119,9 @@ Before editing:
    image before editing. Missing evidence is a recovery blocker, never a reason to infer a body.
 7. For an intentional non-retail change, read the linked issue and confirm that it already
    discusses the approach. If that discussion is missing, stop the affected implementation and
-   report the missing prerequisite.
+   report the missing prerequisite. A retail fix needs no issue: confirm instead that it meets the
+   conditions under *Intentional fixes and improvements* and prepare its entry for
+   `docs/retail-fixes.md`.
 
 Current source and freshly inspected PE/ELF instructions take precedence over old comments or
 link counts. Verify source placement against original `__FILE__` strings or translation-unit
@@ -127,7 +139,8 @@ symbols before choosing or moving a recovered file; label unattested placement `
   observable quirks, and documented defects. Do not silently “improve” retail behavior.
 - In a recovery change, add guards only when they exist in the retail PE/ELF and preserve observed
   defects. Bug, exploit and crash fixes that intentionally change retail behavior require the
-  linked issue discussion described above; distinguish the fix from the recovered baseline.
+  linked issue discussion described above or, when they qualify as retail fixes, an entry in
+  `docs/retail-fixes.md`; distinguish the fix from the recovered baseline.
 - Public signatures, inheritance, virtual declaration order, object ownership, serialized layouts,
   bit widths, event ids, and packet state transitions are ABI/protocol contracts. Reconstruction
   changes require direct evidence. Intentional contract changes require the issue-discussed
@@ -371,8 +384,9 @@ respect the user's existing authorization before actions that spend GitHub runne
   guide. Keep each temporary boundary's removal condition beside its `[RETIRE-WHEN: tag]` marker;
   remove it only after the required implementation and validation are complete.
 - A change report must state: files changed, recovered behavior and its PE/ELF evidence or the
-  linked issue and intentional design change, tests run and their outcomes, paths not exercised,
-  and every remaining named frontier relevant to the change.
+  linked issue and intentional design change (for a retail fix, its `docs/retail-fixes.md` entry),
+  tests run and their outcomes, paths not exercised, and every remaining named frontier relevant
+  to the change.
 - Distinguish clearly among compile success, diagnostic-link status, `/FORCE` smoke reach, production
   startup, socket-listener reach, loading-screen reach, joined-player reach, and playable-client
   reach. Never collapse them into “the server works.”

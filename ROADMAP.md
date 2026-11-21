@@ -1,6 +1,6 @@
 # OpenBF2 roadmap
 
-This roadmap leads from the current state to 1.0.0. The versions after 0.3.0 are a direction, not a schedule; their scope will change as work is done. Deliberate deviations from retail behaviour are decided in issues before they are implemented ([AGENTS.md](AGENTS.md)).
+This roadmap leads from the current state to 1.0.0. The versions after 0.3.0 are a direction, not a schedule; their scope will change as work is done. Deliberate deviations from retail behaviour are decided in issues before they are implemented ([AGENTS.md](AGENTS.md)); fixes of incorrect retail behaviour are the exception and are listed in [docs/retail-fixes.md](docs/retail-fixes.md).
 
 ## Where we are: 0.2.0
 
@@ -49,7 +49,7 @@ The main goal is playing online again: with a GameSpy replacement provider, and 
 
 1.0.0 means a complete, tested and releasable game on every supported platform:
 
-- **Reconstruction:** every shipped image (game, renderer, menu engine, audio, AI, voice) is recovered or deliberately replaced, and every deliberate deviation is recorded in an issue.
+- **Reconstruction:** every shipped image (game, renderer, menu engine, audio, AI, voice) is recovered or deliberately replaced, and every deliberate deviation is recorded in an issue or in the list of retail fixes.
 - **Platforms:** macOS (Apple silicon and Intel), Windows x64 and Linux, all with signed release packages; Linux and macOS dedicated servers where useful.
 - **Online:** online and ranked play work with at least one public provider and a self-hosted backend.
 - **Quality:** no known crashes in normal play, and the scripted gates (render, combat, demo, menu) run in continuous integration where the platform allows.

@@ -30,6 +30,10 @@ editor-only work. AI may assist with these changes. Link the issue in the change
 or documentation, and in source comments where needed to explain an intentional departure.
 Clearly distinguish the new behavior from recovered code.
 
+Fixes of incorrect retail behavior are the exception. A client fix, or a server fix that stays
+backwards compatible for retail clients, needs no separate issue: list it in
+[docs/retail-fixes.md](docs/retail-fixes.md) in the same PR.
+
 Agents working on recovered engine implementations must have IDA or Ghidra connected and
 accessible with the relevant original Battlefield 2 1.50 binaries loaded. If the tool or
 required evidence is missing, stop that recovery work rather than guess. Intentional changes

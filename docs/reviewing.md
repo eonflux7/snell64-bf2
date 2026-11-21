@@ -84,7 +84,9 @@ to evaluate against the evidence and target contract, not automatic proof of cor
 Classify each observation as an introduced regression, pre-existing defect, evidenced
 retail behavior, intentional project policy, unresolved reconstruction, or an unconfirmed
 hypothesis. These categories are distinct from severity. An inherited defect can matter,
-but silently changing it is not a reconstruction fix.
+but silently changing it is not a reconstruction fix. A deliberate correction of one is a
+retail fix: it needs no issue when it is a client fix, or a server fix that stays backwards
+compatible for retail clients, but it must have its entry in [Retail fixes](retail-fixes.md).
 
 Recovery claims require the binary evidence specified in `AGENTS.md`. Record the relevant
 original image/version/architecture and inspected function or call sites. Without the
@@ -92,7 +94,8 @@ required image or IDA/Ghidra connection, report the missing evidence and limit t
 continue independent source review, build analysis, and reproducible bug investigation.
 Do not infer an unknown signature, layout, or body from a plausible implementation.
 
-Read issue-backed intentional changes before evaluating fidelity. In particular, the
+Read issue-backed intentional changes and the [retail fixes](retail-fixes.md) before
+evaluating fidelity. In particular, the
 native host/plugin contracts documented in `architecture.md` deliberately differ from
 retail DLL compatibility. Do not propose restoring retired VC7.1 adapters, old layouts,
 or retail plugin mixing just because the original executable used them. Editor-only
