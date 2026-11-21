@@ -231,6 +231,32 @@ Each entry is a heading that names the fix, followed by these fields:
 - **Applies to:** Client; all platforms.
 - **Source:** `Code/BF2/External/gameswf/SwiffPlayer/SwiffPlayer.cpp`
 
+### Leaderboard natives stay inside their cache and request tables
+
+- **Retail:** For kits, vehicles and weapons `SwiffPlayer.dll` indexes the leaderboard cache by
+  board with no bound: the row builder (`0x10014230`, `0x10014464`, `0x10014694`) and
+  `getNumPlayersInLeaderboard` (`0x1005BEE0`), whose request tables (`0x100DDB58`) run into string
+  bytes after 26 entries. A board past the cache reads stack memory as rows or as a count. The
+  players list sends an unset profile id when no profile is active (`0x1002C1EA`). Not shown with
+  the shipped menu.
+- **OpenBF2:** A group above 30 builds no rows and reports 0 players and an empty date. A request
+  past the 26 table entries fetches nothing; inside the tables the neighboring entries are still
+  used, as in retail. Without a profile the players list starts from -1 and skips that player.
+- **Applies to:** Client; all platforms.
+- **Source:** `Code/BF2/External/gameswf/SwiffPlayer/SwiffPlayer.cpp`
+
+### Haptic threshold getters search only the three threshold names
+
+- **Retail:** The 20 `HapticSettings` threshold getters, such as `getPhysicsSOLDIERTransition`
+  (`SwiffPlayer.dll` `0x1003A570`), compare the name against 13 slots of 28 bytes (bound `0x16C` at
+  `0x1003A5DE`) of a table that holds three strings (`0x100F3870`); the setters stop after three.
+  Any other name is compared against ten slots of unrelated globals, and a match there passes an
+  index from 3 to 12 to `HapticSettings`. Not shown with the shipped menu.
+- **OpenBF2:** Getters and setters search only the three names. Any other name gives -1, the level
+  retail passes when nothing matches; the three names behave as in retail.
+- **Applies to:** Client; all platforms.
+- **Source:** `Code/BF2/External/gameswf/SwiffPlayer/SwiffNativesRecovered.inl`
+
 ### A command-line join uses the +password value
 
 - **Retail:** `BF2Engine::joinServer` (`BF2.exe` `0x405C10`) overwrites the `GSPassword` setting,
@@ -445,6 +471,27 @@ Each entry is a heading that names the fix, followed by these fields:
   `Code/BF2/Game/GameEvents/ChallengeEvent.cpp`, `Code/BF2/Game/GameEvents/DataBlockEvent.cpp`,
   `Code/BF2/Game/GameEvents/PythonCommandEvent.cpp`
 
+### The server refuses a kit the player's team does not have
+
+- **Retail:** `GameServer::handleNetworkEvent` masks a client's kit request to 0..15 (Linux ia-32
+  server `0x80AC894`), and `ServerGameLogic::selectKitAndUnlockLevel` (`0x80FBDA0`) stores it
+  unchecked; stock levels register kits 0 to 6 per team. At the next spawn
+  `ServerGameLogic::spawnPlayer` finds no kit for the team and index and raises the Error "TBM:
+  Unable to create the requested kit!" (`0x8100370`); an emitted Error ends the process. Not
+  reproduced. The Windows server images were not read.
+- **OpenBF2:** `selectKitAndUnlockLevel` stores nothing and returns false unless the player's team
+  is 0 to 2 and the kit is registered for that team, in the same kit map `spawnPlayer` reads; the
+  previous kit and unlock level stay. Accepted requests are stored as in retail. The spawn-group
+  test in the same file is a separate change and not part of this fix.
+- **Applies to:** Client and server, wherever a game is hosted; all platforms.
+- **Retail clients:** Nothing on the wire changes. An unmodified client sends only kits its HUD
+  offers for its team, 0 to 6 on both teams in 1.50, and the server checks them against the team it
+  already holds, so they are accepted as before. Only a kit the player's team lacks, which takes a
+  modified client or a mod whose teams have different kit lists, is refused where retail would end
+  the process at the next spawn.
+- **Source:** `Code/BF2/Game/GameLogic/ServerGameLogic.cpp`; from [B2BF/OpenBF2
+  #9](https://github.com/B2BF/OpenBF2/issues/9)
+
 ### Wrong-length voice challenge datagram is dropped instead of ending the server
 
 - **Retail:** `VoipServerConnection::HandlePacketChallengeString` (Linux ia-32 server `0x8127600`,
@@ -586,6 +633,22 @@ Each entry is a heading that names the fix, followed by these fields:
 - **Retail clients:** Only the text of a console command's answer is built here, and it is the same
   text for every script without an embedded NUL. No message changes.
 - **Source:** `Code/BF2/Scene/Object/ToolObject/ObjectTemplateAdm.cpp`
+
+### socket.inet_ntop no longer writes one byte past its buffer
+
+- **Retail:** CPython 2.3.4's `socket_inet_ntop` zeroes `sizeof(ip) + 1` bytes. In the Linux ia-32
+  server's `libdice_py.so` (`0xA9557`) the 17-byte buffer is cleared with 18 bytes, so the last zero
+  lands on the low byte of the stack-protector value that the function checks before it returns
+  (`0xA961D`); where that byte is not already zero, the process aborts. The amd-64 build only writes
+  padding, and the Windows `dice_py.dll` has no `inet_ntop`. Reached only when a script calls
+  `socket.inet_ntop`; the stock server scripts do not.
+- **OpenBF2:** The POSIX branch zeroes exactly `sizeof(ip)` bytes. Results are unchanged:
+  `inet_ntop` is given `sizeof(ip)` as its limit, terminator included.
+- **Applies to:** Client and server, wherever a game is hosted; Linux and macOS.
+- **Retail clients:** Only the Python socket module inside the hosting process changes; no game
+  message does.
+- **Source:** `Code/BF2/External/python-embedded/py-src-2.3.4/Modules/socketmodule.c`,
+  `Code/BF2/External/python-embedded/linux/README.md`
 
 ### POSIX mutexes are recursive
 
