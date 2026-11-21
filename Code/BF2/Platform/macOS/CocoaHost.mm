@@ -333,6 +333,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         pid_t  parentPid = 0;           // getppid()
         pid_t  ancestors[6] = {};       // the parent's own ancestors, nearest first; 0 ends them
         bool   ancestryDenied = false;  // the process lookup fails for every process
+        bool   realProcessTable = false; // the three above are not used: getppid() and the kernel's
+                                        // process table answer, as in the client
         pid_t  dockPid = 0;             // the Dock's pid; 0: there is no Dock process
         int    activationRequests = 0;  // requestActivation: a period's first request
         int    activationIgnoringOthers = 0; // those of them made ignoring other applications
@@ -461,7 +463,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // This process's parent: the launcher itself when an application started the client directly.
     pid_t parentPid() const
     {
-        if (const TestSystem* t = testSystemState())
+        const TestSystem* t = testSystemState();
+        if (t && !t->realProcessTable)
             return t->parentPid;
         return getppid();
     }
@@ -476,7 +479,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // background take the front from whatever the user works in.
     macos::ProcessAncestry launcherAncestry(pid_t pid) const
     {
-        if (const TestSystem* t = testSystemState())
+        const TestSystem* t = testSystemState();
+        if (t && !t->realProcessTable)
             return macos::processAncestry(pid, t->parentPid, [t](pid_t p) { return t->parentOf(p); });
         return macos::processAncestry(pid, getppid(), macos::parentPidOf);
     }
@@ -2608,6 +2612,7 @@ void CocoaHostTestHooks::setSystemFocusForTest(host::ClientHost& host, const Sys
     for (size_t i = 0; i < ancestors; ++i)
         system.ancestors[i] = static_cast<pid_t>(state->ancestors[i]);
     system.ancestryDenied = state->ancestryDenied;
+    system.realProcessTable = state->realProcessTable;
     system.dockPid        = static_cast<pid_t>(state->dockPid);
 }
 

@@ -40,6 +40,10 @@ public:
         int    ancestors[6];    // the parent's own ancestors, nearest first; 0 ends the list
         bool   ancestryDenied;  // the process lookup fails, as in a sandbox that denies it
         int    dockPid;         // the Dock's pid; 0: there is no Dock process
+        // The host asks who started this process as the client does: getppid() and the kernel's
+        // process table (ProcessAncestry.h) answer, and parentPid, ancestors and ancestryDenied
+        // are not used. The rest of the simulation stays.
+        bool   realProcessTable;
     };
     // Simulates that state for the host's focus repair (the per-pump reconciliation and the
     // repair on a press), which then runs without an application or a window; null ends it.

@@ -857,11 +857,16 @@ void testProcessAncestry()
     check(processAncestry(40, 40, denied) == AncestryYes, "the parent is recognised without any lookup");
     const auto loop = [](pid_t pid) -> pid_t { return pid == 40 ? 30 : 40; };
     check(processAncestry(10, 40, loop) == AncestryUnknown, "a chain that never reaches launchd is given up");
-    // The kernel's process table, as the client reads it.
-    check(parentPidOf(getpid()) == getppid(), "sysctl answers this process's parent");
-    check(processAncestry(getppid(), getppid(), parentPidOf) == AncestryYes &&
-          processAncestry(getpid(), getppid(), parentPidOf) == AncestryNo,
-          "the real chain: the parent is an ancestor, this process is not its own");
+    // The kernel's process table, as the client reads it. launchd (pid 1) adopts a process whose
+    // parent has exited, as when this test is started detached from a shell that is gone, and
+    // launchd is nobody's launcher. So the answer for the parent follows who the parent is.
+    const pid_t parent = getppid();
+    std::printf("  this process's parent is pid %d%s\n", static_cast<int>(parent),
+                parent > 1 ? "" : ": launchd, the test was started detached");
+    check(parentPidOf(getpid()) == parent, "sysctl answers this process's parent");
+    check(processAncestry(parent, parent, parentPidOf) == (parent > 1 ? AncestryYes : AncestryNo) &&
+          processAncestry(getpid(), parent, parentPidOf) == AncestryNo,
+          "the real chain: the parent is an ancestor unless it is launchd, this process is not its own");
 }
 
 // The launch activation with the system simulated (SystemFocus::activation). The application in
@@ -1472,6 +1477,38 @@ void testLaunchActivation()
     sys.frontPid = terminal;                    // no ancestor's turn: an unrelated application was in front at the start
     after(0.2);
     check(!stats().pending, "an application the user went to without a click still ends the period");
+
+    // The same decision with the lookup the client makes: getppid() and the kernel's process
+    // table instead of the simulated chain that every scenario above uses. The application in
+    // front is this test's real parent, then that parent's parent, then a process outside the
+    // chain. launchd (pid 1) is no application and nobody's launcher: where the test's parent, or
+    // its parent's parent, is launchd (the test was started detached from a shell that has
+    // exited), a process outside the chain stands in, and the host must take it for a bystander.
+    {
+        sys.realProcessTable = true;
+        const int outside = 0x7FFFFFF0;         // no process has this pid
+        const int realParent = static_cast<int>(getppid());
+        const int realGrandparent = realParent > 1 ? static_cast<int>(macos::parentPidOf(realParent)) : -1;
+        const int launcher = realParent > 1 ? 1 : 0;      // expected first requests that ignore other applications
+        const int further = realGrandparent > 1 ? 1 : 0;
+        start(realParent > 1 ? realParent : outside);
+        check(stats().pending && requests() == 1 && ignoringOthers() == launcher,
+              "the real process table, this test's parent in front: the launcher (a bystander stands in when "
+              "launchd is the parent)");
+        after(0.6);
+        after(0.6);
+        check(retries() == launcher && dockResets() == launcher,
+              "the real process table: repeated requests and the Dock reset against the real parent, none against "
+              "a bystander");
+        start(realGrandparent > 1 ? realGrandparent : outside);
+        check(stats().pending && requests() == 1 && ignoringOthers() == further,
+              "the real process table, the parent's parent in front: an ancestor found through sysctl is the "
+              "launcher (a bystander stands in when the chain has ended at launchd)");
+        start(outside);
+        check(stats().pending && requests() == 1 && ignoringOthers() == 0,
+              "the real process table, an application outside the chain in front: a bystander");
+        sys.realProcessTable = false;
+    }
 
     // A game that restarts itself (the player activates a mod): the first instance starts the new
     // one and quits. When it was the active application at that moment it says so in the new
