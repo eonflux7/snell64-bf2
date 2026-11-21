@@ -403,13 +403,20 @@ Each entry is a heading that names the fix, followed by these fields:
 - **OpenBF2:** The Linux entry point puts quotes around an argument before the join only where
   retail would cut it: the argument has text after whitespace, contains no option token (a `+`, a
   name, then whitespace or the end of the argument), and neither it nor an earlier argument
-  contains a quote character. Every other argument, the empty one and one whose whitespace is all
-  at its end included, is joined unchanged, so every spelling that works on retail, such as an
-  argument with its own quotes or one that holds several options, gives retail's line; whitespace
-  at the end of a value is cut as on retail. A value with whitespace is still cut as on retail when
-  it contains an option token or follows an argument with a quote character.
-  `bf2_command_line_join_check` compares the parse with retail's line through the recovered parser;
-  not run on a server.
+  contains a quote character. Under the same quote condition an empty or blank argument, unless it
+  is the only one, is written as `""`: it parses as retail's empty value and survives the in-game
+  restart of the macOS and Linux clients, which splits the stored line again. Every other argument,
+  one whose whitespace is all at its end included, is joined unchanged, so every spelling that
+  works on retail, such as an argument with its own quotes or one that holds several options,
+  parses as retail's line; whitespace at the end of a value is cut as on retail. A value with
+  whitespace is still cut as on retail when it contains an option token or follows an argument
+  with a quote character. The restart can still change the parse where an argument holds a quote
+  character, which the split reads as `CommandLineToArgvW` does, or where an argument that holds an
+  option also holds the whitespace of an empty value, such as `+password  +port 1` passed as one
+  argument. A value longer than 255 characters overflows the parser's buffer, as it does on retail;
+  the join lets a spaced value reach that length.
+  `bf2_command_line_join_check` compares the parse with retail's line through the recovered parser
+  and, on macOS, the restart's round trip; not run on a server or client.
 - **Applies to:** Server; Linux, and macOS, whose server uses the same entry point. The helper also
   serves entry points without a retail counterpart: the macOS and Linux clients and the rebuilt
   Windows console entry.

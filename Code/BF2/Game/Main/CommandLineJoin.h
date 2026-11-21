@@ -5,7 +5,8 @@
 // spaces" (docs/retail-fixes.md). The retail Linux main joins argv[1..] with single spaces and no
 // quoting, and SimpleParser reads an unquoted value only up to the next whitespace, so a value that
 // the caller passed as one argument is cut at its first space. This join quotes such a value and
-// otherwise produces retail's line, so every spelling that works on retail parses as it does there.
+// otherwise produces a line that parses as retail's, so every spelling that works on retail parses
+// as it does there.
 // The same join serves the native clients and the rebuilt Windows console entry, which have no
 // retail counterpart.
 
@@ -57,14 +58,26 @@ inline bool hasInteriorSpace(const std::string& arg)
     return false;
 }
 
-// Joins argv[1..argc-1] with single spaces, as the retail Linux main does. An argument is wrapped
-// in quotes only when all of the following hold; retail would cut such an argument where a value
-// starts at it, and the quotes change nothing else in the parse:
-// - it has text after whitespace (whitespace at its end only is cut by the parser as on retail);
-// - it contains no quote character, and no earlier argument did (the caller then uses retail's own
-//   quoting, and an added quote could close a value that one of those quotes opened);
-// - it contains no option token, so it is a value and not one or more options of its own.
-// Every other argument, the empty one included, is copied unchanged, as retail does.
+// True when arg is empty or holds only whitespace.
+inline bool isBlank(const std::string& arg)
+{
+    for (std::string::size_type c = 0; c < arg.size(); ++c)
+        if (!isParserSpace(arg[c]))
+            return false;
+    return true;
+}
+
+// Joins argv[1..argc-1] with single spaces, as the retail Linux main does. While neither the
+// argument nor an earlier one contains a quote character (the caller then uses retail's own
+// quoting, and an added quote could close a value that one of those quotes opened):
+// - an argument with text after whitespace and no option token is wrapped in quotes. Retail would
+//   cut it where a value starts at it; the quotes change nothing else in the parse. An argument
+//   with an option token is one or more options of its own and stays unchanged.
+// - an empty or blank argument, when it is not the only one, is written as "". The parse is the
+//   same as retail's (an empty value), and the relaunch on the native clients, which splits the
+//   stored line again (macos::splitCommandLine), keeps it as an argument instead of dropping it.
+// Every other argument is copied unchanged, as retail does; whitespace at the end of a value is cut
+// by the parser as on retail.
 inline std::string joinArgs(int argc, const char* const* argv)
 {
     std::string out;
@@ -77,7 +90,11 @@ inline std::string joinArgs(int argc, const char* const* argv)
 
         quoteSeen = quoteSeen || arg.find('"') != std::string::npos;
 
-        if (!quoteSeen && hasInteriorSpace(arg) && !containsOptionToken(arg))
+        if (!quoteSeen && isBlank(arg) && argc > 2)
+        {
+            out += "\"\"";
+        }
+        else if (!quoteSeen && hasInteriorSpace(arg) && !containsOptionToken(arg))
         {
             out += '"';
             out += arg;

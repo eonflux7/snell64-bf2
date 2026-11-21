@@ -5,8 +5,15 @@
 //
 // retailJoin models the Linux ia-32 server main (ELF 0x8052C62 to 0x8052CA6): argv[1..] streamed
 // with one ' ' between arguments and no quoting.
+//
+// On macOS the check also runs the native clients' relaunch round trip: BF2Engine::restartBF2
+// hands the stored line to macos::relaunchExecutable, which splits it with splitCommandLine, and
+// the new process joins the pieces again. That second line must parse as the first.
 #include "../BF2/Game/Main/CommandLineJoin.h"
 #include "../BF2/Game/Utility/SimpleParser.h"
+#if defined(__APPLE__)
+#include "../BF2/Platform/macOS/MacSystem.h"
+#endif
 
 #include <cstdio>
 #include <list>
@@ -157,6 +164,23 @@ bool onlyCutsDiffer(const Args& args)
     return true;
 }
 
+#if defined(__APPLE__)
+// The relaunch: the stored line split as relaunchExecutable splits it, then joined again.
+std::string relaunchLine(const std::string& line)
+{
+    return join(dice::hfe::macos::splitCommandLine(line));
+}
+
+bool relaunchParsesAlike(const Args& args)
+{
+    Keys first, second;
+    const std::string line = join(args);
+    const bool firstParsed = parse(line, first);
+    const bool secondParsed = parse(relaunchLine(line), second);
+    return firstParsed == secondParsed && show(first) == show(second);
+}
+#endif
+
 } // namespace
 
 int main()
@@ -199,10 +223,16 @@ int main()
         { "stray quote earlier", A("+playerName", "a\"b", "+config", "/a b/c"),
           "+playerName a\"b +config /a b/c", false },
         { "open quote earlier", A("+config", "\"/a", "b c", "d\""), "+config \"/a b c d\"", false },
-        { "empty value", A("+password", "", "+port", "16568"), "+password  +port 16568", false },
-        { "empty value at the end", A("+password", ""), "+password ", false },
-        { "empty first argument", A("", "+port", "16568"), " +port 16568", false },
+        { "empty value", A("+password", "", "+port", "16568"), "+password \"\" +port 16568",
+          false },
+        { "empty value at the end", A("+password", ""), "+password \"\"", false },
+        { "empty first argument", A("", "+port", "16568"), "\"\" +port 16568", false },
         { "only an empty argument", A(""), "", false },
+        { "blank value", A("+password", " \t", "+playerName", "x"),
+          "+password \"\" +playerName x", false },
+        { "only a blank argument", A(" "), " ", false },
+        { "empty value after a quote", A("+playerName", "a\"b", "+password", "", "+port", "1"),
+          "+playerName a\"b +password  +port 1", false },
         { "trailing spaces", A("+config", "sv.con ", "+playerName", "Bob  "),
           "+config sv.con  +playerName Bob  ", false },
         { "trailing CR", A("+config", "/srv/bf2/sv.con\r", "+port", "16567"),
@@ -255,6 +285,59 @@ int main()
     check(differing > 0, "sweep: some inputs exercise a whole value");
     std::printf("sweep %u inputs, %u with a whole value where retail cuts, %u violations\n", swept,
                 differing, violations);
+
+#if defined(__APPLE__)
+    // The relaunch round trip, for every table row without a quote character (the split reads
+    // quotes and backslashes as CommandLineToArgvW does, which a caller's own quoting can change)
+    // and for a sweep over the same pieces without the quote.
+    for (std::size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i)
+    {
+        bool quoted = false;
+        for (std::size_t a = 0; a < rows[i].args.size(); ++a)
+            quoted = quoted || rows[i].args[a].find('"') != std::string::npos;
+        if (!quoted)
+            check(relaunchParsesAlike(rows[i].args),
+                  std::string(rows[i].label) + ": relaunch line ["
+                      + relaunchLine(join(rows[i].args)) + "]");
+    }
+    unsigned relaunchSwept = 0, relaunchViolations = 0;
+    for (int n = 0; n < 200000; ++n)
+    {
+        seed = seed * 1103515245u + 12345u;
+        Args args((seed >> 16) % 4 + 1);
+        for (std::size_t i = 0; i < args.size(); ++i)
+        {
+            seed = seed * 1103515245u + 12345u;
+            const unsigned count = (seed >> 16) % 4;
+            for (unsigned k = 0; k < count; ++k)
+            {
+                seed = seed * 1103515245u + 12345u;
+                const char* piece = pieces[(seed >> 16) % pieceCount];
+                if (piece[0] != '"')
+                    args[i] += piece;
+            }
+        }
+        // An argument that holds an option and whitespace is joined unchanged, and the split
+        // collapses its whitespace runs; the guide lists that limit. Such inputs are skipped.
+        bool optionsWithSpace = false;
+        for (std::size_t i = 0; i < args.size(); ++i)
+            optionsWithSpace = optionsWithSpace
+                               || (dice::hfe::commandLine::containsOptionToken(args[i])
+                                   && args[i].find_first_of(" \t\n\v\f\r") != std::string::npos);
+        if (optionsWithSpace)
+            continue;
+        ++relaunchSwept;
+        if (!relaunchParsesAlike(args) && ++relaunchViolations <= 5)
+        {
+            std::string label = "relaunch sweep:";
+            for (std::size_t i = 0; i < args.size(); ++i)
+                label += " [" + args[i] + "]";
+            check(false, label);
+        }
+    }
+    check(relaunchViolations == 0, "relaunch sweep: the relaunched line parses as the first");
+    std::printf("relaunch sweep %u inputs, %u violations\n", relaunchSwept, relaunchViolations);
+#endif
 
     std::printf("command line join %u/%u checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;

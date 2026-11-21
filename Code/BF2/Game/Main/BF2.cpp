@@ -1037,7 +1037,7 @@ int main(int argc, const char** argv, const char** envp)
     // [CHOSEN, not recovered] Retail fix "The Linux server keeps command-line arguments that contain
     // spaces" (docs/retail-fixes.md): retail joins without quoting, so a value passed as one
     // argument, such as "/media/Battlefield 2/mods/fh2/.../maplist.con", is cut at its first space.
-    // joinArgs quotes such a value and leaves every other argument as retail does.
+    // joinArgs quotes such a value and joins every other argument so that it parses as on retail.
     const std::string commandLine = dice::hfe::commandLine::joinArgs(argc, argv);
 
     dice::hfe::BF2* bf2 = new dice::hfe::BF2();      // operator new(4)
