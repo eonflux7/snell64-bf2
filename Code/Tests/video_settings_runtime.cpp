@@ -222,12 +222,13 @@ int main()
     check(joined()==std::string("getRestartFlag 5;apply;")+readback(),"in-game apply: only the restart flag read, the renderer apply and the read-back");
     check(current.effectsQuality==2 && !api->hasChanges(),"the in-game edit is lost to the read-back (retail)");
     game=nullptr;
-    // A named level in the settings repository skips only the antialiasing push.
+    // [CHOSEN] Issue #60: a named level in the settings repository no longer skips the antialiasing push.
     repository.stringSet(std::string("GSLoadLevel"),std::string("strike_at_karkand"));
     api->setAntialiasing(std::string("4Samples")); callLog.clear();
+    check(!api->needsRestart() && callLog.empty(),"an antialiasing change with a renderer and no game needs no restart");
+    game=loadedGame; check(api->needsRestart(),"an antialiasing change while a game is loaded needs a restart"); game=nullptr;
     check(api->apply(),"apply with a named level succeeds");
-    check(joined()==pushes(twos,"1024x768@85Hz",nullptr)+"apply;"+readback(),"a named GSLoadLevel skips the antialiasing push only");
-    check(observer.selected[0]=="2Samples" && current.antialiasing=="2Samples","the skipped antialiasing edit is lost to the read-back");
+    check(joined()==pushes(twos,"1024x768@85Hz","4Samples")+"apply;"+readback(),"a named GSLoadLevel no longer skips the antialiasing push");
     repository.stringErase(std::string("GSLoadLevel"));
 
     // restart latching with a fresh owner

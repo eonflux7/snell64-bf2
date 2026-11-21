@@ -28,6 +28,7 @@
 #include "../RendMisc/IRenderer.h"     // sub_1000F8D0's typed Renderer calls
 #include "../RendMisc/IRenderView.h"   //   (+0x10 setDisplayMode, +0x48 / +0x50 and the views' +0x40 / +0x10)
 #include "../RendMisc/DisplayModePolicy.h"   // [CHOSEN] the native hosts' default-size choice
+#include "../RendMisc/AntialiasingPolicy.h"   // [CHOSEN] issue #60: what a switch leaves to reload
 #include "../Core/EventManager.h"      // sub_1000F8D0's two ECRenderer posts
 #include "../GeomMisc/Debug.h"          // initialize's registration-failure report
 #include <algorithm>    // std::find - buildResolutionList
@@ -249,6 +250,17 @@ void assignRendererModeRecord(RendDX9Base* b, const Mode40& src)
                           src.multiSample.data() + src.multiSample.size());
 }
 
+// [CHOSEN, not recovered] Issue #60: the multisample half of the HASALPHA2MASK define, as
+// isMultisampleActive reads it (+0x514 forced, +0x515 disabled, else the list's first type).
+static bool alpha2MaskMultisampleOn(const RendDX9Base* b)
+{
+    if (b->forceMultisample)
+        return true;
+    if (b->disableMultisample)
+        return false;
+    return !b->multiSamples.empty() && b->multiSamples[0].type > 0;
+}
+
 // Applies a display mode and selected antialiasing settings. [INFERRED] helper name.
 // Requires initialized renderer services, a depth format and valid selected mode/AA indices.
 // Window size/refresh settings can override the mode. Resize precedes device reset.
@@ -257,6 +269,8 @@ void assignRendererModeRecord(RendDX9Base* b, const Mode40& src)
 void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
 {
     RendDX9Base* const b = static_cast<RendDX9Base*>(g_rendererBase);
+    // [CHOSEN, not recovered] Issue #60: the define's inputs before this switch, see step 13.
+    const bool alpha2MaskBefore = b->hasAlphaToCoverage != 0 && alpha2MaskMultisampleOn(b);
 
     // 1 - 0x1000F8DE..0x1000F8E4 `mov eax, [esi+0B0h]; mov eax, [eax]` unguarded.
     const unsigned int keptDepthFormat = b->depthFormats[0];
@@ -336,11 +350,28 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     ::dice::hfe::eventManager->postEvent(static_cast<EventCategory>(11), 2, &packedSize, 0.0f);
 
     // 12 - 0x1000FB3E..0x1000FB4F, both on dword_1023B970.
+    // [CHOSEN, not recovered] Issue #60 (https://github.com/kr4uzi/OpenBF2/issues/60): the probe's
+    // force and disable bytes only ever become set, so a byte set for the previous level would
+    // still decide isMultisampleActive after a live switch (a failed probe at one level would
+    // disable multisampling for every later level). Both are re-derived by the probe that follows.
+    b->forceMultisample   = 0;
+    b->disableMultisample = 0;
     rendererProbeMultisample(g_rendererBase);
     rendererProbeTransparencyAA(g_rendererBase);
 
     // 13 - sub_10033240 on dword_1023D954.
     effectManagerRebuildShaderDefines();
+
+    // [CHOSEN, not recovered] Issue #60: effects compiled before the switch carry the old
+    // HASALPHA2MASK define. Mark them for the reload the next level load runs (the same flags a
+    // texture-filtering change sets), instead of retail's refusal to switch after a match.
+    if (::dice::hfe::aapolicy::defineInputsChanged(
+            alpha2MaskBefore, b->hasAlphaToCoverage != 0 && alpha2MaskMultisampleOn(b)))
+    {
+        vo->dirty116 = 1;
+        vo->dirty117 = 1;
+        vo->dirty118 = 1;
+    }
 }
 
 } // anonymous namespace
