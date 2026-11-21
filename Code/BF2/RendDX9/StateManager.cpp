@@ -892,7 +892,8 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
 // PE 0x10026A80.
 // [RENDER] The registers kEngineRegisterBegin..kEngineRegisterEnd hold the frame's sun cascade
 // constants (RASM, stateManagerSetSunCascadeConstants), the entry's LOD dither (RaLodDither,
-// renderEntryBindLodDither) and the aerial-perspective lookup (RaAerial and RaAerialHaze, stateManagerSetAerial). The effects that read them declare them at those registers, and D3DX
+// renderEntryBindLodDither), the aerial-perspective lookup (RaAerial and RaAerialHaze, stateManagerSetAerial)
+// and the sky's irradiance (RaSkySH, stateManagerSetSkySh). The effects that read them declare them at those registers, and D3DX
 // uploads the parameters' own zeros at each pass; that part of a write is dropped, so the range
 // keeps the engine's values. Retail mirrors every write.
 int __stdcall smSetPixelShaderConstantF(StateManager* self, unsigned int reg, const float* data,
@@ -1631,6 +1632,13 @@ void stateManagerSetAerial(const float* value)
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kAerialRegister, value, 1u);
     constFileWrite(self->psConst, self->psConstDirty, kAerialHazeRegister, value + 4, 1u);
+}
+
+// [RENDER] RaSkySH into its reserved pixel registers, past the filter above.
+void stateManagerSetSkySh(const float* value)
+{
+    StateManager* const self = sm();
+    constFileWrite(self->psConst, self->psConstDirty, kSkyShRegister, value, kSkyShVec4s);
 }
 
 // FXParameter.cpp's sparse-matrix fast path uploads bone rows through vslot +0x38.

@@ -807,7 +807,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 9
+#define RA_CONTRACT_VERSION 10
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -873,6 +873,38 @@ struct AtmosphereInfo
     float groundAlbedo[3];
 };
 AtmosphereInfo rendererAtmosphereInfo();
+// [RENDER] Milestone 11 task 7 (SkyCube.cpp, contract 10): the sky cube (prefiltered GGX, mip m
+// roughness m / 5), the sky's irradiance as SH9 and the split-sum BRDF table, built on the CPU
+// with the sky view into managed textures. Each frame the cube is bound to the reserved sampler
+// kSkyCubeSampler (trilinear, clamp), the table to kSkyBrdfSampler (bilinear, clamp), and the
+// irradiance to the pixel registers kSkyShRegister.. (RaSkySH, 7 float4s; [6].w 1 while live).
+const unsigned int kSkyCubeSampler = 10;
+const unsigned int kSkyBrdfSampler = 11;
+struct SkyCubeSource
+{
+    const float* skyView;          // rgb per texel, the sky-view table's layout and scale
+    unsigned int skyViewW, skyViewH;
+    double groundRadiusKm, altitudeKm;   // the radius the sky view is seen from, as the table
+    float toSun[3];                // world, unit
+    float sun[3], sky[3];          // Lightmanager.staticSunColor, staticSkyColor
+    float groundAlbedo[3];         // linear
+    double hazeDensity;            // 1/m at the reference height
+};
+void rendererSkyCubeBuild(const SkyCubeSource& source);
+// Binds the cube, the table and RaSkySH; with `use` false (or before a build) unbinds them and
+// zeroes RaSkySH.
+void rendererSkyCubeFrame(bool use);
+struct SkyCubeInfo
+{
+    bool live;
+    IDirect3DCubeTexture9* cube;
+    IDirect3DTexture9* brdf;
+    unsigned int cubeSize, cubeMips, brdfSize;
+    float buildMs, shScale;
+    float sh[7][4];
+    float irradianceUp[3];
+};
+SkyCubeInfo rendererSkyCubeInfo();
 // RASM, the sun cascade constants: 22 float4s, laid out in RaSunShadow.fxh. Pixel shaders read them
 // from the fixed registers c200..c221, which the engine owns: it writes them once per frame
 // (rendererSetSunCascadeConstants) and the StateManager drops every effect's write into the range,
@@ -894,10 +926,15 @@ const unsigned int kAerialRegister = 223;
 // camera's height and 1 / its height falloff, for Ra_GetAerial's haze past fog end. Published with
 // RaAerial.
 const unsigned int kAerialHazeRegister = 199;
-const unsigned int kEngineRegisterBegin = 199;
-const unsigned int kEngineRegisterEnd = 224;   // c199..c223 dropped from effect writes
+// [RENDER] Milestone 11 sky cube (contract 10): RaSkySH, the sky's irradiance as 7 float4s in
+// c192..c198 (SkyCube.cpp), written each frame by rendererSkyCubeFrame.
+const unsigned int kSkyShRegister = 192;
+const unsigned int kSkyShVec4s = 7;
+const unsigned int kEngineRegisterBegin = 192;
+const unsigned int kEngineRegisterEnd = 224;   // c192..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);
+void stateManagerSetSkySh(const float* value /* RaSkySH, kSkyShVec4s float4s */);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

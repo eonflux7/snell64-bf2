@@ -745,6 +745,29 @@ void updateTables()
                      kSkyViewW, kSkyViewH, sky);
         g.skyViewDirty = !uploadTable(g.skyView, sky, kSkyViewW, kSkyViewH);
         g.appliedBlend = g_skyGainBlend;
+        // The sky cube and irradiance (task 7) from this sky view.
+        std::vector<float> rgb(sky.size() * 3);
+        for (size_t i = 0; i < sky.size(); ++i)
+        {
+            rgb[i * 3 + 0] = static_cast<float>(sky[i].x);
+            rgb[i * 3 + 1] = static_cast<float>(sky[i].y);
+            rgb[i * 3 + 2] = static_cast<float>(sky[i].z);
+        }
+        SkyCubeSource src;
+        src.skyView = &rgb[0];
+        src.skyViewW = kSkyViewW;
+        src.skyViewH = kSkyViewH;
+        src.groundRadiusKm = kGroundRadius;
+        src.altitudeKm = std::max(g.refHeight, 1.0) / 1000.0;
+        for (int k = 0; k < 3; ++k)
+        {
+            src.toSun[k] = g.inputs.toSun[k];
+            src.sun[k] = g.inputs.sun[k];
+            src.sky[k] = g.inputs.sky[k];
+            src.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
+        }
+        src.hazeDensity = hazeDensity();
+        rendererSkyCubeBuild(src);
     }
 }
 
@@ -927,7 +950,13 @@ float rendererSceneryDistance()
 void rendererAtmosphereFrame()
 {
     g.atlasLive = false;
-    if (!g_enabled || !device())
+    if (!device())
+        return;
+    struct BindSkyCube   // task 7: at every return below, while the model draws the sky
+    {
+        ~BindSkyCube() { rendererSkyCubeFrame(rendererAtmosphereDrawsSky()); }
+    } bindSkyCube;
+    if (!g_enabled)
         return;
     Inputs in;
     if (!gatherInputs(in))
