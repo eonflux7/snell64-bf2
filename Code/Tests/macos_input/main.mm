@@ -1445,6 +1445,31 @@ void testLaunchActivation()
     check(stats().pending && retries() == 2,
           "a click with this process frontmost: the application left behind may lose the front too");
 
+    // Every application the user leaves with a click into the inactive game window may lose the
+    // front until the period ends. A later click made with another application in front adds
+    // that one. It does not replace the application of the click that started the period or
+    // ended its wait, against which the requests would otherwise stop early.
+    start(editor);
+    after(2.0);
+    click();                                    // ends the wait: the editor may lose the front
+    sys.frontPid = browser;
+    apply(0.3);
+    click();                                    // the user went to the browser and clicks again
+    pump();
+    check(stats().pending && retries() == 2,
+          "a later click with another application in front: the period goes on against that one");
+    sys.frontPid = editor;
+    after(0.6);
+    check(stats().pending && retries() == 3,
+          "the application of the first click may still lose the front after a later click with another one in front");
+    sys.frontPid = browser;
+    after(0.6);                                 // 1.5 s after the first click: the Dock reset is due
+    check(stats().pending && retries() == 3 && dockResets() == 1,
+          "and so may the application of the later click: the Dock reset is made with it in front");
+    sys.frontPid = terminal;                    // no ancestor's turn: an unrelated application was in front at the start
+    after(0.2);
+    check(!stats().pending, "an application the user went to without a click still ends the period");
+
     // End the simulation with no period running, and focus as the other tests force it.
     finish();
     check(!stats().pending && !fallback() && !host.hasFocus(), "the last period is over");

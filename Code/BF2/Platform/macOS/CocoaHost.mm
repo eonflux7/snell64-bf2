@@ -249,12 +249,15 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // the client, the OpenBF2 app. Bystander: the application in front at the first request when
     // it is no ancestor, or when the process lookup failed. The host takes nothing from it: its
     // one request yields to it (requestActivation), nothing is repeated and the Dock is left
-    // alone while it stays in front. Click: the application the user left with a click into the
-    // inactive game window (clickedWhileInactive), which is the user choosing the game over it;
-    // the click makes a bystander this.
+    // alone while it stays in front. Clicks: every application the user left with a click into
+    // the inactive game window (clickedWhileInactive), which is the user choosing the game over
+    // it; the click makes a bystander one of these. They stay until the period ends: a later
+    // click adds the application in front then and replaces none. With a single place for the
+    // latest one, the application of the click that started the period was dropped by the next
+    // click made with another application in front, and the requests against it stopped early.
     pid_t  activationLauncherPid = 0;
     pid_t  activationBystanderPid = 0;
-    pid_t  activationClickPid = 0;
+    std::vector<pid_t> activationClickPids;
     // Since when the requests have been free to take the front (focusNow()); 0 while the
     // bystander holds it. The system-state fallback and the Dock reset wait one second from
     // here, so a period that waited behind a bystander still gives AppKit that second once the
@@ -531,7 +534,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         activationPending = true;
         activationStarted = activationCountFrom = activationLastTry = now;
         activationLookCounted = activationRecounted = false;
-        activationLauncherPid = activationBystanderPid = activationClickPid = 0;
+        activationLauncherPid = activationBystanderPid = 0;
+        activationClickPids.clear();
         dockResetAt = dockAskedAt = 0.0;
         const char* relation = "nobody is in front";
         if (front.pid == getpid())
@@ -614,9 +618,11 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // made in response to the user's own input is not refused) and keep retrying from here, so
     // the menu reacts without switching applications. The application in front at the click may
     // lose the front to those requests, whatever it is, and so may the bystander a period waited
-    // behind: with the click it stops being one. A click that finds no period running, or one
-    // that only waited behind the bystander, starts the ten seconds; only a click that finds
-    // none running allows another Dock reset, so clicks within a period never repeat it.
+    // behind: with the click it stops being one. That holds until the period ends, also when a
+    // later click is made with another application in front (clickedAwayFrom). A click that
+    // finds no period running, or one that only waited behind the bystander, starts the ten
+    // seconds; only a click that finds none running allows another Dock reset, so clicks within
+    // a period never repeat it.
     void clickedWhileInactive()
     {
         if (!activationRuns() || nsAppActive())
@@ -626,7 +632,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const FrontApp front = frontApplication();
         if (!activationPending)
         {
-            activationLauncherPid = activationBystanderPid = activationClickPid = 0;
+            activationLauncherPid = activationBystanderPid = 0;
+            activationClickPids.clear();
             activationRecounted = false;
             dockResetAt = dockAskedAt = 0.0;
         }
@@ -643,11 +650,23 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         // The Dock that this period's reset put in front is not what the user clicked away from.
         const bool ownDock = front.isDock && dockResetAt > 0.0;
         if (front.pid != 0 && front.pid != getpid() && !ownDock)
-            activationClickPid = front.pid;
+            clickedAwayFrom(front.pid);
         else if (activationBystanderPid)
-            activationClickPid = activationBystanderPid;
+            clickedAwayFrom(activationBystanderPid);
         activationBystanderPid = 0;
         repeatRequest(now);
+    }
+
+    // Adds an application to those the user clicked away from in this period; none is removed
+    // before the period ends.
+    void clickedAwayFrom(pid_t pid)
+    {
+        if (!clickedAway(pid))
+            activationClickPids.push_back(pid);
+    }
+    bool clickedAway(pid_t pid) const
+    {
+        return std::find(activationClickPids.begin(), activationClickPids.end(), pid) != activationClickPids.end();
     }
 
     // [CHOSEN, not recovered] The first look at a period after the one inside createWindow: its
@@ -690,7 +709,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return;
         }
         // This process may take the front from nobody, from itself, from its parent, from the
-        // launcher and from the application the user clicked away from. A child started by a
+        // launcher and from the applications the user clicked away from. A child started by a
         // launcher can already be reported frontmost (its window ordered front) while NSApp is
         // still inactive; that state needs the retry most, and the window must be made key again
         // with it.
@@ -698,7 +717,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const pid_t self = getpid();
         const bool mayTakeFront = front.pid == 0 || front.pid == self || front.pid == parentPid() ||
                                   (activationLauncherPid && front.pid == activationLauncherPid) ||
-                                  (activationClickPid && front.pid == activationClickPid);
+                                  clickedAway(front.pid);
         // The Dock is in front because this period's reset put it there.
         const bool dockInFront = dockResetAt > 0.0 && front.isDock;
         if (!mayTakeFront && !dockInFront)

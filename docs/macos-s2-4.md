@@ -153,7 +153,9 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
     once more from that look, once per start.
   - *Later changes of the front.* An application the user goes to after the first request
     ends the requests. A click into the inactive game window starts them again, against
-    whatever is in front then, with the ten seconds counted from the click.
+    whatever is in front then, with the ten seconds counted from the click. Every application
+    the user leaves with such a click may lose the front until the requests end: a later click
+    made with another application in front adds that one and replaces none.
 - **Cursor.** `showCursor` reproduces Win32 `ShowCursor`'s display counter (visible while
   >= 0). `setCursorHiddenInView` is `SetCursor(0)` over the client area. Relative mouse mode
   (an exclusively acquired DirectInput mouse) hides the cursor, parks it in the view's centre
