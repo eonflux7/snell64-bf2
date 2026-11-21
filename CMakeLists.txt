@@ -2823,6 +2823,20 @@ if(APPLE OR UNIX)
     endif()
 endif()
 
+# [TEMP] The argv join of the console entry points against the recovered SimpleParser
+# (Code/Tests/command_line_join_runtime.cpp); retail fix in docs/retail-fixes.md. Built on request.
+if(APPLE OR UNIX)
+    add_executable(bf2_command_line_join_check EXCLUDE_FROM_ALL
+        Code/Tests/command_line_join_runtime.cpp
+        "${BF2_ROOT}/Game/Utility/SimpleParser.cpp")
+    bf2_configure_cpp_target(bf2_command_line_join_check)
+    bf2_set_platform_compat(bf2_command_line_join_check)
+    bf2_set_image(bf2_command_line_join_check 1)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_command_line_join_check COMMAND bf2_command_line_join_check)
+    endif()
+endif()
+
 # [TEMP] CBF2VoipServer::Shutdown under one dice::hfe::Mutex (Code/Tests/voip_server_shutdown_runtime.cpp):
 # the relock through ReleaseAllInstances must not hang. Built on request; UDP port 55197 only.
 if(APPLE)

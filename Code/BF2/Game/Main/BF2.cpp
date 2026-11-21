@@ -10,6 +10,7 @@
 #include "../../Core/System.h"                      // [INFERRED] Core/System.cpp attested (anon-ns)
 #include "../../IO/SettingsManager.h"               // [INFERRED] IO/SettingsManager.cpp attested
 #include "../../Core/SettingsRepostitory.h"
+#include "CommandLineJoin.h"                         // [CHOSEN] the argv join of the console entries
 
 // [UNRESOLVED] memory_update_modules takes const char*, but this call omits it.
 // The declaration's default preserves the current call until argument evidence resolves it.
@@ -59,29 +60,6 @@ namespace memory { void memory_update_modules(const char*) { } }
 #  include "BF2Console.h"                            // IMenuLogic::getConsole()->getConsoleActive()
 #  include "../../Platform/Host/ClientHost.h"
 #endif
-
-// Rebuilds the single command-line string the engine expects. The C runtime has already stripped the
-// shell's quotes from argv, so an argument containing a space must be quoted again before the
-// arguments are rejoined. Without this, a path such as
-// "D:\Battlefield 2\mods\fh2\fh2settings\beta_maplist.con" splits at its space and the parser stores
-// only "D:\Battlefield". WinMain receives lpCmdLine with those quotes intact, which is why the retail
-// server accepts such paths; the re-quoting restores that input contract for the console entry point.
-static void appendCommandLineArg(std::string& out, const char* arg, bool first)
-{
-    if (!first)
-        out += ' ';
-    const std::string value(arg ? arg : "");
-    if (value.empty() || value.find_first_of(" \t") != std::string::npos)
-    {
-        out += '"';
-        out += value;
-        out += '"';
-    }
-    else
-    {
-        out += value;
-    }
-}
 
 namespace dice {
 namespace hfe {
@@ -971,10 +949,8 @@ int main(int argc, char** argv)
     dice::hfe::g_system = new dice::hfe::System();       // operator new(0x30) == 48 bytes on Win32
 
     // Join argv[1..] into the single command-line string the engine expects (as WinMain would hand
-    // it), re-quoting any argument that contains a space.
-    std::string commandLine;
-    for (int i = 1; i < argc; ++i)
-        appendCommandLineArg(commandLine, argv[i], i == 1);
+    // it), quoting a value that the C runtime handed over without its quotes (CommandLineJoin.h).
+    const std::string commandLine = dice::hfe::commandLine::joinArgs(argc, argv);
 
     dice::hfe::BF2* bf2 = new dice::hfe::BF2();
 
@@ -1037,9 +1013,7 @@ int main(int argc, const char** argv)
     }
     dice::hfe::g_system = new dice::hfe::System();
 
-    std::string commandLine;
-    for (int i = 1; i < argc; ++i)
-        appendCommandLineArg(commandLine, argv[i], i == 1);
+    const std::string commandLine = dice::hfe::commandLine::joinArgs(argc, argv);
 
     const int result = dice::hfe::bf2NativeMain(commandLine);
     if (result == 42)
@@ -1057,11 +1031,12 @@ int main(int argc, const char** argv, const char** envp)
     dice::hfe::g_system = new dice::hfe::System();   // operator new(40) == 40 bytes on Linux
 
     // Join argv[1..] with spaces, so the rest of the engine can take the same single
-    // command-line string that Windows hands to WinMain. Re-quote any argument with a space so a
-    // path such as "/media/Battlefield 2/mods/fh2/.../maplist.con" survives the rejoin.
-    std::string commandLine;
-    for (int i = 1; i < argc; ++i)
-        appendCommandLineArg(commandLine, argv[i], i == 1);
+    // command-line string that Windows hands to WinMain.
+    // [CHOSEN, not recovered] Retail fix "The Linux server keeps command-line arguments that contain
+    // spaces" (docs/retail-fixes.md): retail joins without quoting, so a value passed as one
+    // argument, such as "/media/Battlefield 2/mods/fh2/.../maplist.con", is cut at its first space.
+    // joinArgs quotes such a value and leaves every other argument as retail does.
+    const std::string commandLine = dice::hfe::commandLine::joinArgs(argc, argv);
 
     dice::hfe::BF2* bf2 = new dice::hfe::BF2();      // operator new(4)
 

@@ -396,16 +396,21 @@ Each entry is a heading that names the fix, followed by these fields:
   a quoted one up to the closing quote (`SimpleParser::getKey`, `0x814A5F3`). A shell-quoted path
   with a space is therefore cut at the space; only an argument that itself contains the quotes
   works. Linux images only: the Windows server gets its line from `WinMain`.
-- **OpenBF2:** The Linux entry point puts quotes around every argument that is empty or contains a
-  space or tab before it joins them. Read from the code, not run: two inputs that work on retail
-  change. An argument that already contains its own quotes around such a value now yields an empty
-  value, and one argument that holds several options gives the last option a trailing quote.
+- **OpenBF2:** The Linux entry point puts quotes around an argument before the join only where
+  retail would cut it: the argument contains whitespace, contains no option token (a `+`, a name,
+  then whitespace or the end of the argument), and neither it nor an earlier argument contains a
+  quote character. Every other argument, the empty one included, is joined unchanged, so every
+  spelling that works on retail, such as an argument with its own quotes or one that holds several
+  options, gives retail's line. A value with whitespace is still cut as on retail when it contains
+  an option token or follows an argument with a quote character. `bf2_command_line_join_check`
+  compares the parse with retail's line through the recovered parser; not run on a server.
 - **Applies to:** Server; Linux, and macOS, whose server uses the same entry point. The helper also
   serves entry points without a retail counterpart: the macOS and Linux clients and the rebuilt
   Windows console entry.
 - **Retail clients:** The change is confined to how the server process reads its own command line.
   Nothing on the wire and nothing a client relies on changes.
-- **Source:** `Code/BF2/Game/Main/BF2.cpp`
+- **Source:** `Code/BF2/Game/Main/BF2.cpp`, `Code/BF2/Game/Main/CommandLineJoin.h`,
+  `Code/Tests/command_line_join_runtime.cpp`
 
 ## Client and server
 
