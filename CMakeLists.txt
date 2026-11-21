@@ -2465,6 +2465,25 @@ if(BUILD_TESTING)
     add_test(NAME bf2_hud_widescreen_check COMMAND bf2_hud_widescreen_check)
 endif()
 
+# [TEMP] [CHOSEN, not recovered] Content-free display-mode and HiDPI UI-factor policy checks.
+add_executable(bf2_display_mode_policy_check EXCLUDE_FROM_ALL Code/Tests/display_mode_policy.cpp)
+bf2_configure_cpp_target(bf2_display_mode_policy_check)
+bf2_set_platform_compat(bf2_display_mode_policy_check)
+bf2_set_image(bf2_display_mode_policy_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_display_mode_policy_check COMMAND bf2_display_mode_policy_check)
+endif()
+
+# [TEMP] [CHOSEN, not recovered] Content-free check of the queued menu-mouse rule
+# (External/gameswf/SwiffPlayer/QueuedMouse.h): input ticks against frames, no movie or player.
+add_executable(bf2_swiff_queued_mouse_check EXCLUDE_FROM_ALL Code/Tests/swiff_queued_mouse.cpp)
+bf2_configure_cpp_target(bf2_swiff_queued_mouse_check)
+bf2_set_platform_compat(bf2_swiff_queued_mouse_check)
+bf2_set_image(bf2_swiff_queued_mouse_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_swiff_queued_mouse_check COMMAND bf2_swiff_queued_mouse_check)
+endif()
+
 if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Content-free offline popup VM regression.
     add_executable(bf2_swiff_offline_connect_popup_check EXCLUDE_FROM_ALL
@@ -3176,6 +3195,8 @@ if(BUILD_TESTING AND MSVC)
             bf2_runtime_pair
             bf2_registry_dat_check
             bf2_hud_widescreen_check
+            bf2_display_mode_policy_check
+            bf2_swiff_queued_mouse_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM

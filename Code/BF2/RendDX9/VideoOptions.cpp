@@ -27,6 +27,7 @@
 #include "RendDX9Base.h"
 #include "../RendMisc/IRenderer.h"     // sub_1000F8D0's typed Renderer calls
 #include "../RendMisc/IRenderView.h"   //   (+0x10 setDisplayMode, +0x48 / +0x50 and the views' +0x40 / +0x10)
+#include "../RendMisc/DisplayModePolicy.h"   // [CHOSEN] the native hosts' default-size choice
 #include "../Core/EventManager.h"      // sub_1000F8D0's two ECRenderer posts
 #include "../GeomMisc/Debug.h"          // initialize's registration-failure report
 #include <algorithm>    // std::find - buildResolutionList
@@ -996,6 +997,46 @@ static int closestDynamicOption(VideoOptions* vo, int index, const char* value)
     return best;
 }
 
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] The engine's own default sizes
+// - the medium/low presets' "800x600", High's "1024x768" and the VideoSettings record default
+// "800x600@60Hz" - are requests for "the default mode", not choices a player made. On a display
+// that does not list them (Apple-silicon panels list only their backing sizes) they select the
+// resolution list's displaymode::preferredMode entry: the mode fitFullscreenStartMode starts at
+// and a new profile takes, so Renderer::initialize's apply of the medium preset and an empty
+// Video.con keep it. Any other unlisted value keeps issue #4's closest-size choice. Returns the
+// entry index, or -1.
+static bool isEngineDefaultResolution(const char* value)
+{
+    return std::strcmp(value, "800x600") == 0 || std::strcmp(value, "800x600@60Hz") == 0 ||
+           std::strcmp(value, "1024x768") == 0;
+}
+
+static int preferredDynamicOption(VideoOptions* vo)
+{
+    std::vector<displaymode::Mode> modes;
+    std::vector<int> entries;
+    for (std::size_t i = 0; i < vo->resList.size(); ++i)
+    {
+        int w = 0, h = 0, hz = 0;
+        if (std::sscanf(vo->resList[i].c_str(), "%dx%d@%dHz", &w, &h, &hz) == 3 && w > 0 && h > 0 && hz >= 0)
+        {
+            const displaymode::Mode m = { static_cast<unsigned>(w), static_cast<unsigned>(h),
+                                          static_cast<unsigned>(hz) };
+            modes.push_back(m);
+            entries.push_back(static_cast<int>(i));
+        }
+    }
+    RendDX9Base* const b = baseOfVo(vo);
+    D3DDISPLAYMODE desktop = {};
+    if (modes.empty() || !b->d3d9 || FAILED(b->d3d9->GetAdapterDisplayMode(b->adapter, &desktop)))
+        return -1;
+    const displaymode::Mode desk = { desktop.Width, desktop.Height, desktop.RefreshRate };
+    const int best = displaymode::preferredMode(&modes[0], modes.size(), desk, 0);
+    return best < 0 ? -1 : entries[best];
+}
+#endif
+
 // +0x1C, sub_1000FB70 - setDynamicOption(index, value). Prefix-searches the index-th string list
 // (index 0 = anti-aliasing @0xB4, index 1 = resolution @0xC4) for `value` - strnicmp over the search
 // string's length, so "800x600" matches "800x600@60Hz". On a match it records the chosen entry index
@@ -1025,7 +1066,13 @@ bool RD9_THUNK videoOptions_setDynamicOption(void* self RD9_THUNK_EDX, int index
     {
         // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/4: select the closest supported entry
         // instead. Retail stops here (below), which kills a fullscreen client without a message.
-        const int replacement = closestDynamicOption(vo, index, needle);
+        int replacement = -1;
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+        if (index == 1 && isEngineDefaultResolution(needle))
+            replacement = preferredDynamicOption(vo);     // [CHOSEN] see above
+#endif
+        if (replacement < 0)
+            replacement = closestDynamicOption(vo, index, needle);
         if (replacement >= 0)
         {
             ::renddx9abi::logf("VideoOptions::setDynamicOption: unsupported video option %d value '%s' "

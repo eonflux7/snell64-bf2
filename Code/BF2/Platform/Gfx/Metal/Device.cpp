@@ -186,7 +186,13 @@ public:
     HRESULT STDMETHODCALLTYPE GetAdapterDisplayMode(UINT a,D3DDISPLAYMODE* out) override {
         mainThread("IDirect3D9::GetAdapterDisplayMode");
         if (a || !out) return D3DERR_INVALIDCALL;
-        const auto m = dice::hfe::host::ClientHost::instance().desktopMode();
+        auto m = dice::hfe::host::ClientHost::instance().desktopMode();
+        // [TEMP] BF2_TEST_DESKTOP_MODE="WxH@Hz" replaces the desktop (points) alongside
+        // BF2_TEST_DISPLAY_MODES, so another Mac reproduces the M2's 1470x956-point desktop.
+        if (const char* test = std::getenv("BF2_TEST_DESKTOP_MODE")) {
+            int w = 0, h = 0, hz = 0;
+            if (std::sscanf(test, "%dx%d@%d", &w, &h, &hz) == 3) m = {w, h, hz, 32};
+        }
         if (m.width <= 0 || m.height <= 0) return D3DERR_NOTAVAILABLE;
         *out = {UINT(m.width),UINT(m.height),UINT(m.refreshHz),D3DFMT_X8R8G8B8}; return D3D_OK;
     }

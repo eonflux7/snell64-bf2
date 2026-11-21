@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
-#include <unistd.h>                         // getppid: the launcher's pid (activation retries)
+#include <unistd.h>                         // getpid, getppid: who started this process
 
 #include "../Host/ClientHost.h"
 #include "../Host/KeyMap.h"
@@ -15,8 +15,11 @@
 #include "CocoaText.h"
 #include "MacKeyMap.h"
 #include "MacRawMouse.h"
+#include "ProcessAncestry.h"                // [CHOSEN] the launcher of this process (activation)
+#include "RestartInFront.h"                 // [CHOSEN] a game that restarted itself (activation)
 #include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
 #include "../Host/CursorFile.h"
+#include "CursorScale.h"                 // [CHOSEN] the cursor's size on screen
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -64,6 +67,8 @@ struct HostCursor
 
 // The view's cursor rect asks the host for the cursor it shows (defined after ClientHost::Impl).
 NSCursor* currentViewCursor();
+// The view asks the host to re-choose the layer's magnification filter (defined with it).
+void refreshViewMagnification();
 } // namespace
 
 @interface OpenBF2HostWindow : NSWindow
@@ -97,8 +102,9 @@ NSCursor* currentViewCursor();
     layer.contentsScale = 1.0;
     layer.contentsGravity = kCAGravityResize;
     // [CHOSEN, not recovered] The internal-resolution drawable is enlarged by Core Animation
-    // on Retina. Preserve its pixel-snapped bitmap text instead of applying a second linear
-    // filter after the D3D font sampler. Keep linear minification for windows scaled to fit.
+    // on Retina. A whole-number enlargement keeps its pixel-snapped bitmap text with nearest-
+    // neighbour magnification; other factors use linear (ClientHost::Impl::updateMagnification).
+    // Keep linear minification for windows scaled to fit.
     layer.magnificationFilter = kCAFilterNearest;
     CGColorRef black = CGColorCreateGenericGray(0.0, 1.0);
     layer.backgroundColor = black;
@@ -126,11 +132,11 @@ NSCursor* currentViewCursor();
 {
     [super viewDidChangeBackingProperties];
     self.layer.contentsScale = 1.0;
+    refreshViewMagnification();
 }
 @end
 
 @interface OpenBF2HostDelegate : NSObject <NSWindowDelegate, NSApplicationDelegate>
-- (void)syncFocus;
 @end
 
 namespace dice {
@@ -193,28 +199,175 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     unsigned int deactivations = 0; // deactivationCount(): active -> inactive transitions
 
     // [CHOSEN, not recovered] Activation after a start from another application (the setup app
-    // runs the client through NSTask). Since macOS 14 activation is cooperative: a request made
-    // while another application is active may be refused, and a refused game window stays in
-    // front of the launcher without key status, so its clicks never reach the menu. The request
-    // is repeated for a few seconds, but only while the application that started this process (or
-    // nobody) is frontmost: an application the user went to meanwhile keeps the front.
-    bool   activationPending = false;
-    bool   fullscreenPending = false;
+    // runs the client through NSTask; a player or a script starts it from Terminal). Since
+    // macOS 14 activation is cooperative: a request made while another application is active may
+    // be refused, and a refused game window stays in front of the launcher without key status,
+    // so its clicks never reach the menu. The first request is made when the game window is
+    // shown (beginActivation) and opens an activation period of ten seconds, in which the
+    // request is repeated every half second (updateActivation) - but only at the expense of the
+    // launcher, of nobody, or of this process itself. An unrelated application that is in front
+    // at the first request (the user works elsewhere while a client starts in the background)
+    // gets that one request, made on every macOS version in the form that yields to an active
+    // application (requestActivation). It keeps the front unless the system itself grants that
+    // request, and an application the user goes to afterwards ends the period. The ten seconds
+    // count from the host's first look at the period after window creation, not from the first
+    // request (activationCountFrom).
+    bool   activationPending = false;  // an activation period is running
+    bool   fullscreenPending = false;  // a fullscreen start waiting for activation (createWindow)
     // [CHOSEN, not recovered] The system reports this process active (another app activated it
     // during launch) while NSApp never received the activation; AppKit then keeps isActive NO
     // and its windows non-key, so the engine's focus gate drops every click. When that state
     // lasts, the host trusts the system's answer until NSApp catches up or the user leaves.
-    bool   systemActive = false; // a fullscreen start waiting for activation (createWindow)
+    bool   systemActive = false;
     ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
-    double activationStarted = 0.0;  // systemUptime of the first request
-    double activationLastTry = 0.0;
+    double activationStarted = 0.0;  // focusNow() of the period's first request; the report counts from it
+    double activationLastTry = 0.0;  // of its last request, Dock reset or look at a bystander
+    // [CHOSEN, not recovered] From when the period's ten seconds count (focusNow()). A look is one
+    // run of the event pump, which calls updateActivation. The host is not pumped while the
+    // engine initialises: the look inside createWindow follows the first request at once, and the
+    // next one comes with the first frame, six to seven seconds later on the Intel test machine
+    // and longer on a slower one, with a cold disk cache or in a debug build. Counted from the
+    // first request, most of the ten seconds would be gone at that look, or all of them, and the
+    // period would end before its Dock reset and its repeated requests could run. So they count
+    // - from the first look after the one inside createWindow, for every period that begins at
+    //   window creation and whoever is in front at that look (activationLookCounted);
+    // - once more from the first look that finds the front free after a wait behind a bystander
+    //   (activationRecounted);
+    // - from the click that starts a period or ends its wait behind a bystander, in place of the
+    //   first request (clickedWhileInactive).
+    // The two look-based counts happen once per period each, so a front that alternates between
+    // the bystander and this process cannot prolong the requests without end, and every period
+    // ends: ten seconds after the last of these counts, or with the request its Dock reset owes
+    // (dockAskedAt).
+    double activationCountFrom = 0.0;
+    bool   activationLookCounted = false;
+    bool   activationRecounted = false;
+    bool   creationLook = false;       // createWindow is running: a look made now is the one inside
+                                       // it (InsideCreateWindow sets and clears this, nothing else)
+    // Totals for the tests (CocoaHostTestHooks::activationStatsForTest): every look made (look),
+    // and those of them made while createWindow ran.
+    unsigned int looks = 0;
+    unsigned int looksInsideCreateWindow = 0;
+    // [CHOSEN, not recovered] Whose front the repeated requests may take, as pids; 0: nobody's.
+    // Launcher: the application in front at the first request when it is this process's parent
+    // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
+    // the client, the OpenBF2 app. Bystander: the application in front at the first request when
+    // it is no ancestor, or when the process lookup failed. The host takes nothing from it: its
+    // one request yields to it (requestActivation), nothing is repeated and the Dock is left
+    // alone while it stays in front. Clicks: every application the user left with a click into
+    // the inactive game window (clickedWhileInactive), which is the user choosing the game over
+    // it; the click makes a bystander one of these. They stay until the period ends: a later
+    // click adds the application in front then and replaces none. With a single place for the
+    // latest one, the application of the click that started the period was dropped by the next
+    // click made with another application in front, and the requests against it stopped early.
+    pid_t  activationLauncherPid = 0;
+    pid_t  activationBystanderPid = 0;
+    std::vector<pid_t> activationClickPids;
+    // [CHOSEN, not recovered] A game that restarted itself (RestartInFront.h). The instance that
+    // started this process was the active application at that moment and says so in the
+    // environment. This process is then entitled to the front: the application that takes the
+    // front over from the first instance counts as the launcher, whatever it is. That is the
+    // application in front at the first request. When the first instance itself is still in
+    // front then, or nobody is, it is the application found in front once the first instance has
+    // exited (activationHeirOpen: not found yet). The entitlement belongs to this process's first
+    // showing of its game window: the environment is read once, by the first beginActivation
+    // (restartMarkerRead), so a window created again later starts like any other.
+    bool   restartMarkerRead = false;
+    bool   activationHeirOpen = false;
+    // Since when the requests have been free to take the front (focusNow()); 0 while the
+    // bystander holds it. The system-state fallback and the Dock reset wait one second from
+    // here, so a period that waited behind a bystander still gives AppKit that second once the
+    // game comes forward.
+    double activationFreeSince = 0.0;
+    // [CHOSEN, not recovered] An unbundled executable started from Terminal can be left frontmost
+    // for the window server while AppKit never completes its activation: NSApp stays inactive,
+    // GCMouse delivers nothing, and only switching applications recovers. Activating the Dock
+    // first resets that state, then this process asks again (the workaround SDL uses for
+    // Terminal launches). Once per activation period, and never against a bystander. The reset
+    // leaves the Dock in front until this process asks again, so the period owes that request:
+    // its ten seconds do not end it before the request was made and had half a second for its
+    // answer (updateActivation).
+    double dockResetAt = 0.0;        // focusNow() of the period's Dock activation; 0: none yet,
+                                     // -1: there is no Dock process
+    double dockAskedAt = 0.0;        // focusNow() of the first request after it; 0: still owed
+    // [CHOSEN, not recovered] Focus self-repair. windowKey and appActive cache AppKit's state as
+    // the delegate callbacks report it, and the engine's input gate (hasFocus) reads only the
+    // cache. A callback that never came, or a game window left without key status, would close
+    // the gate for good: every key and click dropped while the game is visibly in front. So each
+    // pump re-reads AppKit and brings the cache in line (reconcileFocus), an active application's
+    // game window is made key again when nothing else is due the key status (repairKeyWindow), a
+    // press into the window repairs before it is routed (repairFocusForPress), and what the gate
+    // still drops is reported (inputDropped). None of this asks for activation: taking the front
+    // stays with the launch requests above and the user's own click (clickedWhileInactive).
+    //
+    // keyLostWhileActive: the game window resigned key while the application stayed active.
+    // Something else took the keyboard, usually a panel of another process (Spotlight,
+    // Notification Centre) that returns it when it closes. Taking it back from a pump would close
+    // that panel, so only a press into the window does.
+    bool   keyLostWhileActive = false;
+    bool   keyRepairing = false;     // a pump-time key repair is under way (logged once)
+    double keyRepairAt = 0.0;        // focusNow() of its last attempt
+    // Since when the system has called this process frontmost while NSApp is inactive (0: it does
+    // not). A press repairs through the system-state fallback only once that has lasted, so the
+    // click that brings the application forward from another one is still not game input.
+    double systemFrontSince = 0.0;
+    bool   dropReported = false;     // inputDropped: one report a second at most
+    double dropReportAt = 0.0;
+    unsigned int dropsSinceReport = 0;
+    unsigned int droppedInputs = 0;  // totals (CocoaHostTestHooks::focusRepairStatsForTest)
+    unsigned int dropReports = 0;
     float scriptX = 0.0f, scriptY = 0.0f;
     bool scriptPointerSet = false;
 
+    // [TEMP] setSystemFocusForTest: the answers AppKit and the system would give, so the focus
+    // repair and the launch activation can be checked without an application or a window.
+    struct TestSystem
+    {
+        bool   set = false;
+        bool   appActive = false;       // [NSApp isActive]
+        bool   windowKey = false;       // window.isKeyWindow
+        bool   windowOnScreen = false;  // window.isVisible, not miniaturized
+        bool   modalWindow = false;     // a modal window of this process, or a sheet on the window
+        bool   otherKeyWindow = false;  // another key or key-capable visible window of this process
+        bool   makeKeyWorks = true;     // making the game window key succeeds
+        pid_t  frontPid = 0;            // the system's frontmost application; 0: none
+        double now = 0.0;               // focusNow()
+        int    makeKeyCalls = 0;
+        // The launch activation. Its requests and Dock resets are counted, none is made.
+        bool   activation = false;      // the simulation covers it (activationRuns)
+        pid_t  parentPid = 0;           // getppid()
+        pid_t  ancestors[6] = {};       // the parent's own ancestors, nearest first; 0 ends them
+        bool   ancestryDenied = false;  // the process lookup fails for every process
+        bool   realProcessTable = false; // the three above are not used: getppid() and the kernel's
+                                        // process table answer, as in the client
+        pid_t  dockPid = 0;             // the Dock's pid; 0: there is no Dock process
+        int    activationRequests = 0;  // requestActivation: a period's first request
+        int    activationIgnoringOthers = 0; // those of them made ignoring other applications
+        int    activationRetries = 0;   // requestActivationNow: its repeated requests
+        int    dockResets = 0;          // activateDock
+        // The simulated process table (macos::parentPidOf): the chain ends at launchd, pid 1.
+        pid_t parentOf(pid_t pid) const
+        {
+            if (ancestryDenied || pid <= 0)
+                return -1;
+            const size_t count = sizeof ancestors / sizeof ancestors[0];
+            if (pid == parentPid)
+                return ancestors[0] ? ancestors[0] : 1;
+            for (size_t i = 0; i < count && ancestors[i]; ++i)
+                if (ancestors[i] == pid)
+                    return i + 1 < count && ancestors[i + 1] ? ancestors[i + 1] : 1;
+            return -1;                           // no such process
+        }
+    };
 #if defined(OPENBF2_HOST_TEST_SEAMS)
     bool testHeadless = false;      // enableHeadlessForTest: no window, no real cursor changes
+    bool testFocusOverride = false; // overrideFocusForTest was used: the focus it set stands
+    mutable TestSystem testSystem;
+    TestSystem* testSystemState() const { return testSystem.set ? &testSystem : nullptr; }
 #else
     static constexpr bool testHeadless = false;
+    static constexpr bool testFocusOverride = false;
+    static constexpr TestSystem* testSystemState() { return nullptr; }
 #endif
 
     std::vector<IHostEventListener*> snapshot() const { return listeners; }
@@ -223,10 +376,157 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
 
     static double uptime() { return [[NSProcessInfo processInfo] systemUptime]; }
 
-    // -[NSApplication activate] from macOS 14 on; activateIgnoringOtherApps: before (its
-    // "ignoring" flag is ignored since macOS 14 and the selector deprecated).
-    static void requestActivation()
+    // What AppKit and the system report right now; a headless test supplies the answers.
+    double focusNow() const
     {
+        if (const TestSystem* t = testSystemState())
+            return t->now;
+        return uptime();
+    }
+    bool nsAppActive() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->appActive;
+        return [NSApp isActive] ? true : false;
+    }
+    bool windowIsKey() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->windowKey;
+        return window != nil && window.isKeyWindow;
+    }
+    // On screen: ordered in, not hidden with the application, not miniaturized.
+    bool windowOnScreen() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->windowOnScreen;
+        return window != nil && window.isVisible && !window.isMiniaturized;
+    }
+    // The pid of the application the system calls frontmost; 0 when it names none.
+    pid_t systemFrontPid() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->frontPid;
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        return front ? front.processIdentifier : 0;
+    }
+    // The system reports this process active and frontmost, whatever NSApp says.
+    bool systemFrontmost() const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->frontPid == getpid();
+        return [NSRunningApplication currentApplication].active && systemFrontPid() == getpid();
+    }
+    // Another window of this process holds the key status or is due it: a modal window or a sheet
+    // on the game window; for a repair nobody asked for (unprompted) also the current key window
+    // and any other visible window that can become key, such as an alert. A press into the game
+    // window takes the key status from an ordinary window, as AppKit does itself.
+    bool keyStatusTaken(bool unprompted) const
+    {
+        if (const TestSystem* t = testSystemState())
+            return t->modalWindow || (unprompted && t->otherKeyWindow);
+        NSWindow* modal = [NSApp modalWindow];
+        if ((modal && modal != window) || window.attachedSheet)
+            return true;
+        if (!unprompted)
+            return false;
+        NSWindow* key = [NSApp keyWindow];
+        if (key && key != window)
+            return true;
+        for (NSWindow* other in [NSApp windows])
+            if (other != window && other.isVisible && other.canBecomeKeyWindow)
+                return true;
+        return false;
+    }
+
+    // The application the system calls frontmost, read once for a decision; pid 0 when it names
+    // none. The name is for the log: nil when there is none and in a simulated system.
+    struct FrontApp
+    {
+        pid_t pid = 0;
+        bool  isDock = false;
+        NSString* name = nil;
+    };
+    FrontApp frontApplication() const
+    {
+        FrontApp app;
+        if (const TestSystem* t = testSystemState())
+        {
+            app.pid = t->frontPid;
+            app.isDock = t->dockPid != 0 && t->frontPid == t->dockPid;
+            return app;
+        }
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (front)
+        {
+            app.pid = front.processIdentifier;
+            app.isDock = [front.bundleIdentifier isEqualToString:@"com.apple.dock"] ? true : false;
+            app.name = front.localizedName;
+        }
+        return app;
+    }
+    // This process's parent: the launcher itself when an application started the client directly.
+    pid_t parentPid() const
+    {
+        const TestSystem* t = testSystemState();
+        if (t && !t->realProcessTable)
+            return t->parentPid;
+        return getppid();
+    }
+    // [CHOSEN, not recovered] Whether the application `pid` started this process: it is the
+    // parent or a further ancestor (Terminal -> login -> shell -> script -> client). A lookup that
+    // fails part of the way answers "unknown", which the caller treats as "no": the direct parent
+    // needs no lookup and is still recognised, while an application further up gets a
+    // bystander's one cooperative request (requestActivation) and no repeated ones. That costs a
+    // click into the game window (or a switch to it) when that request is not granted: before
+    // macOS 14 whenever the application is active, from macOS 14 on when the system refuses it.
+    // Counting an unknown application as a launcher would let a client started in the
+    // background take the front from whatever the user works in.
+    macos::ProcessAncestry launcherAncestry(pid_t pid) const
+    {
+        const TestSystem* t = testSystemState();
+        if (t && !t->realProcessTable)
+            return macos::processAncestry(pid, t->parentPid, [t](pid_t p) { return t->parentOf(p); });
+        return macos::processAncestry(pid, getppid(), macos::parentPidOf);
+    }
+
+    // Whether the host asks for activation at all: never in scripted runs, which do not take the
+    // user's focus ([TEMP] scriptedFocus), and in a test only against a simulated system that
+    // covers the activation.
+    bool activationRuns() const
+    {
+        if (scriptedFocus)
+            return false;
+        if (const TestSystem* t = testSystemState())
+            return t->activation;
+        return !testHeadless;
+    }
+
+    // [CHOSEN, not recovered] One activation request. `ignoringOtherApps` says whether it may take
+    // the front from an application that is active, which only a system before macOS 14 leaves
+    // to the caller:
+    // - macOS 14 and later: -[NSApplication activate]. Activation is cooperative there: the
+    //   system may refuse any request made while another application is active, so the flag
+    //   changes nothing.
+    // - macOS 11 to 13: activateIgnoringOtherApps:, which AppKit has marked for deprecation since.
+    //   With YES this process is activated whatever application is active; with NO "the app is
+    //   activated only if no other app is currently active" (NSApplication.h).
+    // A request that yields to an active application on all of these systems is called
+    // cooperative here. A bystander's one request is cooperative (beginActivation): made with
+    // YES, that request alone would take the front from the application the user works in on
+    // macOS 11 to 13, whatever the host withholds afterwards. Every other request ignores other
+    // applications; the host makes those only while this process may take the front (the first
+    // request without a bystander, updateActivation, clickedWhileInactive). The macOS 11 to 13
+    // branch follows AppKit's documentation; no such system was at hand to run it on.
+    void requestActivation(bool ignoringOtherApps)
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->activationRequests;
+            if (ignoringOtherApps)
+                ++t->activationIgnoringOthers;
+            return;
+        }
         if (@available(macOS 14.0, *))
         {
             [NSApp activate];
@@ -235,82 +535,352 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            [NSApp activateIgnoringOtherApps:YES];
+            [NSApp activateIgnoringOtherApps:ignoringOtherApps ? YES : NO];
 #pragma clang diagnostic pop
         }
     }
 
-    // The first request, made when the game window is shown. Scripted runs never take the
-    // user's focus ([TEMP] scriptedFocus).
-    void beginActivation()
+    // [CHOSEN, not recovered] Reads the restart marker (RestartInFront.h), once per process: the
+    // first call answers whether the instance that started this process was the active
+    // application then, every later call answers no.
+    bool takeRestartMarker()
     {
-        if (scriptedFocus || testHeadless)
-            return;
-        if ([NSApp isActive])
-            return;
-        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, launcher pid %d)\n",
-                     front.localizedName.UTF8String ?: "none", front ? front.processIdentifier : 0,
-                     static_cast<int>(getppid()));
-        activationPending = true;
-        activationStarted = activationLastTry = uptime();
-        requestActivation();
+        if (restartMarkerRead)
+            return false;
+        restartMarkerRead = true;
+        return macos::restartedInFront(std::getenv(macos::kRestartedInFrontVariable));
     }
 
-    // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and
-    // repeats the request every half second for ten seconds while the launcher, nobody or this
-    // process is frontmost.
+    // The first request, made when the game window is shown, and the decision whose front the
+    // repeated requests may take: the application in front now is the launcher when it is this
+    // process's parent or another ancestor, and a bystander otherwise. A bystander's request is
+    // the cooperative one; a launcher, nobody and this process itself get the request that
+    // ignores other applications (requestActivation). A game that restarted itself while it was
+    // the active application has no bystander: the application in front counts as its launcher.
+    void beginActivation()
+    {
+        // The marker is for the first showing of the game window, whether or not that showing
+        // has to ask for activation.
+        const bool restarted = takeRestartMarker();
+        if (!activationRuns() || nsAppActive())
+            return;
+        const double now = focusNow();
+        const FrontApp front = frontApplication();
+        activationPending = true;
+        activationStarted = activationCountFrom = activationLastTry = now;
+        activationLookCounted = activationRecounted = false;
+        activationLauncherPid = activationBystanderPid = 0;
+        activationClickPids.clear();
+        activationHeirOpen = false;
+        dockResetAt = dockAskedAt = 0.0;
+        const char* relation = "nobody is in front";
+        if (front.pid == getpid())
+            relation = "this process";
+        else if (front.pid != 0)
+        {
+            switch (launcherAncestry(front.pid))
+            {
+            case macos::AncestryYes:
+                activationLauncherPid = front.pid;
+                relation = front.pid == parentPid() ? "the parent of this process"
+                                                    : "an ancestor of this process";
+                break;
+            case macos::AncestryNo:
+                activationBystanderPid = front.pid;
+                relation = "not an ancestor of this process";
+                break;
+            case macos::AncestryUnknown:
+                activationBystanderPid = front.pid;
+                relation = "ancestry unknown as the process lookup failed, taken as not an ancestor";
+                break;
+            }
+            if (restarted && activationBystanderPid)
+            {
+                // Whatever application is in front where the first instance was counts as the
+                // launcher: its ancestry does not matter.
+                activationLauncherPid = front.pid;
+                activationBystanderPid = 0;
+                relation = "not an ancestor, in front in place of the instance that restarted the game";
+            }
+        }
+        // The first instance is still in front, or nobody is yet: which application follows it
+        // shows at a later look (updateActivation).
+        if (restarted && (front.pid == 0 || (front.pid != getpid() && front.pid == parentPid())))
+            activationHeirOpen = true;
+        activationFreeSince = activationBystanderPid ? 0.0 : now;
+        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, %s; parent pid %d)%s%s\n",
+                     front.name.UTF8String ?: (front.pid ? "?" : "none"), static_cast<int>(front.pid),
+                     relation, static_cast<int>(parentPid()),
+                     activationBystanderPid ? " - one cooperative request, no retries or Dock reset while it stays in front"
+                                            : "",
+                     restarted ? " - restarted by an instance of the game that was the active application" : "");
+        requestActivation(activationBystanderPid == 0);
+    }
+
+    // Asks for activation the strongest way available while this process may take the front.
+    void requestActivationNow()
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->activationRetries;
+            return;
+        }
+        [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
+        requestActivation(true);
+        if (window && visible && !minimized && !window.isKeyWindow)
+        {
+            [window makeKeyAndOrderFront:nil];
+            [window makeFirstResponder:view];
+        }
+    }
+
+    // A repeated request, counted for the half-second cadence. The first one after the period's
+    // Dock reset is the request that reset owes (dockAskedAt).
+    void repeatRequest(double now)
+    {
+        activationLastTry = now;
+        if (dockResetAt > 0.0 && dockAskedAt == 0.0)
+            dockAskedAt = now;
+        requestActivationNow();
+    }
+
+    // Activates the Dock, which takes the front from whoever holds it. False without a Dock.
+    bool activateDock()
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            if (t->dockPid == 0)
+                return false;
+            ++t->dockResets;
+            return true;
+        }
+        NSArray<NSRunningApplication*>* docks =
+            [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.dock"];
+        if (docks.count == 0)
+            return false;
+        [docks.firstObject activateWithOptions:0];
+        return true;
+    }
+
+    // [CHOSEN, not recovered] A click into the game window while AppKit still reports the
+    // application inactive is the user choosing the game: ask for activation again (a request
+    // made in response to the user's own input is not refused) and keep retrying from here, so
+    // the menu reacts without switching applications. The application in front at the click may
+    // lose the front to those requests, whatever it is, and so may the bystander a period waited
+    // behind: with the click it stops being one. That holds until the period ends, also when a
+    // later click is made with another application in front (clickedAwayFrom). A click that
+    // finds no period running, or one that only waited behind the bystander, starts the ten
+    // seconds; only a click that finds none running allows another Dock reset, so clicks within
+    // a period never repeat it.
+    void clickedWhileInactive()
+    {
+        if (!activationRuns() || nsAppActive())
+            return;
+        std::fprintf(stderr, "[host] click into the inactive game window - requesting activation\n");
+        const double now = focusNow();
+        const FrontApp front = frontApplication();
+        if (!activationPending)
+        {
+            activationLauncherPid = activationBystanderPid = 0;
+            activationClickPids.clear();
+            activationHeirOpen = false;
+            activationRecounted = false;
+            dockResetAt = dockAskedAt = 0.0;
+        }
+        if (!activationPending || activationFreeSince == 0.0)
+        {
+            activationPending = true;
+            activationStarted = activationCountFrom = now;
+            activationFreeSince = now;
+            // The ten seconds count from this click, and no later look counts them again from
+            // window creation: clicks arrive in a pump, with the engine's initialisation over.
+            // The one exception is a click that the look inside createWindow itself delivers.
+            activationLookCounted = !creationLook;
+        }
+        // The Dock that this period's reset put in front is not what the user clicked away from.
+        const bool ownDock = front.isDock && dockResetAt > 0.0;
+        if (front.pid != 0 && front.pid != getpid() && !ownDock)
+            clickedAwayFrom(front.pid);
+        else if (activationBystanderPid)
+            clickedAwayFrom(activationBystanderPid);
+        activationBystanderPid = 0;
+        repeatRequest(now);
+    }
+
+    // Adds an application to those the user clicked away from in this period; none is removed
+    // before the period ends.
+    void clickedAwayFrom(pid_t pid)
+    {
+        if (!clickedAway(pid))
+            activationClickPids.push_back(pid);
+    }
+    bool clickedAway(pid_t pid) const
+    {
+        return std::find(activationClickPids.begin(), activationClickPids.end(), pid) != activationClickPids.end();
+    }
+
+    // [CHOSEN, not recovered] Marks the time createWindow runs (creationLook). createWindow holds
+    // one of these for as long as it runs, so the pump it runs is the look inside createWindow
+    // wherever in the function that pump is made, and however often. The headless test never
+    // calls createWindow, which needs a window; it holds one of these around the look it makes
+    // in createWindow's place (CocoaHostTestHooks::lookInsideCreateWindowForTest). The two lines
+    // that set and clear the mark are therefore the ones its checks run. What no headless check
+    // covers is that createWindow holds one: the test that opens a real window checks that
+    // (Code/Tests/macos_host).
+    struct InsideCreateWindow
+    {
+        explicit InsideCreateWindow(Impl& host) : impl(host) { impl.creationLook = true; }
+        ~InsideCreateWindow() { impl.creationLook = false; }
+        InsideCreateWindow(const InsideCreateWindow&) = delete;
+        InsideCreateWindow& operator=(const InsideCreateWindow&) = delete;
+        Impl& impl;
+    };
+
+    // [CHOSEN, not recovered] The first look at a period after the one inside createWindow: its
+    // ten seconds count from here, whoever is in front (activationCountFrom). Once per period.
+    void countFromFirstLook(double now)
+    {
+        if (activationLookCounted || creationLook)
+            return;
+        activationLookCounted = true;
+        activationCountFrom = now;
+        std::fprintf(stderr, "[host] first look %d ms after the first request; the ten seconds count from here\n",
+                     static_cast<int>((now - activationStarted) * 1000.0));
+    }
+
+    // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and for
+    // ten seconds repeats the request every half second while this process may take the front.
+    // The host is not pumped while the engine initialises and so first looks at a start seconds
+    // after its first request, however long the initialisation takes. The ten seconds therefore
+    // count from that look, the first after the one inside createWindow (countFromFirstLook),
+    // and a period that waited behind a bystander counts them once more from the first look that
+    // finds the front free (activationCountFrom). A period that is first looked at later than
+    // ten seconds after its request thus still gets the system-state fallback, the Dock reset and
+    // the repeated requests, and ends ten seconds after that look. No period ends between its
+    // Dock reset and the request that reset owes (dockAskedAt).
     void updateActivation()
     {
         if (!activationPending)
             return;
-        const double now = uptime();
-        if ([NSApp isActive])
+        if (!activationRuns())
+        {
+            activationPending = false;           // a test ended its simulation: nothing real is asked
+            return;
+        }
+        const double now = focusNow();
+        if (nsAppActive())
         {
             activationPending = false;
             std::fprintf(stderr, "[host] application active after %d ms\n",
                          static_cast<int>((now - activationStarted) * 1000.0));
             return;
         }
-        if (!systemActive && now - activationStarted > 1.0 &&
-            [NSRunningApplication currentApplication].active)
+        // This process may take the front from nobody, from itself, from its parent, from the
+        // launcher and from the applications the user clicked away from. A child started by a
+        // launcher can already be reported frontmost (its window ordered front) while NSApp is
+        // still inactive; that state needs the retry most, and the window must be made key again
+        // with it.
+        const FrontApp front = frontApplication();
+        const pid_t self = getpid();
+        // The Dock is in front because this period's reset put it there.
+        const bool dockInFront = dockResetAt > 0.0 && front.isDock;
+        // [CHOSEN, not recovered] A restarted game whose first instance, or nobody, was in front
+        // at the first request: once that instance has exited (launchd is this process's parent
+        // then), the application the system names in front took its place and counts as the
+        // launcher. Decided once per period. This process in front then means that no other
+        // application followed the first instance.
+        if (activationHeirOpen && parentPid() <= 1 && front.pid != 0 && !dockInFront &&
+            front.pid != activationLauncherPid)
         {
-            NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
-            if (f && f.processIdentifier == getpid())
+            activationHeirOpen = false;
+            if (front.pid != self)
             {
-                systemActive = true;
-                std::fprintf(stderr, "[host] system reports the application active; NSApp does not - using the system's state\n");
-                becameActive();
-                [delegate syncFocus];
+                activationLauncherPid = front.pid;
+                std::fprintf(stderr, "[host] %s (pid %d) is in front in place of the instance that restarted the game; "
+                             "it counts as the launcher\n",
+                             front.name.UTF8String ?: "?", static_cast<int>(front.pid));
             }
         }
-        if (now - activationStarted > 10.0)
+        const bool mayTakeFront = front.pid == 0 || front.pid == self || front.pid == parentPid() ||
+                                  (activationLauncherPid && front.pid == activationLauncherPid) ||
+                                  clickedAway(front.pid);
+        if (!mayTakeFront && !dockInFront)
+        {
+            if (!activationBystanderPid || front.pid != activationBystanderPid)
+            {
+                activationPending = false;
+                std::fprintf(stderr, "[host] another application (%s) was activated; activation left to the user\n",
+                             front.name.UTF8String ?: "?");
+                return;
+            }
+            countFromFirstLook(now);
+            // The bystander of the first request is in front: it had that one request, and
+            // nothing is aimed at it. The period only waits for this process, its parent or
+            // nobody to be in front, or for the user's click. The half-second cadence runs on, so
+            // the next request follows within half a second of the front becoming free.
+            activationFreeSince = 0.0;
+            if (now - activationCountFrom > 10.0)
+            {
+                activationPending = false;
+                std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
+                return;
+            }
+            if (now - activationLastTry >= 0.5)
+                activationLastTry = now;
+            return;
+        }
+        countFromFirstLook(now);
+        if (mayTakeFront && activationFreeSince == 0.0)
+        {
+            // The front is free after a wait behind the bystander: this process, its parent or
+            // nobody is in front. The first time in a period, the ten seconds count from here
+            // once more. Without that a front that comes free late in the wait would leave a
+            // second or two for the requests, the system-state fallback and the Dock reset, or
+            // none at all.
+            activationFreeSince = now;
+            if (!activationRecounted)
+            {
+                activationRecounted = true;
+                activationCountFrom = now;
+                std::fprintf(stderr, "[host] %s in front %d ms after the first request; the request is repeated "
+                             "for up to ten seconds from here\n",
+                             front.pid == self ? "this process is" : front.pid == 0 ? "nobody is"
+                                                                                    : "the parent of this process is",
+                             static_cast<int>((now - activationStarted) * 1000.0));
+            }
+        }
+        const bool freeForASecond = activationFreeSince != 0.0 && now - activationFreeSince > 1.0;
+        if (!systemActive && freeForASecond && front.pid == self && systemFrontmost())
+        {
+            enterSystemFallback();               // its becameActive ran this function for this pump
+            return;
+        }
+        // A Dock reset is finished half a second after the request that follows it. Until then
+        // the ten seconds do not end the period: the reset put the Dock in front, and a period
+        // that ended there would leave it in front and the game without focus, by the host's own
+        // doing. The cadence below makes that request, past the ten seconds if it has to, and
+        // the half second lets its answer arrive while the period still owns the focus state.
+        const bool dockResetUnfinished = dockResetAt > 0.0 && (dockAskedAt == 0.0 || now - dockAskedAt < 0.5);
+        if (now - activationCountFrom > 10.0 && !dockResetUnfinished)
         {
             activationPending = false;
             std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
             return;
         }
-        if (now - activationLastTry < 0.5)
-            return;
-        activationLastTry = now;
-        // Retry while the launcher, nobody, or this process itself is frontmost. A child started
-        // by the launcher can already be reported frontmost (its window ordered front) while
-        // NSApp is still inactive; that state needs the retry most, and the window must be made
-        // key again with it.
-        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        const pid_t frontPid = front ? front.processIdentifier : 0;
-        if (front && frontPid != getppid() && frontPid != getpid())
-            return;
-        if (frontPid == getpid())
+        if (dockResetAt == 0.0 && freeForASecond && mayTakeFront)
         {
-            [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
-            if (window && visible && !minimized && !window.isKeyWindow)
+            if (activateDock())
             {
-                [window makeKeyAndOrderFront:nil];
-                [window makeFirstResponder:view];
+                dockResetAt = now;
+                std::fprintf(stderr, "[host] activation still pending; resetting it through the Dock\n");
+                activationLastTry = now;     // ask again once the Dock has taken the front
+                return;
             }
+            dockResetAt = -1.0;              // no Dock process: retries only
         }
-        requestActivation();
+        if (now - activationLastTry < (dockResetAt > 0.0 && now - dockResetAt < 0.5 ? 0.3 : 0.5))
+            return;
+        repeatRequest(now);
     }
 
     // The application became active: the game window takes key status if it lost it (a window
@@ -329,6 +899,174 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             [window makeFirstResponder:view];
         }
         updateActivation();
+    }
+
+    // Enters the system-state fallback (systemActive): the system's answer counts from here on.
+    void enterSystemFallback()
+    {
+        systemActive = true;
+        std::fprintf(stderr, "[host] system reports the application active; NSApp does not - using the system's state\n");
+        becameActive();
+        syncFocus();
+    }
+
+    // Brings windowKey and appActive in line with AppKit and the system-state fallback; the
+    // listeners hear of a change once (setFocusState). The delegate callbacks end here, and so
+    // does every pump (reconcileFocus). A pump leaves the fallback only for an application the
+    // system names: a moment without any frontmost application is not the user leaving.
+    void syncFocus(bool fromPump = false)
+    {
+        if (systemActive)
+        {
+            // Leave the fallback once AppKit has caught up, or once another application is in front.
+            const pid_t front = systemFrontPid();
+            if (nsAppActive() || (front != getpid() && (front != 0 || !fromPump)))
+                systemActive = false;
+        }
+        const bool active = nsAppActive() || systemActive;
+        const bool key = (window != nil || testHeadless) &&
+                         (windowIsKey() || (systemActive && windowOnScreen()));
+        setFocusState(key, active);
+    }
+
+    // windowDidBecomeKey / windowDidResignKey.
+    void windowKeyChanged(bool key)
+    {
+        keyLostWhileActive = !key && nsAppActive();
+        syncFocus();
+    }
+
+    // applicationDidBecomeActive / applicationDidResignActive.
+    void applicationActiveChanged(bool active)
+    {
+        keyLostWhileActive = false;              // the key status went or returns with the application
+        if (active)
+            becameActive();
+        syncFocus();
+    }
+
+    // Makes the game window key and its view the first responder.
+    void makeWindowKey()
+    {
+        if (TestSystem* t = testSystemState())
+        {
+            ++t->makeKeyCalls;
+            if (t->makeKeyWorks && !t->windowKey)
+            {
+                t->windowKey = true;
+                windowKeyChanged(true);          // as AppKit's windowDidBecomeKey
+            }
+            return;
+        }
+        [window makeKeyAndOrderFront:nil];
+        [window makeFirstResponder:view];
+    }
+
+    // Whether the focus state follows AppKit. Forced focus stays as it was set: scripted runs
+    // ([TEMP] scriptedFocus) and tests that use overrideFocusForTest without a simulated system.
+    bool focusFollowsSystem() const
+    {
+        if (scriptedFocus)
+            return false;
+        return testSystemState() || (!testHeadless && !testFocusOverride);
+    }
+
+    // [CHOSEN, not recovered] Every pump: the application is active and the game window is on
+    // screen, yet the window is not key and nothing else of this process is due the key status.
+    // Make it key and first responder, as becameActive does at activation; again every half
+    // second while that state lasts. Not after the window gave the key status away while the
+    // application stayed active (keyLostWhileActive).
+    void repairKeyWindow(double now)
+    {
+        if (!nsAppActive() || windowIsKey() || !windowOnScreen())
+        {
+            keyRepairing = false;
+            return;
+        }
+        if (keyLostWhileActive || keyStatusTaken(true))
+            return;
+        if (keyRepairing && now - keyRepairAt < 0.5)
+            return;
+        if (!keyRepairing)
+            std::fprintf(stderr, "[host] game window not key in the active application - making it key\n");
+        keyRepairing = true;
+        keyRepairAt = now;
+        makeWindowKey();
+    }
+
+    // [CHOSEN, not recovered] Called on every pump: re-reads AppKit and passes through the
+    // transitions the delegate callbacks would have made, so a cache they left stale lasts one
+    // frame instead of until the next application switch. Unchanged state notifies nobody. While
+    // an activation period makes its requests updateActivation owns the state (its Dock reset
+    // puts the Dock in front for a moment); a period that only waits behind a bystander does not.
+    void reconcileFocus()
+    {
+        if (!focusFollowsSystem())
+            return;
+        const double now = focusNow();
+        const bool active = nsAppActive();
+        if (!active && systemFrontmost())
+        {
+            if (systemFrontSince == 0.0)
+                systemFrontSince = now;
+        }
+        else
+            systemFrontSince = 0.0;
+        if (activationPending && activationFreeSince != 0.0)
+            return;
+        if (active && !appActive)
+            becameActive();                      // an activation the delegate never reported
+        repairKeyWindow(now);
+        syncFocus(true);
+    }
+
+    // [CHOSEN, not recovered] A press inside the game window found the focus gate closed. When
+    // this application is active for AppKit, or the system has called it frontmost for a quarter
+    // of a second while AppKit never activated it, the press is meant for the game: bring the key
+    // status and the cache in line first, so the listeners get the focus change, the pointer
+    // position (reportPointer) and then the press. A press that brings the application forward
+    // from another one stays window management and is not delivered.
+    void repairFocusForPress()
+    {
+        if (!focusFollowsSystem())
+            return;
+        if (nsAppActive())
+        {
+            if (!appActive)
+                becameActive();
+            if (!windowIsKey() && windowOnScreen() && !keyStatusTaken(false))
+                makeWindowKey();
+        }
+        else if (!systemActive && systemFrontSince != 0.0 && focusNow() - systemFrontSince >= 0.25 &&
+                 systemFrontmost())
+            enterSystemFallback();
+        syncFocus();
+    }
+
+    // [CHOSEN, not recovered] The focus gate dropped an input event (a key press, a press or move
+    // inside the game window, the wheel). One line a second at most says so, with the cache and
+    // what AppKit and the system report, so a log shows whether "the game ignores my clicks" was
+    // the gate and which side was wrong.
+    void inputDropped(const char* what)
+    {
+        ++droppedInputs;
+        ++dropsSinceReport;
+        const double now = focusNow();
+        if (dropReported && now - dropReportAt < 1.0)
+            return;
+        dropReported = true;
+        dropReportAt = now;
+        ++dropReports;
+        NSRunningApplication* front = testSystemState() ? nil : [[NSWorkspace sharedWorkspace] frontmostApplication];
+        std::fprintf(stderr, "[host] input dropped: %s (%u event(s) since the last report); appActive=%d "
+                     "windowKey=%d [NSApp isActive]=%d window.isKeyWindow=%d window.isVisible=%d "
+                     "systemActive=%d frontmost pid=%d (%s), own pid=%d\n",
+                     what, dropsSinceReport, appActive ? 1 : 0, windowKey ? 1 : 0, nsAppActive() ? 1 : 0,
+                     windowIsKey() ? 1 : 0,
+                     testSystemState() ? (windowOnScreen() ? 1 : 0) : (window != nil && window.isVisible ? 1 : 0),
+                     systemActive ? 1 : 0, static_cast<int>(systemFrontPid()),
+                     front.localizedName.UTF8String ?: "?", static_cast<int>(getpid()));
+        dropsSinceReport = 0;
     }
 
     // [CHOSEN, not recovered] Win32 sends WM_SETCURSOR and WM_MOUSEMOVE when a window under the
@@ -403,14 +1141,34 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         [CATransaction setDisableActions:YES];
         layer.contentsScale = 1.0;
         layer.drawableSize = CGSizeMake(backWidth, backHeight);
+        updateMagnification();
         [CATransaction commit];
+    }
+
+    // [CHOSEN, not recovered] Core Animation enlarges the drawable to the view's backing pixels.
+    // Nearest-neighbour keeps a whole-number enlargement (1440x900 on a 2880x1800 backing) pixel-
+    // exact. At any other factor (800x600 or 2048x1330 full screen on a Retina panel) it repeats
+    // some rows and columns and the image looks jagged ("oversharp"), so those use linear.
+    void updateMagnification()
+    {
+        if (!layer || !view || backWidth <= 0 || backHeight <= 0)
+            return;
+        const NSRect pixels = [view convertRectToBacking:view.bounds];
+        const double fx = NSWidth(pixels) / backWidth, fy = NSHeight(pixels) / backHeight;
+        const auto whole = [](double f) { return f >= 1.0 && std::fabs(f - std::round(f)) < 0.01; };
+        NSString* const filter = whole(fx) && whole(fy) ? kCAFilterNearest : kCAFilterLinear;
+        if (![layer.magnificationFilter isEqualToString:filter])
+            layer.magnificationFilter = filter;
     }
 
     // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
     // the 32x32 cursor at one back-buffer pixel per cursor pixel (a full-screen mode change on
     // Windows), so its size follows the game image: points per back-buffer pixel, times the frame
-    // size. Pixels are enlarged nearest-neighbour to the next whole multiple and, when the
-    // Retina target is not a whole multiple, reduced to it with high-quality filtering.
+    // size - and, on high-resolution back buffers, times MenuViewport::bitmapScale. `scale` is
+    // that product within its bounds, in points per cursor pixel (macos::cursorPointsPerPixel in
+    // CursorScale.h, which customCursor calls).
+    // Pixels are enlarged nearest-neighbour to the next whole multiple and, when the Retina
+    // target is not a whole multiple, reduced to it with high-quality filtering.
     static NSCursor* buildCursorFrame(const CursorFrame& f, CGFloat scale, CGFloat backing)
     {
         const NSSize points = NSMakeSize(f.width * scale, f.height * scale);
@@ -475,7 +1233,13 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const NSRect b = view.bounds;
         if (b.size.height <= 0)
             return nil;
-        const CGFloat scale = std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight));
+        // [CHOSEN, not recovered] The menu's .ani cursors grow with the HUD on high-resolution back
+        // buffers (2560x1664: 2 back-buffer pixels per cursor pixel) instead of shrinking with it,
+        // never past retail's size against the UI (MenuViewport::bitmapScale rounds down). On
+        // screen a cursor pixel is that many back-buffer pixels, kept between 0.5 and 4 points.
+        // The rule is macos::cursorPointsPerPixel (CursorScale.h), which a headless check pins;
+        // this call only passes on the view's height in points and the back buffer's size.
+        const CGFloat scale = static_cast<CGFloat>(macos::cursorPointsPerPixel(b.size.height, backWidth, backHeight));
         const CGFloat backing = window && window.backingScaleFactor > 0 ? window.backingScaleFactor : 1.0;
         if (!c->cursors || std::fabs(c->builtScale - scale) > 0.001 || c->builtBacking != backing)
         {
@@ -493,6 +1257,32 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             c->cursors = built;
             c->builtScale = scale;
             c->builtBacking = backing;
+            // [TEMP] [CHOSEN, not recovered] BF2_HOST_TRACE=1: the size each cursor build shows.
+            // [RETIRE-WHEN: macos-options-validated]
+            static const bool trace = [] { const char* e = std::getenv("BF2_HOST_TRACE"); return e && e[0] == '1'; }();
+            if (trace && !c->anim.frames.empty())
+            {
+                const CursorFrame& f = c->anim.frames[0];
+                std::fprintf(stderr, "[TEMP] [HOST] cursor %zu frame(s) %dx%d at %.3f pt per cursor pixel "
+                             "(bitmapScale %u, back=%dx%d, backing %.1f): %.1fx%.1f pt\n",
+                             c->anim.frames.size(), f.width, f.height, scale,
+                             macos::cursorBitmapScale(backWidth, backHeight), backWidth, backHeight,
+                             backing, f.width * scale, f.height * scale);
+                std::fflush(stderr);
+                // BF2_HOST_CURSOR_DUMP=DIR also writes the first frame's bitmap as built, since
+                // back-buffer captures do not contain the system cursor.
+                const char* dump = std::getenv("BF2_HOST_CURSOR_DUMP");
+                NSImage* image = built.count ? built[0].image : nil;
+                NSBitmapImageRep* rep = image.representations.count
+                    ? (NSBitmapImageRep*)image.representations[0] : nil;
+                if (dump && dump[0] && [rep isKindOfClass:[NSBitmapImageRep class]])
+                {
+                    NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+                    NSString* path = [NSString stringWithFormat:@"%s/cursor_%dx%d_scale%.3f.png", dump,
+                                      backWidth, backHeight, scale];
+                    [png writeToFile:path atomically:YES];
+                }
+            }
         }
         if (c->cursors.count == 0 || c->anim.steps.empty())
             return nil;
@@ -658,6 +1448,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
 
     void notifyResize()
     {
+        updateMagnification();                   // the view's frame may have changed with the size
         // [TEMP] [CHOSEN, not recovered] BF2_HOST_TRACE=1: window geometry after each resize or
         // full-screen switch, for unattended option runs. [RETIRE-WHEN: macos-options-validated]
         static const bool trace = [] { const char* e = std::getenv("BF2_HOST_TRACE"); return e && e[0] == '1'; }();
@@ -864,11 +1655,12 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return;
         if (scripted)
             return;                              // [TEMP] scripted runs ignore the real devices
-        const bool focus = hasFocus();
+        bool focus = hasFocus();
         switch (event.type)
         {
         case NSEventTypeKeyDown:
             if (focus) handleKey(event, true);
+            else inputDropped("key down");
             break;
         case NSEventTypeKeyUp:
             if (focus) handleKey(event, false);
@@ -882,12 +1674,24 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         case NSEventTypeRightMouseDragged:
         case NSEventTypeOtherMouseDragged:
             if (focus) handleMouseMove(event);
+            else if (insideGameView(event)) inputDropped("mouse move");
             break;
         case NSEventTypeLeftMouseDown:
         case NSEventTypeRightMouseDown:
         case NSEventTypeOtherMouseDown:
+        {
+            if (!nsAppActive() && event.window == window)
+                clickedWhileInactive();          // also in the system-active fallback (focus held)
+            const bool inside = !focus && insideGameView(event);
+            if (inside)
+            {
+                repairFocusForPress();
+                focus = hasFocus();
+            }
             if (focus) handleMouseButton(event, true);
+            else if (inside) inputDropped("mouse down");
             break;
+        }
         case NSEventTypeLeftMouseUp:
         case NSEventTypeRightMouseUp:
         case NSEventTypeOtherMouseUp:
@@ -895,10 +1699,20 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             break;
         case NSEventTypeScrollWheel:
             if (focus) handleWheel(event);
+            else if (event.window == window) inputDropped("scroll wheel");
             break;
         default:
             break;
         }
+    }
+
+    // Whether a mouse event lies inside the game view; the title bar is window management.
+    bool insideGameView(NSEvent* event) const
+    {
+        float x = 0.0f, y = 0.0f;
+        bool inside = false;
+        locate(event, x, y, inside);
+        return inside;
     }
 
     // Hands the GCMouse samples published since the last pump to the listeners, on this (the
@@ -925,6 +1739,19 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
+    // One look: the focus part of one run of the pump, the launch activation first and then the
+    // reconciliation. The pump makes it once per run, after it has routed the queued events, and
+    // the headless test makes it in the pump's place (CocoaHostTestHooks::pumpFocusForTest), so
+    // both run these lines. The two totals are for the tests.
+    void look()
+    {
+        ++looks;
+        if (creationLook)
+            ++looksInsideCreateWindow;
+        updateActivation();
+        reconcileFocus();
+    }
+
     bool pump(double timeout)
     {
         if (!appInitialized)
@@ -947,7 +1774,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
                 until = [NSDate distantPast];
             }
             [NSApp updateWindows];
-            updateActivation();
+            look();
             updateCursorImage();
         }
         drainRawMouse();
@@ -1124,40 +1951,26 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
 @public
     dice::hfe::host::ClientHost::Impl* impl;
 }
-- (void)syncFocus
-{
-    NSWindow* window = impl ? (NSWindow*)impl->window : nil;
-    if (!impl)
-        return;
-    if (impl->systemActive)
-    {
-        // Leave the fallback once AppKit has caught up, or once another application is in front.
-        NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if ([NSApp isActive] || !f || f.processIdentifier != getpid())
-            impl->systemActive = false;
-    }
-    const bool active = [NSApp isActive] || impl->systemActive;
-    const bool key = window != nil && (window.isKeyWindow || (impl->systemActive && window.isVisible));
-    impl->setFocusState(key, active);
-}
 - (BOOL)windowShouldClose:(NSWindow*)sender
 {
     (void)sender;
     ClientHost::instance().requestQuit();
     return NO;                                   // the engine tears the window down itself
 }
-- (void)windowDidBecomeKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
-- (void)windowDidResignKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
+- (void)windowDidBecomeKey:(NSNotification*)note     { (void)note; if (impl) impl->windowKeyChanged(true); }
+- (void)windowDidResignKey:(NSNotification*)note     { (void)note; if (impl) impl->windowKeyChanged(false); }
 - (void)windowDidMiniaturize:(NSNotification*)note   { (void)note; if (impl) { impl->minimized = true;  impl->notifyResize(); } }
-- (void)windowDidDeminiaturize:(NSNotification*)note { (void)note; if (impl) { impl->minimized = false; impl->notifyResize(); } }
-- (void)applicationDidBecomeActive:(NSNotification*)note
+- (void)windowDidDeminiaturize:(NSNotification*)note
 {
     (void)note;
-    if (impl)
-        impl->becameActive();
-    [self syncFocus];
+    if (!impl)
+        return;
+    impl->minimized = false;
+    impl->keyLostWhileActive = false;            // the key status went with the miniaturized window
+    impl->notifyResize();
 }
-- (void)applicationDidResignActive:(NSNotification*)note { (void)note; [self syncFocus]; }
+- (void)applicationDidBecomeActive:(NSNotification*)note { (void)note; if (impl) impl->applicationActiveChanged(true); }
+- (void)applicationDidResignActive:(NSNotification*)note { (void)note; if (impl) impl->applicationActiveChanged(false); }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
     (void)sender;
@@ -1184,6 +1997,11 @@ ClientHost::Impl* s_hostImpl = nullptr;   // the singleton's state, for the view
 NSCursor* currentViewCursor()
 {
     return s_hostImpl ? s_hostImpl->rectCursor : nil;
+}
+void refreshViewMagnification()
+{
+    if (s_hostImpl)
+        s_hostImpl->updateMagnification();
 }
 } // namespace
 
@@ -1257,6 +2075,12 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
 {
     if (!initApplication() || m_impl->window)
         return false;
+    // [CHOSEN, not recovered] From here to the return the host is inside createWindow. The pump
+    // at the end of this function is therefore the look inside createWindow: it follows the
+    // first activation request at once and is the last one before the engine has initialised,
+    // so the activation period's ten seconds count from the look after it, not from this one
+    // (Impl::countFromFirstLook). Keep this ahead of everything that can pump.
+    const Impl::InsideCreateWindow insideCreateWindow(*m_impl);
     @autoreleasepool
     {
         NSScreen* screen = [NSScreen mainScreen];
@@ -1320,8 +2144,9 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
         [window makeKeyAndOrderFront:nil];
         [window makeFirstResponder:view];
     }
-    pumpEvents();                                // deliver the activation before returning
-    [m_impl->delegate syncFocus];
+    pumpEvents();                                // the look inside createWindow (insideCreateWindow
+                                                 // above): deliver the activation before returning
+    m_impl->syncFocus();
     return true;
 }
 
@@ -1346,6 +2171,8 @@ void ClientHost::destroyWindow()
     m_impl->fullscreen = false;
     m_impl->visible = false;
     m_impl->windowKey = false;
+    m_impl->keyLostWhileActive = false;
+    m_impl->keyRepairing = false;
     m_impl->buttonsDown = 0;
     m_impl->applyCursor();                       // window gone: unhide and re-associate
 }
@@ -1761,6 +2588,17 @@ unsigned int ClientHost::tickCountMs()
 
 } // namespace host
 
+namespace macos {
+
+// RestartInFront.h. The host's own focus state as the engine sees it, minus forced focus.
+bool clientHoldsFront()
+{
+    const host::ClientHost::Impl* impl = s_hostImpl;
+    return impl && impl->appActive && !impl->scriptedFocus;
+}
+
+} // namespace macos
+
 #if defined(OPENBF2_HOST_TEST_SEAMS)
 namespace macos {
 
@@ -1786,7 +2624,92 @@ bool CocoaHostTestHooks::isISOKeyboard(const host::ClientHost&)
 
 void CocoaHostTestHooks::overrideFocusForTest(host::ClientHost& host, bool windowKey, bool appActive)
 {
+    host.m_impl->testFocusOverride = true;
     host.m_impl->setFocusState(windowKey, appActive);
+}
+
+void CocoaHostTestHooks::setSystemFocusForTest(host::ClientHost& host, const SystemFocus* state)
+{
+    host::ClientHost::Impl::TestSystem& system = host.m_impl->testSystem;
+    system.set = state != nullptr;
+    if (!state)
+        return;
+    system.appActive      = state->appActive;
+    system.windowKey      = state->windowKey;
+    system.windowOnScreen = state->windowOnScreen;
+    system.modalWindow    = state->modalWindow;
+    system.otherKeyWindow = state->otherKeyWindow;
+    system.makeKeyWorks   = state->makeKeyWorks;
+    system.frontPid       = static_cast<pid_t>(state->frontPid);
+    system.now            = state->now;
+    system.activation     = state->activation;
+    system.parentPid      = static_cast<pid_t>(state->parentPid);
+    const size_t ancestors = sizeof system.ancestors / sizeof system.ancestors[0];
+    for (size_t i = 0; i < ancestors; ++i)
+        system.ancestors[i] = static_cast<pid_t>(state->ancestors[i]);
+    system.ancestryDenied = state->ancestryDenied;
+    system.realProcessTable = state->realProcessTable;
+    system.dockPid        = static_cast<pid_t>(state->dockPid);
+}
+
+void CocoaHostTestHooks::focusCallbackForTest(host::ClientHost& host, FocusCallback callback)
+{
+    switch (callback)
+    {
+    case WindowBecameKey:   host.m_impl->windowKeyChanged(true); break;
+    case WindowResignedKey: host.m_impl->windowKeyChanged(false); break;
+    case AppBecameActive:   host.m_impl->applicationActiveChanged(true); break;
+    case AppResignedActive: host.m_impl->applicationActiveChanged(false); break;
+    }
+}
+
+void CocoaHostTestHooks::pumpFocusForTest(host::ClientHost& host)
+{
+    host.m_impl->look();                        // the lines the pump runs
+}
+
+void CocoaHostTestHooks::lookInsideCreateWindowForTest(host::ClientHost& host, const std::function<void()>& events)
+{
+    // What createWindow holds while it runs; nothing here writes the mark itself.
+    const host::ClientHost::Impl::InsideCreateWindow insideCreateWindow(*host.m_impl);
+    if (events)
+        events();                               // pump's order: the queued events are routed first
+    host.m_impl->look();
+}
+
+CocoaHostTestHooks::FocusRepairStats CocoaHostTestHooks::focusRepairStatsForTest(const host::ClientHost& host)
+{
+    FocusRepairStats stats;
+    stats.windowKey     = host.m_impl->testSystem.windowKey;
+    stats.systemActive  = host.m_impl->systemActive;
+    stats.makeKeyCalls  = host.m_impl->testSystem.makeKeyCalls;
+    stats.droppedInputs = host.m_impl->droppedInputs;
+    stats.dropReports   = host.m_impl->dropReports;
+    return stats;
+}
+
+void CocoaHostTestHooks::beginActivationForTest(host::ClientHost& host)
+{
+    host.m_impl->beginActivation();
+}
+
+void CocoaHostTestHooks::forgetRestartMarkerForTest(host::ClientHost& host)
+{
+    host.m_impl->restartMarkerRead = false;
+}
+
+CocoaHostTestHooks::ActivationStats CocoaHostTestHooks::activationStatsForTest(const host::ClientHost& host)
+{
+    ActivationStats stats;
+    stats.pending    = host.m_impl->activationPending;
+    stats.requests   = host.m_impl->testSystem.activationRequests;
+    stats.ignoringOthers = host.m_impl->testSystem.activationIgnoringOthers;
+    stats.retries    = host.m_impl->testSystem.activationRetries;
+    stats.dockResets = host.m_impl->testSystem.dockResets;
+    stats.lookCounted = host.m_impl->activationLookCounted;
+    stats.looks      = host.m_impl->looks;
+    stats.looksInsideCreateWindow = host.m_impl->looksInsideCreateWindow;
+    return stats;
 }
 
 void CocoaHostTestHooks::enableHeadlessForTest(host::ClientHost& host)

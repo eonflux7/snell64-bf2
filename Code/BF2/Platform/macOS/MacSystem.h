@@ -21,7 +21,12 @@ std::vector<std::string> splitCommandLine(const std::string& commandLine);
 // instance of the running executable with the split command line, in the current working
 // directory and environment. Returns true when the new process was started (ShellExecute's
 // result above 32), false otherwise.
-bool relaunchExecutable(const std::string& commandLine);
+//
+// [CHOSEN, not recovered] `inFront` says that this process is the active application now, so the
+// new instance is entitled to its place in front. macOS passes that on in the new instance's
+// environment (RestartInFront.h): the variable is set when `inFront` and removed otherwise, at
+// every call, and this process's own environment is left as it is. Linux ignores `inFront`.
+bool relaunchExecutable(const std::string& commandLine, bool inFront);
 
 // MessageBoxA(0, text, caption, MB_OK): a modal alert with one OK button that blocks the calling
 // thread until it is dismissed. Text and caption are Windows-1252, as the ANSI call takes them.

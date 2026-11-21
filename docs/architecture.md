@@ -148,6 +148,58 @@ registry, which also works when Windows loads the two plugins as separate DLLs.
 SWF curve precision follows the ratio of output pixels to movie pixels.
 See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
 
+## Client display modes and HiDPI UI
+
+`[CHOSEN, not recovered]` policy shared by the rebuilt clients
+(`RendMisc/DisplayModePolicy.h`, `Menu/MenuViewport.h`):
+
+- A new profile's resolution uses the preferred mode, the same rule on every
+  platform: the largest listed mode that fits the desktop (on Windows and Linux the
+  desktop mode itself); when none fits (Apple-silicon panels list only their Retina
+  backing sizes, while the macOS desktop is reported in points), the listed whole
+  multiple of the desktop: the pixel size of the image the system composites for
+  this screen (2940x1912 for a 1470x956-point desktop), which equals the native or
+  desktop mode wherever the desktop scale is a whole number; otherwise the smallest
+  larger mode. On macOS and Linux a
+  fullscreen start without `+szx/+szy`, and the engine's own default sizes (the
+  presets' 800x600 and 1024x768, the empty profile's 800x600@60Hz), take the same
+  mode when the display does not list them. Windowed starts and explicit
+  `+szx/+szy` keep their size.
+- Any other profile resolution the display does not list runs as the closest listed
+  mode ([issue #4](https://github.com/kr4uzi/OpenBF2/issues/4)); `Video.con` keeps
+  the stored value until a resolution is set again.
+- Every successful device reset logs the back-buffer size, mode, refresh rate,
+  fullscreen, vsync and multisampling.
+- From 1350 lines the console is drawn at a whole-number scale, the back-buffer
+  height over 900 rounded (1600 and 1800 lines: 2, 2250: 3), with its bitmap font
+  as point-sampled blocks. It shows as many lines, at most the shipped 20, as cover
+  the share of the screen retail's console has at 1440x900 (1600 lines: 18 lines).
+  Below 1350 lines it is the shipped console.
+- macOS: the menu's `.ani` cursors are enlarged by `MenuViewport::bitmapScale`, the
+  4:3 menu viewport's height over 600 rounded down (1 below 1200 lines, 2 at 1600
+  and 1664, 3 at 1912), so they look no larger against the UI than in the 800x600
+  menu. On screen a cursor pixel covers that many back-buffer pixels, kept between
+  0.5 and 4 points per cursor pixel (`Platform/macOS/CursorScale.h`): 1.125 points
+  for 2560x1600 full screen on a 1440x900-point desktop.
+- macOS: Core Animation enlarges the drawable with nearest-neighbour filtering only
+  at a whole-number factor (linear otherwise, so 800x600 or 1650x1050 full screen on
+  a Retina panel is not jagged).
+
+## Client menu mouse queue
+
+`[CHOSEN, not recovered]`: `SwiffPlayer::update` hands the movie one queued mouse sample
+per frame, as recovered, after dropping queued samples that the next one repeats
+(`External/gameswf/SwiffPlayer/QueuedMouse.h`). The loading and end-of-round screen
+(`BetweenRoundsLogic`) queues the pointer state once per 30 Hz input tick, so below 30
+frames a second each frame queues the same state more than once. Without the rule the
+queue grows on every frame and the movie falls behind the pointer: at 17 frames a second
+a click on JOIN GAME a minute after the level loaded takes most of a minute to reach
+the button. The movie still receives every distinct pointer state and button change, in
+order and one per frame. A frame that holds one input tick at most, the normal case
+above 30 frames a second, queues nothing the rule would drop.
+`bf2_swiff_queued_mouse_check` models both rates. A press and its release that arrive
+within one frame are still not seen by that screen, as recovered.
+
 ## Client menu disconnect
 
 The stock `mainMenu.swf` disconnect page queues `dice.bf2.Logic.disconnectGame`

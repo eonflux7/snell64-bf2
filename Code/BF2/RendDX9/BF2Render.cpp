@@ -50,6 +50,10 @@
 #include "../Geom/DecalSystem/DecalManager.h"    // typed update / render-path draw
 #include "../Geom/RoadEditableRenderer.h"   // IRoadEditableRenderer - the typed drawAll below
 #include "../RendMisc/IRenderer.h"
+#include "../RendMisc/DisplayModePolicy.h"   // [CHOSEN] native fullscreen start mode
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+#include "../Platform/Host/ClientHost.h"     // [CHOSEN] fitFullscreenStartMode resizes the client
+#endif
 #include "../RendMisc/IRenderView.h"
 #include "../Math/Frustum.h"
 #include "RendDX9Math.h"                    // the RendDX9.dll Math copies
@@ -5625,6 +5629,24 @@ Mode40 modeFromAdapterMode(const D3DDISPLAYMODE& mode)
 // [RETIRE-WHEN: macos-display-mode-policy] Validate this G3 policy on Intel and M2;
 // settle the plan's fractional-resolution/Retina policy before retiring the debt.
 void injectRequestedMode(RendDX9Base* b);
+
+// The adapter's X8R8G8B8 modes as policy records (the sizes buildModeListImpl lists).
+std::vector<displaymode::Mode> listedAdapterModes(RendDX9Base* b)
+{
+    std::vector<displaymode::Mode> modes;
+    const UINT count = b->d3d9->GetAdapterModeCount(b->adapter, D3DFMT_X8R8G8B8);
+    for (UINT i = 0; i < count; ++i)
+    {
+        D3DDISPLAYMODE mode = {};
+        if (FAILED(b->d3d9->EnumAdapterModes(b->adapter, D3DFMT_X8R8G8B8, i, &mode)) ||
+            mode.Width > 65535 || mode.Height > 65535 || mode.RefreshRate > 65535)
+            continue;
+        const displaymode::Mode m = { mode.Width, mode.Height, mode.RefreshRate };
+        modes.push_back(m);
+    }
+    return modes;
+}
+
 void buildModeListImpl(RendDX9Base* b)
 {
     if (!b->modeList.empty() || !b->d3d9) return;
@@ -5649,13 +5671,13 @@ void buildModeListImpl(RendDX9Base* b)
     injectRequestedMode(b);
 }
 
-// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] The requested window size
-// (GSWindowSizeX/Y, i.e. +szx/+szy, copied in by copyDisplayModeFrom) joins the list when the
-// display lists no mode of that size. A Windows driver lists the classic sizes on every panel, so
-// retail's own requests ("800x600", VideoSettings' "800x600@60Hz") always match; the M2's built-in
-// panel has no 800x600, and setDynamicOption's miss then stops the game. This backend never
-// switches display modes and presents at the panel's rate, so the size is added at the desktop
-// rate and at the 60 Hz the game's defaults name.
+// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] A size the display does not
+// list joins the list when it was requested for a window, or explicitly (+szx/+szy, i.e.
+// GSWindowSizeX/Y) for fullscreen: any client size can be presented, and setDynamicOption must
+// find the request (the M2's built-in panel has no 800x600). A fullscreen start without +szx/+szy
+// does not reach here with an unlisted size: fitFullscreenStartMode already replaced the engine
+// default. This backend never switches display modes and presents at the panel's rate, so the size
+// is added at the desktop rate and at the 60 Hz the game's defaults name.
 void injectRequestedMode(RendDX9Base* b)
 {
     const unsigned int w = b->modeWidth, h = b->modeHeight;
@@ -5806,6 +5828,44 @@ void buildModeListImpl(RendDX9Base* b)
 
 } // anonymous namespace
 
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] [RETIRE-WHEN: macos-display-mode-policy] A fullscreen start asks for the
+// engine's 800x600 (GSWindowSizeX/Y unset; BF2Render::init's defaults) whatever the display. When
+// the display does not list that size (Apple-silicon panels list only their backing sizes), the
+// device starts at displaymode::preferredMode instead - the mode a new profile takes - rather than
+// at 800x600 stretched over the panel, and the host's client takes the same size. Windowed starts
+// and explicit +szx/+szy keep their request (injectRequestedMode lists it). Runs after
+// copyDisplayModeFrom, before the device exists. Retire with the debt above.
+void fitFullscreenStartMode(void* renderer)
+{
+    RendDX9Base* const b = reinterpret_cast<RendDX9Base*>(renderer);
+    if (!b->fullscreen || !b->d3d9)
+        return;
+    if (readIntSetting("GSWindowSizeX", 0) != 0 && readIntSetting("GSWindowSizeY", 0) != 0)
+        return;
+    const std::vector<displaymode::Mode> modes = listedAdapterModes(b);
+    if (modes.empty() || displaymode::listsSize(&modes[0], modes.size(), b->modeWidth, b->modeHeight))
+        return;
+    D3DDISPLAYMODE desktop = {};
+    if (FAILED(b->d3d9->GetAdapterDisplayMode(b->adapter, &desktop)))
+        return;
+    const displaymode::Mode desk = { desktop.Width, desktop.Height, desktop.RefreshRate };
+    const int index = displaymode::preferredMode(&modes[0], modes.size(), desk, 800);
+    if (index < 0)
+        return;
+    const displaymode::Mode& chosen = modes[index];
+    ::renddx9abi::logf("fitFullscreenStartMode: requested %ux%u not listed by the display; starting at "
+                       "%ux%u@%uHz (desktop %ux%u) [CHOSEN, not recovered]",
+                       b->modeWidth, b->modeHeight, chosen.width, chosen.height, chosen.refresh,
+                       desk.width, desk.height);
+    b->modeWidth = static_cast<unsigned short>(chosen.width);
+    b->modeHeight = static_cast<unsigned short>(chosen.height);
+    b->modeRefresh = static_cast<unsigned short>(chosen.refresh);
+    host::ClientHost::instance().resizeClient(static_cast<int>(chosen.width),
+                                              static_cast<int>(chosen.height));
+}
+#endif
+
 // the mode-list builder (Renderer vtable slot +0x3C, `retn 4`: one filter argument,
 // IRenderer.h). Returns the base's std::vector<Mode40> (retail `this+0x90`), building the list
 // whenever it is null or empty (0x10007439..0x1000746E) - in practice once, by
@@ -5862,6 +5922,7 @@ namespace geom {
 // objects initializeFontAndConsoleOverlay created (held here as IBase*, as createInstance returned).
 int  fontPortedGetHeight(IBase* font);                                            // Font::Ported +0x1C
 void fontPortedDrawText(IBase* font, float x, float y, const std::string& text);  // Font::Ported +0x18
+void fontPortedSetScale(IBase* font, float x, float y);                           // Font::Ported +0x28
 void overlayTextureSetSize(IBase* overlay, const Vec2& size);                      // OverlayTexture +0x18
 void overlayTextureDraw(IBase* overlay);                                           // OverlayTexture +0x10
 } // namespace geom
@@ -5869,24 +5930,66 @@ void overlayTextureDraw(IBase* overlay);                                        
 namespace dx9rend {
 
 
+namespace {
+// [CHOSEN, not recovered] The HiDPI console layout (Renderer::slot_0x58). Retail's unscaled console
+// at 1440x900 is the size the owner picked as right (comparison with retail, 2026-11-20); at higher
+// resolutions retail's console is too small. The 11-pixel bitmap font is only readable at
+// whole-number scales (a fractional scale blurs it, owner checks at 1.45 and 1.78), so the scale is
+// the back-buffer height over 900 rounded to a whole number, and the console shows as many lines
+// (at most the shipped 20) as cover the share of the screen the shipped console has at 900 lines.
+// Below 1350 lines the scale is 1: the shipped console with its 20 lines.
+struct ConsoleLayout
+{
+    float scale;    // a whole number, at least 1
+    int   lines;    // 1..20
+};
+
+ConsoleLayout consoleLayout(float backBufferHeight, int fontHeight)
+{
+    ConsoleLayout layout = { 1.0f, 20 };
+    const float k = backBufferHeight / 900.0f;
+    const float scale = ::floorf(k + 0.5f);
+    const float step = static_cast<float>(fontHeight) + 1.0f;
+    if (!(scale >= 2.0f) || !(step > 0.0f))
+        return layout;
+    // The shipped height ((fontHeight + 1) * 20 + 4) holds at 900 lines; k times it is the target.
+    const float target = (step * 20.0f + 4.0f) * k;
+    const float lines = ::floorf((target / scale - 4.0f) / step + 0.5f);
+    layout.scale = scale;
+    layout.lines = lines < 1.0f ? 1 : lines > 20.0f ? 20 : static_cast<int>(lines);
+    return layout;
+}
+} // namespace
+
 // PE 0x1002E2D0: draw the last 20 console lines, including the current prompt, over a full-width background.
 // Re-read font height per line and restore statistics before destroying the line vector.
 // Compat strings use the VC7.1 CRT; their vector storage uses the engine heap.
 // [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
+// [CHOSEN, not recovered] HiDPI console: retail draws at one back-buffer pixel per font pixel, which
+// leaves 11-pixel lines on a 1664-line panel. From 1350 lines every console length (background,
+// line step, margins, glyphs) is multiplied by consoleLayout's whole-number scale and the line
+// count follows it (1600 lines: scale 2 and 18 lines; 1800: scale 2 and 20; 2250: scale 3 and 17).
+// The font draws through its unused retail setScale slot as uniform point-sampled blocks.
+// Scale 1: the shipped arithmetic and 20 lines, unchanged; the layout is read before the lines
+// because the line count depends on it.
 void Renderer::slot_0x58()
 {
     const unsigned char statsWere = statsSwapEnabled(0);
-
-    std::vector<std::string> lines;
-    reinterpret_cast<io::Console*>(::dice::hfe::mainConsole)->getLines(20, lines);
-    const unsigned int lineCount = static_cast<unsigned int>(lines.size());
 
     IBase* const font    = static_cast<IBase*>(m_consoleFont);                  // +0x5CC
     IBase* const overlay = static_cast<IBase*>(m_consoleOverlay);               // +0x5C8
 
     const int fontHeight = geom::fontPortedGetHeight(font);
-    const float consoleHeight =
-        (static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f;
+    const ConsoleLayout layout = consoleLayout(getRenderView()->getViewport()[3], fontHeight);
+    const float k = layout.scale;
+
+    std::vector<std::string> lines;
+    reinterpret_cast<io::Console*>(::dice::hfe::mainConsole)->getLines(layout.lines, lines);
+    const unsigned int lineCount = static_cast<unsigned int>(lines.size());
+
+    const float consoleHeight = k == 1.0f
+        ? (static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f
+        : ((static_cast<float>(fontHeight) + 1.0f) * static_cast<float>(lineCount) + 4.0f) * k;
 
     Vec2 overlaySize;
     overlaySize.x = 1.0f;
@@ -5894,24 +5997,32 @@ void Renderer::slot_0x58()
     geom::overlayTextureSetSize(overlay, overlaySize);
     geom::overlayTextureDraw(overlay);
 
-    // [CHOSEN] one-shot diagnostic, NOT in retail: proves on a live run that the console draw ran.
-    static bool s_firstDrawLogged = false;
-    if (!s_firstDrawLogged)
+    // [CHOSEN] diagnostic, NOT in retail: proves on a live run that the console draw ran, and
+    // names the effective scale whenever it changes.
+    static float s_loggedScale = 0.0f;
+    if (s_loggedScale != k)
     {
-        s_firstDrawLogged = true;
-        ::renddx9abi::logf("Renderer::slot_0x58 (console draw): first call - %u console lines, "
-                           "line height %d, background %.1f px", lineCount, fontHeight,
-                           static_cast<double>(consoleHeight));
+        s_loggedScale = k;
+        ::renddx9abi::logf("Renderer::slot_0x58 (console draw): %u console lines, line height %d, "
+                           "scale %.3f, background %.1f px", lineCount, fontHeight,
+                           static_cast<double>(k), static_cast<double>(consoleHeight));
     }
 
+    if (k != 1.0f)
+        geom::fontPortedSetScale(font, k, k);
     int line = 0;
     for (std::vector<std::string>::const_iterator it = lines.begin(); it != lines.end();
          ++it, ++line)
     {
         const std::string text = ::renddx9abi::fromHostString(*it);
         const int height = geom::fontPortedGetHeight(font);                    // re-read per line
-        geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), text);
+        if (k == 1.0f)
+            geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), text);
+        else
+            geom::fontPortedDrawText(font, 2.0f * k, static_cast<float>((height + 1) * line + 2) * k, text);
     }
+    if (k != 1.0f)
+        geom::fontPortedSetScale(font, 1.0f, 1.0f);    // the font's other users draw at 1
 
     statsSwapEnabled(statsWere);
 

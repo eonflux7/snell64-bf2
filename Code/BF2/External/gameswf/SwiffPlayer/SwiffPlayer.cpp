@@ -23,6 +23,7 @@
 #include "SwiffBitmapCache.h"
 #include "OfflineConnectPopup.h"
 #include "PunkBusterMenu.h"                     // [CHOSEN, not recovered] PunkBuster options per build
+#include "QueuedMouse.h"                        // [CHOSEN, not recovered] repeated queued mouse samples
 #include "../../../Game/PunkBuster/PbAvailability.h"
 #include "../../../Core/MsvcCrtCompat.h"   // [CHOSEN, not recovered] sprintf_s, __time32_t/_time32, _time64 outside MSVC
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
@@ -10800,6 +10801,9 @@ void SwiffPlayer::update(float deltaTime)
 
     // Mouse flush: the queued path if there is queued input or the deferred sample is already spent;
     // otherwise apply the deferred position once and mark it spent.
+    // [CHOSEN, not recovered] Queued samples that their successor repeats are dropped first, so a
+    // frame slower than the input tick does not leave the movie behind the pointer (QueuedMouse.h).
+    dropRepeatedMouseSamples(queued_mouse);
     const bool haveQueued = !queued_mouse.empty();
     if (haveQueued || !deferred_mouse_dirty)
     {

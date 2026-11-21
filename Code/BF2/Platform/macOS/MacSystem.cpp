@@ -4,6 +4,7 @@
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !(defined(DEDICATED) && DEDICATED)
 
 #if defined(__APPLE__)
+#include "RestartInFront.h"  // [CHOSEN] the marker a restart hands to the new instance
 #include <CoreFoundation/CoreFoundation.h>
 #include <crt_externs.h>     // _NSGetEnviron
 #include <mach-o/dyld.h>     // _NSGetExecutablePath
@@ -61,7 +62,7 @@ std::vector<std::string> splitCommandLine(const std::string& commandLine)
     return args;
 }
 
-bool relaunchExecutable(const std::string& commandLine)
+bool relaunchExecutable(const std::string& commandLine, bool inFront)
 {
 #if defined(__APPLE__)
     std::uint32_t size = 0;
@@ -87,8 +88,19 @@ bool relaunchExecutable(const std::string& commandLine)
     argv.push_back(0);
     pid_t child = 0;
 #if defined(__APPLE__)
-    return posix_spawn(&child, path.data(), 0, 0, argv.data(), *_NSGetEnviron()) == 0;
+    // [CHOSEN, not recovered] The new instance gets this process's environment with the restart
+    // marker set or removed for it alone (RestartInFront.h). A marker this process inherited
+    // from its own start never passes through: it would entitle a generation that is restarted
+    // in the background to the front.
+    std::vector<std::string> environment =
+        restartEnvironment(*_NSGetEnviron(), inFront);
+    std::vector<char*> envp;
+    for (std::size_t i = 0; i < environment.size(); ++i)
+        envp.push_back(&environment[i][0]);
+    envp.push_back(0);
+    return posix_spawn(&child, path.data(), 0, 0, argv.data(), envp.data()) == 0;
 #else
+    (void)inFront;               // [CHOSEN, not recovered] only the Cocoa host reads the marker
     return posix_spawn(&child, path.data(), 0, 0, argv.data(), environ) == 0;
 #endif
 }

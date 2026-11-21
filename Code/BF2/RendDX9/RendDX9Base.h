@@ -379,6 +379,11 @@ bool  RendDX9_shutdownD3DSubsystems(void* renderer);
 // free the movie recorder, then clear the slot. Defined in BF2Render.cpp beside the slot.
 void  destroyMovieRenderer(RendDX9Base* base);
 void  copyDisplayModeFrom(void* renderer, const HWndBf2TempSlt* src);
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] Native hosts: a fullscreen start at a size the display does not list
+// takes the preferred listed mode instead (BF2Render.cpp, macos-display-mode-policy).
+void  fitFullscreenStartMode(void* renderer);
+#endif
 void  clearDisplayModeCopies(void* renderer);
 void  renderPathListCtor(void* list);
 void  rendererStatsConstruct(unsigned char* stats);   // PE 0x1000D900 / 0x1000D300; `stats` = base + 0x108
@@ -616,6 +621,8 @@ int*          effectShaderVersion(void* effect);
 void stateManagerPush();
 void stateManagerPop();
 void stateManagerSetRenderState(unsigned int state, unsigned int value);
+// [CHOSEN, not recovered] the deferred +0x28 SetSamplerState (HiDPI console font, FontSystem.cpp).
+void stateManagerSetSamplerState(unsigned int stage, unsigned int type, unsigned int value);
 // sub_10025BA0 - the persistent set: device mirror AND base value, issued at once (StateManager.cpp).
 void stateManagerSetRenderStatePersistent(unsigned int state, unsigned int value);
 // sub_10026880 - the pre-draw apply, published for the Ra shader's draw (RaShader::draw calls it
