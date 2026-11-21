@@ -334,6 +334,18 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   up irradiance 0.17 0.35 0.74, bluer than the authored grey, by design). SH9 against the cosine
   integral: within 1 % sideways, 2–13 % straight up and down (ringing at the horizon's step).
   Nothing reads it until task 8. `tools.atmosphere` dumps it ([tools.md](tools.md#atmosphere)).
+- **Shared lighting model** (task 8, A/B `renderer.skyIbl`, contract 11): with the shaders, behind
+  `RaSkySH[6].w`. One perceptual roughness and F0 per pixel drive the sun's GGX highlight and the
+  sky's (split sum: cube mip roughness x 5, table on s11); gloss maps become roughness within the
+  material class's range, metals take F0 from albedo; roughness widened by the normal's
+  screen-space derivatives. Sky light: the SH at the normal times the receiver's sky visibility,
+  normalised in the shader to the old model's brightness (up, open: 0.18 of the sun), so only its
+  direction and colour change; the authored per-level sky luminance (to which the engine scales the
+  SH) is not used yet, which leaves the owner to choose at the A/B. Specular from the sky in
+  scene units, the sky as drawn, occluded by the sky visibility (Lagarde). Bundled meshes use it
+  first (task 9), with a placeholder class (env-mapped: paint, else matte). Seen on test_bootcamp
+  (agent, 2026-11-21): vehicles lit bluer from above and darker in shade (this level's SH sky is
+  B/R 4.7, against the old neutral sky), a sky sheen on grazing tops; glass waits for task 9's classes.
 - **Left** (owner's look, 2026-11-20: good on Saaremaa, Kashan Desert, Burning Sands, The Falklands): the far ground ring (land past the ring
   shows sky); below the horizon the sky repeats its horizon row, flat (seen from the air until the
   ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets
@@ -598,6 +610,7 @@ and add its row here.
 | 8 | Aerial perspective (render milestone 11, task 4): the atlas (contract 6) is bound to the reserved sampler s9 (linear, clamp) after it draws, and pixel register c223 is the engine's `RaAerial` (1 / the viewport's width and height, 1 / fog end, w 1 while the atlas holds the world view's haze; zero in the first-person passes, under water, with `renderer.atmosphere 0`), published with `RASM`. Lit shaders fog through `Ra_GetAerial` (VPOS and the distance pick the atlas texel; w 0 or thermals: retail's fog curve). `RaAtmosPerspective` also gets `RaSkyViewTable`: full haze is the sky's radiance along each ray. `RaAtmosphere` rows 8–10: [8] unused (the steepening, removed at contract 9), [9].rgb the sun at the ground, [10].rgb the sky light |
 | 9 | View distance (render milestone 11, task 5): `RaAerial.w` is 2 while the radial cut applies (`renderer.viewDistance`, the world view with the atlas). `Ra_ViewDistanceFade` (1 inside, 0 at fog end and beyond, over the last 15 % by distance from the camera) and `Ra_ViewDistanceClip` (that fade against a 4x4 Bayer threshold, `Ra_Bayer4`) are called by every opaque world effect's main pixel shader, which its depth prepass calls too; blended effects (particles, trails, decals) take the fade on alpha. The atlas is no longer steepened: the haze stays exponential up to fog end. `RaAerialHaze` (c199, engine-owned, published with `RaAerial`): the haze's density at the camera's height and 1 / its height falloff; past fog end `Ra_GetAerial` integrates the haze in closed form along the pixel's ray (world-space positions). Static meshes (`RaShaderSTM`, and trees through the leaf and trunk effects), overgrowth and roads are not cut: the engine culls static meshes by size on screen, overgrowth at its own range |
 | 10 | Sky cube (render milestone 11, task 7): the sky cube on the reserved sampler s10 (`A16B16G16R16F` cube, 128 per face, 6 mips, trilinear, clamp): mip m is GGX-prefiltered for perceptual roughness m / 5 (alpha its square), so `texCUBElod(dir, roughness * 5)`; the model's clear sky above the horizon (no sun disc), the lit ground hazed toward the horizon below it; in scene units, the drawn sky's scale. The split-sum BRDF table on s11 (64x64 `A16B16G16R16F`, bilinear, clamp): u n.v, v perceptual roughness, r scale and g bias on F0 (Smith GGX, k = alpha / 2). `RaSkySH` in pixel registers c192–c198 (engine-owned): the sky's irradiance / pi (the authored sky colour's unit) at normal n per channel ch = dot([ch], (n, 1)) + dot([3 + ch], n.xyzz * n.yzzx) + [6][ch] * (n.x² − n.y²); [6].w 1 while live, all zero (and s10, s11 unbound) with `renderer.atmosphere 0` or before the first fit. Its sky part is scaled so its upward value keeps the authored sky colour's luminance; the ground's bounce is not scaled |
+| 11 | Sky light A/B (render milestone 11, task 8): `RaSkySH[6].w` is 1 while the sky cube is live and `renderer.skyIbl` is on, else 0; lit shaders take their sky light (the SH) and ambient specular (the cube and the split-sum table) only while it is 1. The cube, the table and the coefficients stay bound whenever live |
 
 Samplers 9, 10, 11, 13 and 15 are reserved for renderer frame resources, and pixel registers
 c192–c223 for `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
