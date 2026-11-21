@@ -217,8 +217,19 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // lasts, the host trusts the system's answer until NSApp catches up or the user leaves.
     bool   systemActive = false;
     ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
-    double activationStarted = 0.0;  // focusNow() of the period's first request
+    double activationStarted = 0.0;  // focusNow() of the period's first request; the report counts from it
     double activationLastTry = 0.0;  // of its last request, Dock reset or look at a bystander
+    // [CHOSEN, not recovered] From when the period's ten seconds count (focusNow()): its first
+    // request, or the click that started it or ended its wait behind a bystander. The host is
+    // not pumped while the engine initialises (six to seven seconds on the Intel test machine,
+    // longer on a slower one), so a period that began behind a bystander is first looked at
+    // with most of those ten seconds gone, or all of them. The first pump that finds the front
+    // free after such a wait therefore starts the ten seconds again. It does so once per period
+    // (activationRecounted): a front that alternates between the bystander and this process
+    // cannot prolong the requests without end. Where the pump inside createWindow already finds
+    // the front free, that is this pump: nothing is gained and the period runs like a launcher's.
+    double activationCountFrom = 0.0;
+    bool   activationRecounted = false;
     // [CHOSEN, not recovered] Whose front the repeated requests may take, as pids; 0: nobody's.
     // Launcher: the application in front at the first request when it is this process's parent
     // or another ancestor (launcherAncestry): Terminal above the shells and scripts that started
@@ -239,9 +250,13 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     // for the window server while AppKit never completes its activation: NSApp stays inactive,
     // GCMouse delivers nothing, and only switching applications recovers. Activating the Dock
     // first resets that state, then this process asks again (the workaround SDL uses for
-    // Terminal launches). Once per activation period, and never against a bystander.
+    // Terminal launches). Once per activation period, and never against a bystander. The reset
+    // leaves the Dock in front until this process asks again, so the period owes that request:
+    // its ten seconds do not end it before the request was made and had half a second for its
+    // answer (updateActivation).
     double dockResetAt = 0.0;        // focusNow() of the period's Dock activation; 0: none yet,
                                      // -1: there is no Dock process
+    double dockAskedAt = 0.0;        // focusNow() of the first request after it; 0: still owed
     // [CHOSEN, not recovered] Focus self-repair. windowKey and appActive cache AppKit's state as
     // the delegate callbacks report it, and the engine's input gate (hasFocus) reads only the
     // cache. A callback that never came, or a game window left without key status, would close
@@ -479,9 +494,10 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         const double now = focusNow();
         const FrontApp front = frontApplication();
         activationPending = true;
-        activationStarted = activationLastTry = now;
+        activationStarted = activationCountFrom = activationLastTry = now;
+        activationRecounted = false;
         activationLauncherPid = activationBystanderPid = activationClickPid = 0;
-        dockResetAt = 0.0;
+        dockResetAt = dockAskedAt = 0.0;
         const char* relation = "nobody is in front";
         if (front.pid == getpid())
             relation = "this process";
@@ -530,6 +546,16 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
     }
 
+    // A repeated request, counted for the half-second cadence. The first one after the period's
+    // Dock reset is the request that reset owes (dockAskedAt).
+    void repeatRequest(double now)
+    {
+        activationLastTry = now;
+        if (dockResetAt > 0.0 && dockAskedAt == 0.0)
+            dockAskedAt = now;
+        requestActivationNow();
+    }
+
     // Activates the Dock, which takes the front from whoever holds it. False without a Dock.
     bool activateDock()
     {
@@ -566,12 +592,13 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         if (!activationPending)
         {
             activationLauncherPid = activationBystanderPid = activationClickPid = 0;
-            dockResetAt = 0.0;
+            activationRecounted = false;
+            dockResetAt = dockAskedAt = 0.0;
         }
         if (!activationPending || activationFreeSince == 0.0)
         {
             activationPending = true;
-            activationStarted = now;
+            activationStarted = activationCountFrom = now;
             activationFreeSince = now;
         }
         // The Dock that this period's reset put in front is not what the user clicked away from.
@@ -581,12 +608,18 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         else if (activationBystanderPid)
             activationClickPid = activationBystanderPid;
         activationBystanderPid = 0;
-        activationLastTry = now;
-        requestActivationNow();
+        repeatRequest(now);
     }
 
     // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and for
     // ten seconds repeats the request every half second while this process may take the front.
+    // The ten seconds count from the first request. Two things move the end, because the host is
+    // not pumped while the engine initialises and so first looks at a start seconds after that
+    // request: a period that waited behind a bystander counts them again from the first pump
+    // that finds the front free (activationCountFrom), and no period ends between its Dock
+    // reset and the request that reset owes (dockAskedAt). A period whose front was free from
+    // the start, a launcher's, gets no second count: first looked at after its ten seconds, it
+    // enters the system-state fallback where that applies and ends without a Dock reset.
     void updateActivation()
     {
         if (!activationPending)
@@ -630,7 +663,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             // nobody to be in front, or for the user's click. The half-second cadence runs on, so
             // the next request follows within half a second of the front becoming free.
             activationFreeSince = 0.0;
-            if (now - activationStarted > 10.0)
+            if (now - activationCountFrom > 10.0)
             {
                 activationPending = false;
                 std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
@@ -641,14 +674,36 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             return;
         }
         if (mayTakeFront && activationFreeSince == 0.0)
+        {
+            // The front is free after a wait behind the bystander: this process, its parent or
+            // nobody is in front. The first time in a period, the ten seconds count from here.
+            // Without that a start whose first pump comes late would have a second or two left
+            // for the requests, the system-state fallback and the Dock reset, or none at all.
             activationFreeSince = now;
+            if (!activationRecounted)
+            {
+                activationRecounted = true;
+                activationCountFrom = now;
+                std::fprintf(stderr, "[host] %s in front %d ms after the first request; the request is repeated "
+                             "for up to ten seconds from here\n",
+                             front.pid == self ? "this process is" : front.pid == 0 ? "nobody is"
+                                                                                    : "the parent of this process is",
+                             static_cast<int>((now - activationStarted) * 1000.0));
+            }
+        }
         const bool freeForASecond = activationFreeSince != 0.0 && now - activationFreeSince > 1.0;
         if (!systemActive && freeForASecond && front.pid == self && systemFrontmost())
         {
             enterSystemFallback();               // its becameActive ran this function for this pump
             return;
         }
-        if (now - activationStarted > 10.0)
+        // A Dock reset is finished half a second after the request that follows it. Until then
+        // the ten seconds do not end the period: the reset put the Dock in front, and a period
+        // that ended there would leave it in front and the game without focus, by the host's own
+        // doing. The cadence below makes that request, past the ten seconds if it has to, and
+        // the half second lets its answer arrive while the period still owns the focus state.
+        const bool dockResetUnfinished = dockResetAt > 0.0 && (dockAskedAt == 0.0 || now - dockAskedAt < 0.5);
+        if (now - activationCountFrom > 10.0 && !dockResetUnfinished)
         {
             activationPending = false;
             std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
@@ -667,8 +722,7 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         }
         if (now - activationLastTry < (dockResetAt > 0.0 && now - dockResetAt < 0.5 ? 0.3 : 0.5))
             return;
-        activationLastTry = now;
-        requestActivationNow();
+        repeatRequest(now);
     }
 
     // The application became active: the game window takes key status if it lost it (a window
