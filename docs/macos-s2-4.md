@@ -101,7 +101,84 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
 - **Focus.** `hasFocus()` is "game window is key and the application is active". Changes
   arrive through the window and application delegates and are reported to listeners as
   `onAppActivationChanged` then `onFocusChanged`, the Win32 order of `WM_ACTIVATEAPP` and
-  `WM_ACTIVATE`.
+  `WM_ACTIVATE`. [CHOSEN] Every pump re-reads AppKit as well, so a state the callbacks left
+  stale is corrected on the next frame, and an active application's game window that is on
+  screen but not key is made key unless another window of the process is due the key status
+  or the window gave it to a panel of another process (Spotlight). A press inside the window
+  that finds the gate closed while the application is active repairs it first and is then
+  delivered. Input the gate drops is reported on stderr as `[host] input dropped: ...`, once a
+  second at most. None of this requests activation.
+- **Activation.** [CHOSEN] The system does not reliably activate a client started from another
+  application, so the host asks: once when the game window is shown, then every half second
+  for ten seconds. After one second without success it activates the Dock for a moment and
+  asks again; that resets a state in which the client is frontmost for the system but never
+  becomes active for AppKit (seen after a start from Terminal on Apple silicon). The reset
+  leaves the Dock in front until the client asks again, so the ten seconds never end the
+  requests between the two: the request after the reset is made even when they have run out,
+  and the requests end half a second after it.
+  - *From when the ten seconds count.* From the host's first look at the start, not from the
+    first request. A look is one run of the event pump. `createWindow` looks once, right
+    after the first request. The engine then initialises without pumping, for six to seven
+    seconds on the Intel test machine and longer with a cold disk cache or in a debug build,
+    and the next look comes with the first frame. That look starts the ten seconds, once per
+    start and whoever is in front. A start whose first frame comes later than ten seconds
+    after the request therefore still gets the Dock reset and the repeated requests, and it
+    still ends, ten seconds after that look. Counted from the request, such a start ended at
+    its first frame with `[host] application not activated; click the game window or switch
+    to it`. The log marks the look: `[host] first look N ms after the first request; the ten
+    seconds count from here`. The host tells the look inside `createWindow` from the others by
+    a mark that `createWindow` holds for as long as it runs (`Impl::InsideCreateWindow`), so a
+    run of the pump made anywhere in that function is never the one the ten seconds count
+    from. A click into the new window that this run of the pump itself delivers is treated like
+    any other click (see *Later changes of the front*), with one difference. Where a click
+    starts the ten seconds, they count from the click, and after a click in a frame's pump no
+    later look counts them again; after this click the first look after `createWindow` does.
+  - *Whose front the requests take.* The repeated requests and the Dock reset take the front
+    only from the launcher, and when nobody or the client itself is in front. The launcher is
+    the application in front at the first request when it is the client's parent or another
+    ancestor in the process tree (Terminal above the shells and scripts that started the
+    client, the OpenBF2 app); the parent chain is read with `sysctl(kern.proc.pid)`
+    (`ProcessAncestry.h`). The parent counts whenever it is in front.
+  - *Any other application in front at the first request* gets that one request and no more,
+    and the request is a cooperative one: it yields to an application that is active. On
+    macOS 14 and later every request is of that kind (`-[NSApplication activate]`, which the
+    system may refuse). On macOS 11 to 13 the caller chooses: the host makes this one request
+    with `activateIgnoringOtherApps:NO`, which activates only when no other application is
+    active, and all its other requests with `YES`, which activates whatever application is
+    active and would take the front with that one request alone. The macOS 11 to 13 branch
+    follows AppKit's documentation and was only compiled: no such system was at hand. Unless
+    the system grants the request, the other application keeps the front: a client started in
+    the background while the user works elsewhere waits for a click into its window or a
+    switch to it. The same holds when the process lookup fails, and for a client whose chain
+    to the launching application is broken: tmux or screen, SSH, a launchd job, a script that
+    has ended, and a client that restarted itself while it was in the background (see below).
+    While the client waits, the host asks nothing and only looks at who is in front,
+    for ten seconds from its first look. When it finds the client itself (that one request
+    can leave it frontmost for the system and inactive for AppKit), the client's parent or
+    nobody there, the repeated requests and the Dock reset start, and the ten seconds count
+    once more from that look, once per start.
+  - *A game that restarts itself.* Activating a mod makes the client start a new instance of
+    itself and quit (`BF2Engine::restartBF2`, `relaunchExecutable`). Once the first instance
+    has exited, the new one's parent is launchd and the application that the system puts in
+    front is unrelated to it, so by the rules above the restarted game would wait behind that
+    application. A first instance that is the active application at the moment it restarts
+    therefore hands its place on: it sets `BF2_RESTARTED_IN_FRONT=1` in the new instance's
+    environment (`RestartInFront.h`). The new instance reads the variable once, at its first
+    activation request, and then treats its start like a launcher start: the application in
+    front at that request counts as the launcher, whatever it is. When the first instance
+    itself is still in front then (it is the new one's parent, a launcher by the ordinary
+    rule), or nobody is, the application found in front once the first instance has exited
+    takes that role instead; the client itself in front then means that no application does.
+    The variable is written into the new instance's environment at every restart: set when the
+    game is active, removed when it restarts in the background or runs under an input script
+    that forces focus. A later generation therefore never inherits it, and the first
+    instance's own environment is not changed. A game window that the same process creates
+    again later starts by the ordinary rules. Linux and Windows are unchanged.
+  - *Later changes of the front.* An application the user goes to after the first request
+    ends the requests. A click into the inactive game window starts them again, against
+    whatever is in front then, with the ten seconds counted from the click. Every application
+    the user leaves with such a click may lose the front until the requests end: a later click
+    made with another application in front adds that one and replaces none.
 - **Cursor.** `showCursor` reproduces Win32 `ShowCursor`'s display counter (visible while
   >= 0). `setCursorHiddenInView` is `SetCursor(0)` over the client area. Relative mouse mode
   (an exclusively acquired DirectInput mouse) hides the cursor, parks it in the view's centre
@@ -387,7 +464,7 @@ client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptio
    | --- | --- | --- |
    | `BF2Engine.cpp` main loop | `ShowCursor(FALSE/TRUE)` | `showCursor(false/true)` (same counter semantics) |
    | `BF2Engine::browseModHomepage` | `ShowWindow(SW_MINIMIZE)`, `ShellExecuteA("open", url)` | `minimize()`, `openURL(url)` (true on success) |
-   | `BF2Engine::restartBF2`, `activateMod` | `GetModuleFileNameA`, `ShellExecuteA(exe, args)` | `_NSGetExecutablePath` + `posix_spawn`; not provided by the host |
+   | `BF2Engine::restartBF2`, `activateMod` | `GetModuleFileNameA`, `ShellExecuteA(exe, args)` | `_NSGetExecutablePath` + `posix_spawn`; not provided by the host. [CHOSEN] On macOS the new instance's environment carries `BF2_RESTARTED_IN_FRONT=1` when the game is the active application (see Activation) |
    | `MainMenuLogic.cpp`, `BetweenRoundsLogic.cpp` | `ShowCursor`, `SetCursor(host->getCursor(i))`, `SetCursor(0)` | `showCursor`, `setCursorShape(HostCursorArrow/Busy)`, `setCursorHiddenInView(true)` |
    | `MainMenuLogic::handleClipboardShortcut` | `GetAsyncKeyState`, `OpenClipboard`/`GetClipboardData`/`SetClipboardData(CF_TEXT)` | `modifierFlags()` (Control or Command as Ctrl, Option as Alt), `getClipboardText`/`setClipboardText` |
    | `BetweenRoundsLogic.cpp menuScanCodeToChar` | `ToAsciiEx(MapVirtualKeyEx(scan))` | `ClientHost::keyCharacter(dik, modifierFlags())`; the Cocoa backend performs its own layout conversion |
@@ -404,6 +481,18 @@ host and devices with a control-map fixture that answers only what the mouse dev
 (axis scale 1, sensitivity 1, no inversion). It opens the window through the host, runs the
 engine's update protocol, posts synthetic events to its own queue (never system-wide), logs
 DIK codes, mouse axes and buttons, and ends by pressing the close button programmatically.
+
+Right after `createWindow` returns it also checks that the host took the pump inside
+`createWindow` for the look inside `createWindow` (see Activation): every look made so far
+was made while `createWindow` ran, there was at least one, and an activation period that is
+still running has not had its ten seconds started. It prints one `[activation] ...` line with
+those values and fails with `FAIL createWindow: its own pump was not taken for the look inside
+createWindow` otherwise. The activation rules themselves are checked without a window by
+`Code/Tests/macos_input`, which makes that look through a test hook, marked by the object
+`createWindow` holds. That test never calls `createWindow`, so two call sites in the host are
+covered by this program alone: `createWindow` holding the mark, and the pump making its look
+through the member that counts it. This check was added after the result below was recorded.
+It has been compiled and not yet run, because the program opens a window.
 
 ```sh
 cd Code/Tests/macos_host

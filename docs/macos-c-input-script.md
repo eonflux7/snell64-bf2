@@ -84,10 +84,13 @@ input is ignored, the app is not activated (the user's focus is not taken), and 
 never hidden, warped or disassociated. Without the variable nothing changes.
 
 `BF2_INPUT_SCRIPT_REAL_FOCUS=1` ([TEMP]) keeps the scripted input but drops the forced focus: the
-app is activated when its window is created, and focus changes made from outside (for example
+app asks for activation when its window is created, as an unscripted start does, and focus
+changes made from outside (for example
 `osascript -e 'tell application "Finder" to activate'`) reach the engine as WM_ACTIVATEAPP /
 WM_ACTIVATE / WM_KILLFOCUS. This is how the full-screen tab-out is tested unattended
-(`scripts/tabout.txt`). With `BF2_HOST_TRACE=1` each transition is
+(`scripts/tabout.txt`). The request takes the front only from the application the run was
+started from (the Activation item of [macos-s2-4.md](macos-s2-4.md#host)), so such a run has to
+start while its terminal is in front. With `BF2_HOST_TRACE=1` each transition is
 logged as `[host] focus key=<0|1> active=<0|1> fullscreen=<0|1>`.
 
 | Command | Meaning |

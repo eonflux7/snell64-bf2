@@ -1277,6 +1277,13 @@ void stateManagerSetRenderState(unsigned int state, unsigned int value)
     smSetRenderState(sm(), state, value);
 }
 
+// [CHOSEN, not recovered] The +0x28 SetSamplerState slot as an owner-TU seam, for the HiDPI
+// console's point-filtered font draw (FontSystem.cpp); no retail caller outside the effect path.
+void stateManagerSetSamplerState(unsigned int stage, unsigned int type, unsigned int value)
+{
+    smSetSamplerState(sm(), stage, type, value);
+}
+
 // PE 0x10025A90 / +0x60 and 0x10025AE0 / +0x64.  The mirror owns COM references and defers the
 // device calls until flushRenderTargets, exactly like the primary-vtable entry points.
 void stateManagerSetRenderTarget(unsigned int index, IDirect3DSurface9* surface)

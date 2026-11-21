@@ -7,6 +7,7 @@
 #include "Main/IVideoOptions.h"
 #include "../Core/Ids.h"
 #include "../RendMisc/IRenderer.h"
+#include "../RendMisc/DisplayModePolicy.h"  // [CHOSEN] the new-profile resolution pick
 #include "../Core/SettingsRepostitory.h"  // settings - "GSLoadLevel" gates the antialiasing push
 #include <cstdio>                       // [CHOSEN] sscanf for the new-profile resolution pick
 #include <new>
@@ -120,10 +121,73 @@ void* VideoSettings::queryInterface(unsigned int iid) const
 
 std::string VideoSettings::getFileName() { return std::string("Video.con"); }
 
-// (77 B): the current record is written, not the pending one.
+namespace {
+
+// [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/4: "the profile keeps its stored
+// value until the player saves new settings". When the renderer runs a profile resolution it does
+// not list as the closest listed entry (VideoOptions::setDynamicOption's fallback), the applied
+// record holds that entry, so the menu shows the mode in use; Video.con keeps the stored value
+// until a resolution that was set (setResolution: Video.con, the options page, the console; or
+// setDefaults for a new profile) is applied. A value picked on the options page and cancelled, or
+// set while a game is loaded, applies nothing and keeps the record. One record: VideoSettings is
+// a singleton.
+struct ResolutionSubstitute
+{
+    std::string stored;        // the profile's value the renderer does not list
+    std::string substitute;    // the entry the renderer selected for it
+};
+ResolutionSubstitute s_resolutionSubstitute;
+bool s_resolutionSet = false;  // a resolution was set since the last apply or revert
+
+// setDynamicOption's own match: a case-insensitive prefix ("800x600" selects "800x600@60Hz").
+bool selectsEntry(const std::string& requested, const std::string& entry)
+{
+    if (requested.empty() || requested.size() > entry.size())
+        return false;
+    for (std::size_t i = 0; i < requested.size(); ++i) {
+        char a = requested[i], b = entry[i];
+        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
+// Records the outcome of one resolution push: a stored value replaced by a listed entry, or (an
+// exact or prefix match) no substitute. Applying other settings pushes the substitute itself again,
+// which keeps the record.
+void noteResolutionSubstitute(const std::string& requested, const std::string& selected)
+{
+    if (!s_resolutionSubstitute.stored.empty() && requested == s_resolutionSubstitute.substitute &&
+        selected == requested)
+        return;                // the substitute pushed again (other settings applied) keeps it
+    if (requested.empty() || selectsEntry(requested, selected)) {
+        s_resolutionSubstitute = ResolutionSubstitute();
+        return;
+    }
+    s_resolutionSubstitute.stored = requested;
+    s_resolutionSubstitute.substitute = selected;
+    std::fprintf(stderr, "[CHOSEN, not recovered] VideoSettings: profile resolution %s runs as %s; "
+                         "Video.con keeps %s until a resolution is set (issue #4)\n",
+                 requested.c_str(), selected.c_str(), requested.c_str());
+}
+
+} // namespace
+
+// (77 B): the current record is written, not the pending one. [CHOSEN, not recovered] A resolution
+// substitute (noteResolutionSubstitute) is written as the profile's stored value.
 std::string VideoSettings::getSettingsScript()
 {
     std::stringstream stream;
+    if (!s_resolutionSubstitute.stored.empty() &&
+        m_current.resolution == s_resolutionSubstitute.substitute) {
+        VideoSettingsData record;
+        record = m_current;
+        record.resolution = s_resolutionSubstitute.stored;
+        record.write(stream);
+        return stream.str();
+    }
     m_current.write(stream);
     return stream.str();
 }
@@ -136,6 +200,13 @@ bool VideoSettings::hasChanges() { return m_pending.differsFrom(m_current); }
 bool VideoSettings::apply()
 {
     bool result = true;
+    // [CHOSEN, not recovered] issue #4: applying a resolution that was set ends the substitute
+    // record, also when nothing else changed (a profile whose Video.con names the previous
+    // profile's substitute). Nothing is pushed while a game is loaded, so the record stays then.
+    const bool resolutionSet = s_resolutionSet;
+    s_resolutionSet = false;
+    if (resolutionSet && !game)
+        s_resolutionSubstitute = ResolutionSubstitute();
     if (!hasChanges())
         return result;
     if (needsRestart())
@@ -146,9 +217,12 @@ bool VideoSettings::apply()
         applyToRenderer(m_current);
         return result;
     }
+    const std::string requested = m_pending.resolution;     // [CHOSEN] issue #4, see above
     applyToOptions(options);
     options->apply();
     readOptions(options);
+    if (!game)                 // applyToOptions pushes nothing while a game is loaded
+        noteResolutionSubstitute(requested, m_pending.resolution);
     m_current = m_pending;
     return true;
 }
@@ -156,38 +230,30 @@ bool VideoSettings::apply()
 namespace {
 
 // [CHOSEN, not recovered] The renderer's resolution entry ("%ix%i@%iHz") a new profile starts
-// with: the largest that fits the renderer's desktop mode (IRenderer +0xDC, the adapter's
-// GetAdapterDisplayMode; the Metal backend answers the main display's point size), preferring the
-// desktop's refresh rate, then the highest. Empty when no entry fits or no mode is reported.
+// with, chosen against the renderer's desktop mode (IRenderer +0xDC, the adapter's
+// GetAdapterDisplayMode; the Metal backend answers the main display's point size) by
+// displaymode::preferredMode: the largest entry that fits the desktop, else the Retina backing size
+// (a whole multiple of the desktop; Apple-silicon panels list no mode that fits the point size),
+// else the smallest larger entry. Empty when no entry qualifies or no mode is reported.
 std::string desktopFitResolution(dx9rend::IRenderer* renderer, const std::vector<std::string>& list)
 {
     unsigned int width = 0, height = 0, hz = 0;
     if (!renderer->getDesktopMode(width, height, hz))
         return std::string();
-    const int desktopWidth = static_cast<int>(width), desktopHeight = static_cast<int>(height);
-    const int desktopHz = static_cast<int>(hz);
-    std::string best;
-    long long bestArea = 0;
-    int bestHz = 0;
-    bool bestHzMatches = false;
-    for (const std::string& entry : list) {
-        int width = 0, height = 0, hz = 0;
-        if (std::sscanf(entry.c_str(), "%dx%d@%d", &width, &height, &hz) != 3)
+    std::vector<displaymode::Mode> modes;
+    std::vector<std::size_t> entries;
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        int w = 0, h = 0, r = 0;
+        if (std::sscanf(list[i].c_str(), "%dx%d@%d", &w, &h, &r) != 3 || w <= 0 || h <= 0 || r < 0)
             continue;
-        if (width > desktopWidth || height > desktopHeight)
-            continue;
-        const long long area = static_cast<long long>(width) * height;
-        const bool hzMatches = hz == desktopHz;
-        if (area > bestArea
-            || (area == bestArea && hzMatches && !bestHzMatches)
-            || (area == bestArea && hzMatches == bestHzMatches && hz > bestHz)) {
-            best = entry;
-            bestArea = area;
-            bestHz = hz;
-            bestHzMatches = hzMatches;
-        }
+        const displaymode::Mode mode = { static_cast<unsigned>(w), static_cast<unsigned>(h),
+                                         static_cast<unsigned>(r) };
+        modes.push_back(mode);
+        entries.push_back(i);
     }
-    return best;
+    const displaymode::Mode desktop = { width, height, hz };
+    const int best = modes.empty() ? -1 : displaymode::preferredMode(&modes[0], modes.size(), desktop, 0);
+    return best < 0 ? std::string() : list[entries[best]];
 }
 
 // [CHOSEN, not recovered] Owner decision 2026-11-14: the High scheme also takes the highest
@@ -218,6 +284,7 @@ void selectMaxAntialiasing(IVideoOptions* options)
 // createProfile 4AAAA8); existing profiles keep their Video.con.
 void VideoSettings::setDefaults()
 {
+    s_resolutionSet = true;    // [CHOSEN] issue #4: a new profile ends the previous profile's record
     m_pending.terrainQuality = 2;
     m_pending.geometryQuality = 2;
     m_pending.lightingQuality = 2;
@@ -242,8 +309,8 @@ void VideoSettings::setDefaults()
     }
     m_pending.videoOptionScheme = detectVideoOptionScheme();
     applyVideoOptionScheme(1);
-    // [CHOSEN, not recovered] High stages "1024x768"; a new profile takes the largest listed
-    // resolution that fits the desktop instead, when one does.
+    // [CHOSEN, not recovered] High stages "1024x768"; a new profile takes the desktop-fitting
+    // resolution instead (desktopFitResolution), when the list has one.
     const std::string resolution = desktopFitResolution(renderer, getResolutionList());
     if (!resolution.empty()) {
         options->setDynamicOption(1, resolution);
@@ -256,8 +323,8 @@ void VideoSettings::setDefaults()
                  m_pending.resolution.c_str(), m_pending.antialiasing.c_str());
 }
 
-// (20 B)
-void VideoSettings::revertChanges() { m_pending = m_current; }
+// (20 B) [CHOSEN, not recovered] A reverted resolution choice no longer counts as set (issue #4).
+void VideoSettings::revertChanges() { m_pending = m_current; s_resolutionSet = false; }
 
 // (278 B): nothing is pushed while a game is loaded. Otherwise the eight rows in index order,
 // the resolution (dynamic option 1), the antialiasing (dynamic option 0) only while no level is
@@ -361,7 +428,13 @@ int VideoSettings::getTextureFilteringQuality() { return m_pending.textureFilter
 void VideoSettings::setTextureFilteringQuality(int value) { m_pending.textureFilteringQuality = value; }
 // +80..+94: the two pending strings (copied out, assigned from the by-value argument) and the scale.
 std::string VideoSettings::getResolution() { return m_pending.resolution; }
-void VideoSettings::setResolution(std::string value) { m_pending.resolution = value; }
+// [CHOSEN, not recovered] A resolution set from Video.con, the options page or the console ends a
+// substitute record once it is applied (issue #4, apply).
+void VideoSettings::setResolution(std::string value)
+{
+    m_pending.resolution = value;
+    s_resolutionSet = true;
+}
 std::string VideoSettings::getAntialiasing() { return m_pending.antialiasing; }
 void VideoSettings::setAntialiasing(std::string value) { m_pending.antialiasing = value; }
 float VideoSettings::getViewDistanceScale() { return m_pending.viewDistanceScale; }
