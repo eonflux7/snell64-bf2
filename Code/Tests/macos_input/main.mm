@@ -1658,31 +1658,61 @@ void testRestartInFront()
     settle();
 }
 
-// CursorScale.h: points on screen per cursor pixel, from the points one back-buffer pixel covers
-// (the view's height in points over the back buffer's height) and MenuViewport::bitmapScale. The
-// cursor is bitmapScale back-buffer pixels per cursor pixel wherever that is between 0.5 and 4
-// points; both bounds apply to the product.
+// CursorScale.h: points on screen per cursor pixel. The host hands over the game view's height in
+// points and the back buffer's size in pixels (cursorPointsPerPixel). The function works out the
+// points one back-buffer pixel covers (the view's height over the back buffer's height) and
+// MenuViewport::bitmapScale, and keeps their product between 0.5 and 4 points
+// (cursorPointsWithinBounds): the cursor is bitmapScale back-buffer pixels per cursor pixel
+// wherever that is within those bounds, and both bounds apply to the product.
 void testCursorScale()
 {
     begin("cursor size: bitmapScale back-buffer pixels per cursor pixel, within 0.5 to 4 points");
+    using macos::cursorBitmapScale;
     using macos::cursorPointsPerPixel;
+    using macos::cursorPointsWithinBounds;
     const auto about = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
-    check(cursorPointsPerPixel(0.5625, 2) == 1.125,
+    // The rule from the values the host holds, as customCursor calls it.
+    check(cursorPointsPerPixel(900.0, 2560, 1600) == 1.125,
+          "a 2560x1600 back buffer shown 900 points high: 1.125 points per cursor pixel (the approved size)");
+    check(about(cursorPointsPerPixel(776.0, 2560, 1600), 0.97),
+          "a 2560x1600 back buffer shown 776 points high (a window shrunk to fit the screen): 0.97 points, not 1.0");
+    check(cursorPointsPerPixel(600.0, 800, 600) == 1.0 && cursorPointsPerPixel(900.0, 1440, 900) == 1.0,
+          "800x600 and 1440x900 at one point per pixel: 1 point, retail's size");
+    check(cursorPointsPerPixel(832.0, 2560, 1664) == 1.0,
+          "a 2560x1664 back buffer shown 832 points high: 2 back-buffer pixels, 1 point");
+    check(cursorPointsPerPixel(956.0, 2940, 1912) == 1.5,
+          "a 2940x1912 back buffer shown 956 points high: 3 back-buffer pixels, 1.5 points");
+    check(cursorBitmapScale(800, 600) == 1 && cursorBitmapScale(1440, 900) == 1 && cursorBitmapScale(2560, 1600) == 2 &&
+          cursorBitmapScale(2940, 1912) == 3,
+          "the factor is MenuViewport::bitmapScale: 1 at 600 and 900 lines, 2 at 1600, 3 at 1912");
+    check(cursorBitmapScale(1200, 1600) == 1 && cursorPointsPerPixel(1600.0, 1200, 1600) == 1.0 &&
+          cursorBitmapScale(1600, 1200) == 2 && cursorPointsPerPixel(1200.0, 1600, 1200) == 2.0,
+          "the factor follows the fitted 4:3 viewport, so width and height are not interchangeable "
+          "(1200x1600: factor 1; 1600x1200: factor 2)");
+    check(cursorPointsPerPixel(200.0, 2560, 1600) == 0.5 && cursorPointsPerPixel(2880.0, 800, 600) == 4.0,
+          "the bounds: 0.25 points is raised to 0.5 (2560x1600 shown 200 points high), 4.8 is cut to 4 "
+          "(800x600 shown 2880 points high)");
+    check(cursorPointsPerPixel(600.0, 0, 600) == 1.0, "a back buffer without width has the factor 1");
+    check(cursorPointsPerPixel(0.0, 2560, 1600) == 0.0 && cursorPointsPerPixel(-1.0, 2560, 1600) == 0.0 &&
+          cursorPointsPerPixel(900.0, 2560, 0) == 0.0,
+          "a view or a back buffer without height has no cursor size: 0, for which the host shows the arrow");
+    // The same rule in its two derived values: points per back-buffer pixel and the factor.
+    check(cursorPointsWithinBounds(0.5625, 2) == 1.125,
           "2560x1600 full screen on a 1440x900-point desktop, factor 2: 1.125 points (the approved size)");
-    check(about(cursorPointsPerPixel(0.43, 3), 1.29),
+    check(about(cursorPointsWithinBounds(0.43, 3), 1.29),
           "a full-screen mode above the desktop's backing size (0.43, factor 3): 1.29 points, not 1.5");
-    check(about(cursorPointsPerPixel(0.485, 2), 0.97),
+    check(about(cursorPointsWithinBounds(0.485, 2), 0.97),
           "a 2560x1600 window shrunk to fit the screen (0.485, factor 2): 0.97 points, not 1.0");
-    check(cursorPointsPerPixel(0.2, 1) == 0.5, "0.2 points per back-buffer pixel, factor 1: the 0.5-point floor");
-    check(cursorPointsPerPixel(0.2, 2) == 0.5 && about(cursorPointsPerPixel(0.3, 2), 0.6),
+    check(cursorPointsWithinBounds(0.2, 1) == 0.5, "0.2 points per back-buffer pixel, factor 1: the 0.5-point floor");
+    check(cursorPointsWithinBounds(0.2, 2) == 0.5 && about(cursorPointsWithinBounds(0.3, 2), 0.6),
           "the floor applies after the factor (0.2 x 2 is raised to 0.5, 0.3 x 2 stays 0.6)");
-    check(cursorPointsPerPixel(1.0, 1) == 1.0 && cursorPointsPerPixel(1.5, 1) == 1.5,
+    check(cursorPointsWithinBounds(1.0, 1) == 1.0 && cursorPointsWithinBounds(1.5, 1) == 1.5,
           "between the bounds the product stands (1.0 and 1.5 points at factor 1)");
-    check(cursorPointsPerPixel(0.5, 3) == 1.5, "2940x1912 full screen on a 1470x956-point desktop, factor 3: 1.5 points");
-    check(cursorPointsPerPixel(5.0, 1) == 4.0 && cursorPointsPerPixel(3.0, 2) == 4.0 &&
-          cursorPointsPerPixel(4.0, 1) == 4.0,
+    check(cursorPointsWithinBounds(0.5, 3) == 1.5, "2940x1912 full screen on a 1470x956-point desktop, factor 3: 1.5 points");
+    check(cursorPointsWithinBounds(5.0, 1) == 4.0 && cursorPointsWithinBounds(3.0, 2) == 4.0 &&
+          cursorPointsWithinBounds(4.0, 1) == 4.0,
           "never more than 4 points per cursor pixel");
-    check(cursorPointsPerPixel(1.0, 0) == 1.0, "a factor of 0 counts as 1");
+    check(cursorPointsWithinBounds(1.0, 0) == 1.0, "a factor of 0 counts as 1");
 }
 
 } // namespace
