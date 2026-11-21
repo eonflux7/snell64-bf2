@@ -36,6 +36,7 @@
 #include "../BF2/Game/Objects/StrategicObjectCompTemplate.h"
 #include "../BF2/Game/Objects/ObjectLayoutAccess.h"
 #include "../BF2/Game/GameServer/GameServer.h"
+#include "../BF2/Game/GameLogic/SpawnSystem/SpawnManager.h"
 #include "../BF2/Game/GameLogic/ScoreSystem/ScoreManager.h"
 #include "../BF2/Game/SingletonServer.h"
 #include "../BF2/Core/ClassManager.h"
@@ -57,6 +58,7 @@ using namespace dice::hfe;
 using namespace dice::hfe::world;
 namespace dice { namespace hfe {
 extern ClassManager* classManager;
+extern IBase* spawnManager;
 namespace world { extern IBase* scoreManager; }
 } }
 namespace {
@@ -181,6 +183,8 @@ struct Players : PlayerManager
     IPlayer* registered = 0;
     IPlayer* getPlayerFromId(int id) override
     { ids.push_back(id); return registered && registered->getId() == id ? registered : 0; }
+    std::list<IPlayer*> roster;
+    const std::list<IPlayer*>& getPlayers() override { return roster; }
 };
 struct Server : GameServer
 {
@@ -194,6 +198,14 @@ struct Server : GameServer
         check(p->m_eventCategory == ECGameLogic && p->m_eventId == 1 && p->m_payloadBitSize == 4,
               "status broadcast uses four-bit ECGameLogic event");
         std::memcpy(&status, p->m_payload, sizeof(status)); calls.push_back(400); delete event;
+    }
+    int ifPlayingCalls = 0, ifPlayingTarget = 0, ifPlayingCategory = -1, ifPlayingId = -1;
+    void sendGameEventIfPlaying(unsigned int id, GameEvent* event) override
+    {
+        PostRemoteEvent* p = static_cast<PostRemoteEvent*>(event);
+        ++ifPlayingCalls; ifPlayingTarget = static_cast<int>(id);
+        ifPlayingCategory = p->m_eventCategory; ifPlayingId = static_cast<int>(p->m_eventId);
+        delete event;
     }
 };
 struct Logic : ServerGameLogic
@@ -448,6 +460,24 @@ int main()
     check(debugConnection->debugCalls == 2, "both interfaces dispatch ghost debug with byte-key alias and null guards");
     serverApi->debugShowStreamManagerSizes(); serverApi->debugShowGhostPriorities(-1);
     check(debugConnection->debugCalls == 2, "stream-stat sweep and empty priorities body do not dispatch ghost debug");
+
+    // Spawn-group selection stores the id as received; the spawning pass validates it. Both
+    // uPlayingSpawning calls fall inside its two-call start delay, so only the first pass runs.
+    check(!api->selectSpawnGroup(static_cast<IPlayer*>(0), 3), "spawn-group selection refuses a null player");
+    check(api->selectSpawnGroup(actor, -1) && actor->getSpawnGroup() == -1,
+          "spawn-group selection stores -1 as received");
+    check(api->selectSpawnGroup(actor, 0x1234) && actor->getSpawnGroup() == 0x1234,
+          "spawn-group selection stores an id the spawn manager does not know");
+    spawnManager = new SpawnManager;
+    players->roster.push_back(actor); actor->alive = false;
+    actor->setSpawnGroup(5); logic->uPlayingSpawning(0.0f);
+    check(actor->getSpawnGroup() == 0 && server->ifPlayingCalls == 1 &&
+          server->ifPlayingTarget == actor->getId() && server->ifPlayingCategory == 6 &&
+          server->ifPlayingId == 6, "spawning pass clears a vanished group and asks the player to choose again");
+    actor->setSpawnGroup(-1); logic->uPlayingSpawning(0.0f);
+    check(actor->getSpawnGroup() == -1 && server->ifPlayingCalls == 1,
+          "spawning pass leaves a negative choice to spawnPlayer");
+    players->roster.clear(); actor->setSpawnGroup(0); spawnManager = 0;
 
     world::IPlayer* nullPlayer = 0;
     check(!python::buildArgs(-19, nullPlayer, std::vector<int>()).get(), "uninitialized command arguments return empty PyRef");

@@ -1849,6 +1849,8 @@ bool ServerGameLogic::selectKitAndUnlockLevel(world::IPlayer* player, int kit, i
 
     const int team = player->getTeam();
 
+    // [CHOSEN, not recovered] Retail fix "The server refuses a kit the player's team does not
+    // have" (docs/retail-fixes.md).
     if (team < 0 || team > 2 || kit < 0 || kit > 255)
         return false;
     if (m_kits.find((team << 8) + kit) == m_kits.end())
@@ -1859,15 +1861,13 @@ bool ServerGameLogic::selectKitAndUnlockLevel(world::IPlayer* player, int kit, i
     return true;
 }
 
+// Stores the requested spawn group as received, negative and unknown ids included. The readers
+// validate it: the spawning pass clears a vanished positive choice and asks the client to choose
+// again, spawnPlayer clears an id it cannot use, and the player update sends 0 for an id outside
+// 0 to 255. Returns false only for a null player.
 bool ServerGameLogic::selectSpawnGroup(world::IPlayer* player, int group)
 {
     if (!player)
-        return false;
-
-    if (group < 0 || group > 255)
-        return false;
-    if (group != 0 &&
-        (!spawnManager || !static_cast<SpawnManager*>(spawnManager)->getSpawnGroup(group)))
         return false;
 
     player->setSpawnGroup(group);                                   // vt +0x154

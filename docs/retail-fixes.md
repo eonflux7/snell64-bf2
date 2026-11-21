@@ -481,8 +481,7 @@ Each entry is a heading that names the fix, followed by these fields:
   reproduced. The Windows server images were not read.
 - **OpenBF2:** `selectKitAndUnlockLevel` stores nothing and returns false unless the player's team
   is 0 to 2 and the kit is registered for that team, in the same kit map `spawnPlayer` reads; the
-  previous kit and unlock level stay. Accepted requests are stored as in retail. The spawn-group
-  test in the same file is a separate change and not part of this fix.
+  previous kit and unlock level stay. Accepted requests are stored as in retail.
 - **Applies to:** Client and server, wherever a game is hosted; all platforms.
 - **Retail clients:** Nothing on the wire changes. An unmodified client sends only kits its HUD
   offers for its team, 0 to 6 on both teams in 1.50, and the server checks them against the team it
