@@ -126,7 +126,8 @@ void checkRow(const Row& row)
 }
 
 // Every parse difference must be a key whose value is a whole argument (one with whitespace and no
-// quote) that retail cut at its first whitespace.
+// quote) that retail cut at its first whitespace, losing text that follows it. A value whose only
+// whitespace is at its end must parse as on retail, which cuts that whitespace off.
 bool onlyCutsDiffer(const Args& args)
 {
     Keys retail, ours;
@@ -146,8 +147,11 @@ bool onlyCutsDiffer(const Args& args)
         std::string::size_type cut = 0;
         while (cut < o->second.size() && !isSpace(o->second[cut]))
             ++cut;
+        std::string::size_type text = cut;
+        while (text < o->second.size() && isSpace(o->second[text]))
+            ++text;
         if (!wholeArgument || o->second.find('"') != std::string::npos
-            || cut == o->second.size() || r->second != o->second.substr(0, cut))
+            || text == o->second.size() || r->second != o->second.substr(0, cut))
             return false;
     }
     return true;
@@ -199,6 +203,14 @@ int main()
         { "empty value at the end", A("+password", ""), "+password ", false },
         { "empty first argument", A("", "+port", "16568"), " +port 16568", false },
         { "only an empty argument", A(""), "", false },
+        { "trailing spaces", A("+config", "sv.con ", "+playerName", "Bob  "),
+          "+config sv.con  +playerName Bob  ", false },
+        { "trailing CR", A("+config", "/srv/bf2/sv.con\r", "+port", "16567"),
+          "+config /srv/bf2/sv.con\r +port 16567", false },
+        { "trailing newline", A("+playerName", "Bob\n"), "+playerName Bob\n", false },
+        { "leading space", A("+config", " sv.con"), "+config \" sv.con\"", true },
+        { "spaced value with a trailing space", A("+config", "/srv/My Server/sv.con "),
+          "+config \"/srv/My Server/sv.con \"", true },
         { "unknown option, spaced value", A("+confg", "a b"), "+confg \"a b\"", false },
     };
     for (std::size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i)
@@ -208,7 +220,7 @@ int main()
     // Deterministic sweep over short arguments built from option names, whitespace, quotes and
     // plus signs: no difference from retail's parse other than whole values where retail cuts.
     const char* const pieces[] = { "+config", "+port", "+?", "+", "config", "port", "x", " ",
-                                   "\t", "\"", "C++", "-", "", "+port ", " +config" };
+                                   "\t", "\"", "C++", "-", "", "+port ", " +config", "\r" };
     const unsigned pieceCount = sizeof(pieces) / sizeof(pieces[0]);
     unsigned seed = 12345, swept = 0, differing = 0, violations = 0;
     for (int n = 0; n < 200000; ++n)

@@ -43,10 +43,24 @@ inline bool containsOptionToken(const std::string& arg)
     return false;
 }
 
+// True when arg holds text after whitespace: retail, which ends an unquoted value at the first
+// whitespace character, would lose that text. Whitespace at the end only is dropped by retail's cut
+// and lost nothing the caller meant.
+inline bool hasInteriorSpace(const std::string& arg)
+{
+    std::string::size_type c = 0;
+    while (c < arg.size() && !isParserSpace(arg[c]))
+        ++c;
+    for (; c < arg.size(); ++c)
+        if (!isParserSpace(arg[c]))
+            return true;
+    return false;
+}
+
 // Joins argv[1..argc-1] with single spaces, as the retail Linux main does. An argument is wrapped
 // in quotes only when all of the following hold; retail would cut such an argument where a value
 // starts at it, and the quotes change nothing else in the parse:
-// - it contains whitespace;
+// - it has text after whitespace (whitespace at its end only is cut by the parser as on retail);
 // - it contains no quote character, and no earlier argument did (the caller then uses retail's own
 //   quoting, and an added quote could close a value that one of those quotes opened);
 // - it contains no option token, so it is a value and not one or more options of its own.
@@ -61,12 +75,9 @@ inline std::string joinArgs(int argc, const char* const* argv)
         if (i > 1)
             out += ' ';
 
-        bool hasSpace = false;
-        for (std::string::size_type c = 0; c < arg.size(); ++c)
-            hasSpace = hasSpace || isParserSpace(arg[c]);
         quoteSeen = quoteSeen || arg.find('"') != std::string::npos;
 
-        if (hasSpace && !quoteSeen && !containsOptionToken(arg))
+        if (!quoteSeen && hasInteriorSpace(arg) && !containsOptionToken(arg))
         {
             out += '"';
             out += arg;

@@ -401,13 +401,15 @@ Each entry is a heading that names the fix, followed by these fields:
   with a space is therefore cut at the space; only an argument that itself contains the quotes
   works. Linux images only: the Windows server gets its line from `WinMain`.
 - **OpenBF2:** The Linux entry point puts quotes around an argument before the join only where
-  retail would cut it: the argument contains whitespace, contains no option token (a `+`, a name,
-  then whitespace or the end of the argument), and neither it nor an earlier argument contains a
-  quote character. Every other argument, the empty one included, is joined unchanged, so every
-  spelling that works on retail, such as an argument with its own quotes or one that holds several
-  options, gives retail's line. A value with whitespace is still cut as on retail when it contains
-  an option token or follows an argument with a quote character. `bf2_command_line_join_check`
-  compares the parse with retail's line through the recovered parser; not run on a server.
+  retail would cut it: the argument has text after whitespace, contains no option token (a `+`, a
+  name, then whitespace or the end of the argument), and neither it nor an earlier argument
+  contains a quote character. Every other argument, the empty one and one whose whitespace is all
+  at its end included, is joined unchanged, so every spelling that works on retail, such as an
+  argument with its own quotes or one that holds several options, gives retail's line; whitespace
+  at the end of a value is cut as on retail. A value with whitespace is still cut as on retail when
+  it contains an option token or follows an argument with a quote character.
+  `bf2_command_line_join_check` compares the parse with retail's line through the recovered parser;
+  not run on a server.
 - **Applies to:** Server; Linux, and macOS, whose server uses the same entry point. The helper also
   serves entry points without a retail counterpart: the macOS and Linux clients and the rebuilt
   Windows console entry.
