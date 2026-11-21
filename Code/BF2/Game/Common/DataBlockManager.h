@@ -47,7 +47,8 @@ public:
 class DataBlockManager
 {
 public:
-    // [CHOSEN, not recovered] Largest incoming block newDataBlock accepts (retail has no limit).
+    // [CHOSEN, not recovered] Retail fix "Data-block announcements above 1 MiB are refused"
+    // (docs/retail-fixes.md). Largest incoming block newDataBlock accepts (retail has no limit).
     // The largest fixed-size senders are EndOfRoundInfo (7,166 bytes), ServerInfo (895) and
     // MapInfo (369); the map list and remote-console text grow with their content but stay in
     // the tens of kilobytes. 1 MiB leaves a wide margin and bounds the memory a peer can

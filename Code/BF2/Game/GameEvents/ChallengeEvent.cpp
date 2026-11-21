@@ -66,9 +66,10 @@ void ChallengeEvent::executeClient()
         gameClient->handleChallenge(this);
 }
 
-// Reads the challenge and length-prefixed mod name. [CHOSEN, not recovered] Limits
-// stored names to the local buffer and skips excess bytes, preserving packet alignment
-// while avoiding the original unbounded copy.
+// Reads the challenge and length-prefixed mod name. [CHOSEN, not recovered] Retail fix "Game event
+// readers keep wire lengths and counts inside their buffers" (docs/retail-fixes.md). Limits stored
+// names to the local buffer and skips excess bytes, preserving packet alignment while avoiding the
+// original unbounded copy.
 bool ChallengeEvent::deSerialize(io::BitStream* stream)
 {
     memset(m_challengeString, 0, CHALLENGE_SIZE);

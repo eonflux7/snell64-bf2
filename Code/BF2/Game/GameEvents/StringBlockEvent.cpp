@@ -103,7 +103,8 @@ bool StringBlockEvent::executeServer(int connectionId)
     return true;
 }
 
-// [CHOSEN, not recovered] Bounds chunk storage while consuming the complete wire payload.
+// [CHOSEN, not recovered] Retail fix "Game event readers keep wire lengths and counts inside their
+// buffers" (docs/retail-fixes.md). Bounds chunk storage while consuming the complete wire payload.
 // Announcement size and chunk size are distinct fields.
 bool StringBlockEvent::deSerialize(io::BitStream* stream)
 {

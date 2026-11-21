@@ -811,7 +811,9 @@ const wchar_t* getCrashDumpDirectory();
 //  (client, 353 B) / 0x401410 (dedicated, 369 B). Built once into a function-local static
 // (its guard word is at 0x986F3C): "<directory>\bf2_v<build number>.dmp". [INFERRED] name.
 // Retail appends L"\\bf2_v" to getCrashDumpDirectory(), which already ends in L"\\dmp\\".
-// [CHOSEN, not recovered] Skip that separator when the directory already ends in one. The
+// [CHOSEN, not recovered] Retail fix "Win32 crash dumps are written: no doubled separator in the
+// dump name" (docs/retail-fixes.md).
+// Skip that separator when the directory already ends in one. The
 // writer prefixes the name with \\?\, which turns off path normalization, so CreateFileW
 // rejects the empty component in "dmp\\bf2_v" (ERROR_INVALID_NAME) and no dump is written.
 static const wchar_t* crashDumpFileName(const wchar_t* dumpDirectory)

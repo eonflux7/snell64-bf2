@@ -199,13 +199,14 @@ bool makeConsoleScript(const IBase* object, io::IStream* stream)
 }
 
 // tool::getAsString (ELF 0x6a82d0): return the bytes the writer left in the stream.
-// [CHOSEN, not recovered] This body is deliberately NOT the shipped one. The shipped body sizes the
-// result with the strlen-based std::string(const char*) constructor, then writes a NUL at
-// _M_p + getSize() (the valgrind "Invalid write of size 1" overrun): whenever getSize() exceeds
-// strlen(getPtr()) that write runs past the string's allocation. This version copies getSize() bytes
-// instead, which is byte-for-byte identical for the script text these callers produce (no embedded
-// NUL, so size == strlen) and avoids the out-of-bounds write. Restore the shipped construction only
-// with evidence that the overrun is wanted.
+// [CHOSEN, not recovered] Retail fix "tool::getAsString no longer writes past its string"
+// (docs/retail-fixes.md). This body is deliberately not the shipped one. The shipped body sizes the
+// result with the strlen-based std::string(const char*) constructor, then writes a NUL at _M_p +
+// getSize() (the valgrind "Invalid write of size 1" overrun): whenever getSize() exceeds
+// strlen(getPtr()) that write runs past the string's allocation. This version copies getSize()
+// bytes instead, which is byte-for-byte identical for the script text these callers produce (no
+// embedded NUL, so size == strlen) and avoids the out-of-bounds write. Restore the shipped
+// construction only with evidence that the overrun is wanted.
 std::string getAsString(io::IMemStream* stream)
 {
     const unsigned int size = static_cast<unsigned int>(stream->getSize());

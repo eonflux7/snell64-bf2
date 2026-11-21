@@ -299,10 +299,10 @@ bool textureAtlasLoadTAI(TextureAtlas* atlas, const std::string& path)
             s.readFloat(width);
             s.getChar();
             s.readFloat(height);
-            // On a malformed line the shipped code stores whatever its uninitialised stack slots
-            // held (istream leaves the targets untouched on failure). Ours stores the zeros above -
-            // a bounded divergence that only a malformed .tai can observe, chosen over reproducing
-            // stack garbage.
+            // [CHOSEN, not recovered] Retail fix "An atlas index (.tai) line with missing numbers
+            // reads them as zero" (docs/retail-fixes.md). On a malformed line the shipped code
+            // stores whatever its uninitialised stack slots held (istream leaves the targets
+            // untouched on failure); ours stores the zeros above.
 
             // The page texture, through the by-name loader - ecx = dword_1023B974 at 0x10015CDC.
             EngineTexture* page =

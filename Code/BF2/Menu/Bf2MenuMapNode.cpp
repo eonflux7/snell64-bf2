@@ -738,11 +738,12 @@ Bf2MenuMapNode::Bf2MenuMapNode(System* system, const char* name, int, int, int, 
     m_field8a0 = m_system->loadTexture("Ingame/GeneralIcons/empty.tga", true);                           // +8A0
     m_field694 = 0.5f;                               // +694
     m_expandedMap = false; m_field690 = false;       // +68E/+690 (78181C/781822)
-    // [CHOSEN, not recovered]: memory-safety deviation. The shipped constructor (0x7801AB..0x780206)
-    // never writes +0x68D, but update (0x77C330) reads it at 0x77C48F / 0x77C7E9 before its first
-    // write at 0x77D383. Retail runs on whatever the heap holds there (Memory.dll does not zero user
-    // blocks; fresh Windows pages are zero); on macOS it came back non-zero and the first spawn
-    // screen kept the map at its mini size with no DONE/SUICIDE row. Zero it.
+    // [CHOSEN, not recovered] Retail fix "The spawn map node initializes the flag its update reads
+    // first" (docs/retail-fixes.md). The shipped constructor (0x7801AB..0x780206) never writes
+    // +0x68D, but update (0x77C330) reads it at 0x77C48F / 0x77C7E9 before its first write at
+    // 0x77D383. Retail runs on whatever the heap holds there (Memory.dll does not zero user blocks;
+    // fresh Windows pages are zero); on macOS it came back non-zero and the first spawn screen kept
+    // the map at its mini size with no DONE/SUICIDE row. Zero it.
     m_field68d = false;                              // +68D
     m_commanderMode = false; m_squadMode = false;
     m_field776 = true;                               // +776

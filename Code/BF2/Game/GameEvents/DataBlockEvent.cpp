@@ -112,8 +112,9 @@ bool DataBlockEvent::executeServer(int connectionId)
     return true;
 }
 
-// Decodes an announcement or chunk. [CHOSEN, not recovered] Limits chunk storage
-// to the local buffer and consumes excess bytes to preserve following event alignment.
+// Decodes an announcement or chunk. [CHOSEN, not recovered] Retail fix "Game event readers keep
+// wire lengths and counts inside their buffers" (docs/retail-fixes.md). Limits chunk storage to the
+// local buffer and consumes excess bytes to preserve following event alignment.
 bool DataBlockEvent::deSerialize(io::BitStream* stream)
 {
     int isNewBlock = 0;

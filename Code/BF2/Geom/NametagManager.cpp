@@ -330,7 +330,8 @@ inline bool vehicleHudUsesPlayerIcon(world::IObjectComponent* hudComponent)
 
 
 
-// [CHOSEN, not recovered] Preserve the reissue defect's unchanged item state without
+// [CHOSEN, not recovered] Retail fix "A reissued order nametag no longer writes into the callers'
+// stack" (docs/retail-fixes.md). Preserve the reissue defect's unchanged item state without
 // reproducing its caller-stack corruption. Do not redirect the write onto the real item.
 
 inline void reissueOrderDefect()

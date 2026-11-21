@@ -2300,7 +2300,8 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
     // Arguments zero, one and two are read through the trapping accessor (int 3 at 10022718 and
     // 10022823), so no argument-count test is added. The shipped split is
     // sscanf(id, "%s %s %s %s") into four unbounded 256-byte globals; the loop below is the same
-    // whitespace split without that overflow, which is a [CHOSEN] narrowing of a shipped defect.
+    // whitespace split without that overflow. [CHOSEN, not recovered] Retail fix "Menu natives
+    // split list and server-row ids with bounded reads" (docs/retail-fixes.md).
     const tu_string id = fn.arg(0).to_tu_string();
     tu_string tok[4];
     {
@@ -3532,11 +3533,13 @@ void as_logic_joinCommandlineServer(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_joinCommandlineServer");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-    // [CHOSEN, not recovered] Retail drops +password on this path: BF2Engine::joinServer (BF2.exe
-    // 0x405C10) overwrites GSPassword with the menu's join password (+0x180), which only the in-menu
-    // password dialog sets, and the shipped menu script never reads getCommandlineServerPassword, so
-    // a passworded server refused every command-line join (owner decision 2026-11-14: fix it). The
-    // command-line password (+0xE0, GSPassword) becomes the join password when the menu has none.
+    // [CHOSEN, not recovered] Retail fix "A command-line join uses the +password value"
+    // (docs/retail-fixes.md). Retail drops +password on this path: BF2Engine::joinServer (BF2.exe
+    // 0x405C10) overwrites GSPassword with the menu's join password (+0x180), which only the
+    // in-menu password dialog sets, and the shipped menu script never reads
+    // getCommandlineServerPassword, so a passworded server refused every command-line join (owner
+    // decision 2026-11-14: fix it). The command-line password (+0xE0, GSPassword) becomes the join
+    // password when the menu has none.
     if (h->getJoinPassword().empty())                             // +0x180
         h->setJoinPassword(h->getPasswordSetting());              // +0x184 <- +0x0E0
     const int port = h->getPortSetting();                        // +0x0E4
@@ -5059,7 +5062,8 @@ static bool hostMapStrings(void* h, int mapId, std::string& key, std::string& na
 // record's index; index -1 gives the single space the shipped seeds), 3 map (the map record's name,
 // or "Unknown Map" localised when the manager has no record; index -1 again the space). Another
 // kind leaves the object empty. Stats not fetched: the number 0. The shipped indexes its tables
-// unchecked; an index past a table answers the space here. [CHOSEN, not recovered] for that guard.
+// unchecked; an index outside a table answers the space here. [CHOSEN, not recovered] Retail fix
+// "PlayerStats.getFavouriteName bounds its name-table index" (docs/retail-fixes.md).
 void as_playerstats_getFavouriteName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getFavouriteName");
@@ -6662,14 +6666,16 @@ void as_generalsettings_setCoopBotRatio(const gameswf::fn_call& fn)
 // the port); then a favourite is removed if +0x134 finds it (+0x130), otherwise a history row if
 // +0x150 finds it (+0x14C). The address string and the id die in that order. No result.
 // The shipped buffer takes an unbounded %s and the two numbers stay uninitialised when the id holds
-// fewer than two; the bounded width and the zeroes here are the same [CHOSEN] narrowing joinServer's
-// split makes (sub_100508D0's other caller).
+// fewer than two; the bounded width and the zeroes here are the same narrowing joinServer's split
+// makes (sub_100508D0's other caller).
 void as_generalsettings_removeServer(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_generalsettings_removeServer");
     IGeneralSettings* gs = generalSettingsOf(generalSettingsSingleton());
     const std::string id(fn.arg(0).to_string());
     std::string address;
+    // [CHOSEN, not recovered] Retail fix "Menu natives split list and server-row ids with bounded
+    // reads" (docs/retail-fixes.md).
     char buf[260] = {0};
     int port = 0, second = 0;
     ::sscanf(id.c_str(), "%259s %d %d", buf, &port, &second);
@@ -7974,6 +7980,8 @@ void as_multiplay_joinServer(const gameswf::fn_call& fn)
         (void) classManager->getSingleton(renddx9abi::HostString("LocalProfileManager"));
         const std::string id(fn.arg(0).to_string());
         std::string address;
+        // [CHOSEN, not recovered] Retail fix "Menu natives split list and server-row ids with
+        // bounded reads" (docs/retail-fixes.md).
         char buf[260] = {0};
         int first = 0, second = 0;
         ::sscanf(id.c_str(), "%259s %d %d", buf, &first, &second);
@@ -8000,6 +8008,8 @@ void as_multiplay_setCurrentServerId(const gameswf::fn_call& fn)
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     const std::string id(fn.arg(0).to_string());
     std::string address;
+    // [CHOSEN, not recovered] Retail fix "Menu natives split list and server-row ids with bounded
+    // reads" (docs/retail-fixes.md).
     char buf[260] = {0};
     int queryPort = 0, hostPort = 0;
     ::sscanf(id.c_str(), "%259s %d %d", buf, &queryPort, &hostPort);
@@ -8082,6 +8092,8 @@ void as_multiplay_isServerOnline(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_isServerOnline");
     (void) g_swiffPlayerInstance->getSwiffHost();
+    // [CHOSEN, not recovered] Retail fix "Menu natives split list and server-row ids with bounded
+    // reads" (docs/retail-fixes.md).
     char buf[260] = {0};
     int first = 0, second = 0;
     ::sscanf(fn.arg(0).to_string(), "%259s %d %d", buf, &first, &second);
@@ -9173,8 +9185,9 @@ void as_playerstats_refreshLeaderBoard(const gameswf::fn_call& fn)
 }
 
 // Legacy leaderboard requests by category/board.
-// [CHOSEN] Out-of-range requests follow contiguous table entries while available, then
-// suppress fetching; out-of-range result groups yield zero count or empty date.
+// [CHOSEN, not recovered] Retail fix "Leaderboard natives stay inside their cache and request
+// tables" (docs/retail-fixes.md). Out-of-range requests follow contiguous table entries while
+// available, then suppress fetching; out-of-range result groups yield zero count or empty date.
 static const int kLeaderboardRequestTable[26] = {
     5, 6, 7, 8, 9, 10, 11,  12, 13, 14, 15, 16, 17, 18,  19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
 static bool selectedLeaderboardGroup(void* h, HostLeaderboard& cache, int* group)
@@ -9252,7 +9265,9 @@ static int buildLeaderboardRows(const HostLeaderboard& cache, ListResult& r)
     else if (category == 1) { group = 5 + board;  family = 2; }
     else if (category == 2) { group = 24 + board; family = 2; }
     else if (category == 3) { group = 12 + board; family = 3; }
-    // [CHOSEN] a board past the cache's 31 groups (retail reads beyond the cache) writes nothing.
+    // [CHOSEN, not recovered] Retail fix "Leaderboard natives stay inside their cache and request
+    // tables" (docs/retail-fixes.md): a board past the cache's 31 groups (retail reads beyond the
+    // cache) writes nothing.
     if (family >= 0 && group >= 0 && group <= 30)
     {
         const int rows = leaderboardRowCount(cache, group);
@@ -9378,7 +9393,9 @@ static void listLeaderboard(const gameswf::fn_call& fn, ListResult& r, ListHost 
 }
 
 // Builds leaderboard rows for the profile and selected player, then overwrites totalCount with zero.
-// [CHOSEN] Missing profile IDs start at -1 instead of using an uninitialized stack value.
+// [CHOSEN, not recovered] Retail fix "Leaderboard natives stay inside their cache and request
+// tables" (docs/retail-fixes.md): missing profile IDs start at -1 instead of using an uninitialized
+// stack value.
 static void listLeaderboardPlayers(const gameswf::fn_call& fn, ListResult& r, ListHost h)
 {
     BusyHost busy = busyOpen();

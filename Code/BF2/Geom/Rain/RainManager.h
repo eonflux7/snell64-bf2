@@ -101,7 +101,8 @@ public:
 // One particle, 20 bytes on x86: its position inside its cell, the cell and the deviation group.
 struct RainParticle
 {
-    // [CHOSEN, not recovered] The shipped resize value (split tail 0x10159F43) zeroes only the
+    // [CHOSEN, not recovered] Retail fix "New rain particles start with cell 0 and group 0"
+    // (docs/retail-fixes.md). The shipped resize value (split tail 0x10159F43) zeroes only the
     // position and leaves cell and group as stack garbage, which buildPointBuffer would use as an
     // index into m_cellPrimitiveCounts. They are zeroed here.
     RainParticle() : cell(0), group(0) { position.x = position.y = position.z = 0.0f; }

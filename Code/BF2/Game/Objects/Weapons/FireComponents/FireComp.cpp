@@ -448,7 +448,8 @@ void FireComp::setFirebuttonLastHeldAtTick(io::PlayerInputMap input, unsigned in
 
 // ELF 0x82630C0 fetches the player (0x82630DE) and, when the template names an ignored fire
 // button, calls through it (0x82630F2/0x82630F7) without a null test.
-// [CHOSEN, not recovered] A firearm without a player skips the ignored-button test instead of
+// [CHOSEN, not recovered] Retail fix "FireComp::requestFire tolerates a firearm without a player"
+// (docs/retail-fixes.md). A firearm without a player skips the ignored-button test instead of
 // crashing; the rest is retail (the same path retail takes when no button is ignored).
 bool FireComp::requestFire(bool released, bool)
 {

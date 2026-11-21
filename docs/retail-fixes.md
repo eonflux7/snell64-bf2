@@ -15,12 +15,16 @@ not intend:
 - lost input, lost data, or a setting that does not take effect the way the game says.
 
 A retail fix corrects that behavior and changes nothing else. The following are not retail
-fixes and follow the issue workflow in the [Development guide](development.md):
+fixes and are not listed here:
 
 - improvements and features, including support for systems retail never ran on, such as other
   operating systems, high-DPI or wide displays and newer hardware;
 - different defaults and changes of taste;
-- every change to an ABI, protocol or file-format contract.
+- every change to an ABI, protocol or file-format contract;
+- hardening that changes no behavior retail can show: guards, bounds and initialization in code
+  that retail never executes or that bad input cannot reach.
+
+The first three follow the issue workflow in the [Development guide](development.md).
 
 ## Rule
 

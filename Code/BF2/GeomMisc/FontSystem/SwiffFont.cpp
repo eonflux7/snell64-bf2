@@ -249,8 +249,9 @@ private:
 void DifFont::readHeader(std::istream& input)
 {
     input >> m_version;
-    // [CHOSEN, not recovered] Preserve the prior parser's defined storage if
-    // truncated input would make the retail first-character read uninitialized.
+    // [CHOSEN, not recovered] Retail fix "The DifFont file readers start from zeroed values"
+    // (docs/retail-fixes.md). Preserve the prior parser's defined storage if truncated input would
+    // make the retail first-character read uninitialized.
     char name[33] = {};
     input >> name[0];
     input.putback(name[0]);
@@ -267,8 +268,9 @@ void DifFont::readHeader(std::istream& input)
 // PE 0x100A41B0
 void DifFont::readGlyphs(std::istream& input)
 {
-    // [CHOSEN, not recovered] Retain defined missing-token values rather than
-    // restoring the retail parser's first-row uninitialized reads.
+    // [CHOSEN, not recovered] Retail fix "The DifFont file readers start from zeroed values"
+    // (docs/retail-fixes.md). Retain defined missing-token values rather than restoring the retail
+    // parser's first-row uninitialized reads.
     unsigned int count = 0;
     input >> count;
     unsigned short code = 0;
@@ -303,7 +305,8 @@ void DifFont::readGlyphs(std::istream& input)
 // PE 0x100A4120
 void DifFont::readKerning(std::istream& input)
 {
-    // [CHOSEN, not recovered] Keep the existing missing-token zero initialization.
+    // [CHOSEN, not recovered] Retail fix "The DifFont file readers start from zeroed values"
+    // (docs/retail-fixes.md). Keep the existing missing-token zero initialization.
     unsigned int count = 0;
     input >> count;
     unsigned short a = 0, b = 0;
@@ -2894,8 +2897,9 @@ void* createSwiffFont(const char* name, int size, const wchar_t* initialText)
     if (!fsBase)
         return 0;
     FontSystem* fs = static_cast<FontSystem*>(fsBase);
-    // [CHOSEN, not recovered] Preserve PE 0x10152F26's %d spelling without
-    // restoring sprintf's fixed-buffer overflow for long font names.
+    // [CHOSEN, not recovered] Retail fix "The Swiff font key is built without a fixed stack buffer"
+    // (docs/retail-fixes.md). Preserve PE 0x10152F26's %d spelling without restoring sprintf's
+    // fixed-buffer overflow for long font names.
     char number[32];
     ::_snprintf_s(number, sizeof(number), _TRUNCATE, "%d", size);
     std::string key(name ? name : "");

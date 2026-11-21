@@ -233,7 +233,8 @@ bool GameServer::init()
         // normal retail logging, despite the message saying "Changing server to unranked".
         // Retail (ELF GameServer::init 0x80A67F0) streams the ostringstream object itself into both
         // diagnostics, through operator void*, so the user saw an address instead of the text.
-        // [CHOSEN, not recovered] Both diagnostics carry message.str().
+        // [CHOSEN, not recovered] Retail fix "The server prints the internet-backend failure text
+        // instead of a pointer" (docs/retail-fixes.md): both diagnostics carry message.str().
         std::ostringstream message;
         message << "FATAL ERROR: Your server cannot communicate with the required internet backends.\n"
                 << "Please read the documentation for the dedicated server to find out what ports you\n"

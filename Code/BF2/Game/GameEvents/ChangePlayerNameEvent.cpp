@@ -81,9 +81,10 @@ bool ChangePlayerNameEvent::executeServer(int connectionId)
     return true;
 }
 
-// Reads a player id and fixed 32-byte name. [CHOSEN, not recovered] Forces a final
-// terminator so malformed names cannot make string consumers read beyond the buffer;
-// well-formed names and the stream cursor are unchanged.
+// Reads a player id and fixed 32-byte name. [CHOSEN, not recovered] Retail fix "Game event readers
+// keep wire lengths and counts inside their buffers" (docs/retail-fixes.md). Forces a final
+// terminator so malformed names cannot make string consumers read beyond the buffer; well-formed
+// names and the stream cursor are unchanged.
 bool ChangePlayerNameEvent::deSerialize(io::BitStream* stream)
 {
     int playerId = 0;

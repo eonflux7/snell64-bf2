@@ -1636,7 +1636,8 @@ bool GhostManager::processReceivedPacket(io::BitStream* stream)
         return true;                                     // the one-bit "no ghosts" case
 
 #if DEDICATED
-    // [CHOSEN, not recovered] Clients must not send ghost updates to a dedicated server.
+    // [CHOSEN, not recovered] Retail fix "The dedicated server rejects ghost updates sent by a
+    // client" (docs/retail-fixes.md). Clients must not send ghost updates to a dedicated server.
     // Reject before decoding or applying any state: https://github.com/B2BF/OpenBF2/issues/1.
     return false;
 #else

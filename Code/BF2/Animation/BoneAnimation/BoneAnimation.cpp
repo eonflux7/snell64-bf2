@@ -174,7 +174,9 @@ bool BoneAnimation::load(const std::string& path)
         for (int c = 0; c <= 6; ++c)       // seven channels; six boundaries recorded
         {
             unsigned int count = readField<unsigned short>();
-            // this clamp is this tree'S - see the block comment. dice copies unconditionally.
+            // [CHOSEN, not recovered] Retail fix "BoneAnimation::load keeps channel samples inside
+            // the declared sample block" (docs/retail-fixes.md): retail copies the channel's count
+            // unchecked.
             if (offset + count > sampleCount)
                 count = (offset < sampleCount) ? (sampleCount - offset) : 0;
 

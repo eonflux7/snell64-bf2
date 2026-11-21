@@ -203,10 +203,11 @@ std::string translateCdKey(const std::string& storedKey)
 {
     std::string result("");
 
-    // [CHOSEN, not recovered] Retail protects an empty key too: protect refuses it, and
-    // writeHex then dereferences the null blob, so joining a server without a stored key
-    // crashes at the first challenge. Answer empty instead; GameClient::handleChallenge
-    // already disconnects with reason 7 when the key is empty.
+    // [CHOSEN, not recovered] Retail fix "Joining without a CD key disconnects instead of crashing"
+    // (docs/retail-fixes.md). Retail protects an empty key too: protect refuses it, and writeHex
+    // then dereferences the null blob, so joining a server without a stored key crashes at the
+    // first challenge. Answer empty instead; GameClient::handleChallenge already disconnects with
+    // reason 7 when the key is empty.
     if (storedKey.empty())
         return result;
 

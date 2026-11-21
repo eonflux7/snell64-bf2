@@ -72,9 +72,10 @@ bool ChangeSquadNameEvent::executeServer(int connectionId)
     return true;
 }
 
-// [CHOSEN, not recovered] Bounds stored names to MAX_NAME_LENGTH, unlike the original
-// unbounded reader. Consumes excess bytes so subsequent events remain aligned,
-// and terminates the stored name.
+// [CHOSEN, not recovered] Retail fix "Game event readers keep wire lengths and counts inside their
+// buffers" (docs/retail-fixes.md). Bounds stored names to MAX_NAME_LENGTH, unlike the original
+// unbounded reader. Consumes excess bytes so subsequent events remain aligned, and terminates the
+// stored name.
 bool ChangeSquadNameEvent::deSerialize(io::BitStream* stream)
 {
     int squadId = 0;

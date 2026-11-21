@@ -262,8 +262,9 @@ const std::string& GameEventRegistry::getEventName(unsigned int id) const
 
 
 // Serializes category, id, float bits, then a byte count and payload.
-// [CHOSEN, not recovered] Bounds incoming payloads to local storage and skips excess
-// bytes so subsequent events remain aligned. The wire count can exceed this buffer.
+// [CHOSEN, not recovered] Retail fix "Game event readers keep wire lengths and counts inside their
+// buffers" (docs/retail-fixes.md). Bounds incoming payloads to local storage and skips excess bytes
+// so subsequent events remain aligned. The wire count can exceed this buffer.
 bool PostRemoteEvent::deSerialize(io::BitStream* stream)
 {
     int category = 0;

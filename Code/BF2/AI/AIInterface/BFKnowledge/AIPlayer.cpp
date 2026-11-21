@@ -266,8 +266,9 @@ world::IPlayerControlObject* findControlObject(world::IObject* object)
 // ELF 0x83FC6B0.
 unsigned int AIPlayer::getPlayerControlObjectId()
 {
-    // The ELF reads the template before its null test (a null vehicle faults there); testing
-    // first keeps the C++ defined. [CHOSEN, not recovered] ordering only.
+    // [CHOSEN, not recovered] Retail fix "AIPlayer::getPlayerControlObjectId tests the vehicle for
+    // null before using it" (docs/retail-fixes.md). The ELF reads the template before its null test
+    // (a null vehicle faults there); testing first keeps the C++ defined.
     world::IObject* const vehicle = m_player->getVehicle();
     if (!vehicle)
         return static_cast<unsigned int>(-1);
