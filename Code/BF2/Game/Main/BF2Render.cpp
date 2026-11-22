@@ -60,21 +60,22 @@ extern IProfilerClient*     profilerClient; // ds:0x9A5C6C, published by Core Mo
 
 #if defined(_WIN32)
 namespace {
-// [CHOSEN, not recovered] Windows: RendDX9.dll and TextureAtlasBuilder.dll delay-load d3dx9_25.dll
-// (Code/Build/renddx9.cmd, textureatlasbuilder.cmd), so a missing or wrong-bitness D3DX runtime no
-// longer stops the loader with a system error before the game can say anything. This loads it the
-// way the delay-load helper will (the same name and search order) and keeps it loaded, so the
-// plugins bind this module. Without it the renderer cannot start: one message box, then the process
-// ends with code 1.
+// [CHOSEN, not recovered] Windows: RendDX9.dll and TextureAtlasBuilder.dll delay-load their D3DX
+// (Code/RendDX9Abi/CMakeLists.txt), so a missing or wrong-bitness D3DX runtime no longer stops the
+// loader with a system error before the game can say anything. This loads it the way the
+// delay-load helper will (the same name and search order) and keeps it loaded, so the plugins bind
+// this module. Without it the renderer cannot start: one message box, then the process ends with
+// code 1. [RENDER] d3dx9_43.dll, the June 2010 runtime's D3DX (render milestone 15), in place of
+// retail's d3dx9_25.dll; effects compile with d3dcompiler_47.dll (RendDX9/FxCompiler.h).
 void requireD3dxRuntime()
 {
-    if (::LoadLibraryA("d3dx9_25.dll"))
+    if (::LoadLibraryA("d3dx9_43.dll"))
         return;
     ::MessageBoxA(0,
 #if defined(_WIN64)
-                  "The DirectX 9 runtime (d3dx9_25.dll, 64-bit) is missing; run the OpenBF2 installer "
+                  "The DirectX 9 runtime (d3dx9_43.dll, 64-bit) is missing; run the OpenBF2 installer "
 #else
-                  "The DirectX 9 runtime (d3dx9_25.dll, 32-bit) is missing; run the OpenBF2 installer "
+                  "The DirectX 9 runtime (d3dx9_43.dll, 32-bit) is missing; run the OpenBF2 installer "
 #endif
                   "or the Microsoft DirectX End-User Runtime.",
                   "OpenBF2", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);

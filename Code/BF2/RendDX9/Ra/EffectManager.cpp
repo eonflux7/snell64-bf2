@@ -1521,10 +1521,6 @@ bool rendererDeviceWasReset()
 }
 
 
-// Lazily loads D3DXCreateEffectCompiler from d3dx9_24.dll.
-// This local copy retains its module reference. Consolidate it with the permutator's
-// helper when that helper has a shared declaration and external linkage.
-
 #if defined(__APPLE__)
 // [CHOSEN, not recovered] Native compiler entry; no Win32 DLL recursion workaround.
 long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
@@ -1534,65 +1530,22 @@ long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
     return D3DXCreateEffectCompiler(srcData, srcDataLen, defines, include,
         static_cast<DWORD>(flags), compilerOut, parseErrorsOut);
 }
-#else
-typedef HRESULT (WINAPI* RaD3dxCreateEffectCompilerFn)(LPCSTR, UINT, CONST D3DXMACRO*,
-                                                       LPD3DXINCLUDE, DWORD,
-                                                       LPD3DXEFFECTCOMPILER*, LPD3DXBUFFER*);
-
-HMODULE                      s_raD3dxModule = 0;              // dword_1023E108
-RaD3dxCreateEffectCompilerFn s_raCreateEffectCompiler = 0;    // dword_1023E10C
-
-// [PERF] The lazy load on its own, so the effect prefetch can bind the entry point on the main
-// thread before its workers call raCreateEffectCompiler.
-bool raLoadEffectCompiler()
-{
-    if (!s_raD3dxModule)
-    {
-        s_raD3dxModule = ::LoadLibraryA("d3dx9_24.dll");
-        if (s_raD3dxModule)
-        {
-            s_raCreateEffectCompiler = reinterpret_cast<RaD3dxCreateEffectCompilerFn>(
-                ::GetProcAddress(s_raD3dxModule, "D3DXCreateEffectCompiler"));
-        }
-        if (!s_raD3dxModule || !s_raCreateEffectCompiler)
-        {
-            // The diagnostic retains its original DLL-name typo.
-            ::renddx9abi::logf("RaShaderPermutator.cpp:574: Failed to load D3DX9d_24.dll, we need "
-                               "this to avoid the April 2005 DxSDK bug(recursive call on parsing "
-                               "some .fx files (skinnedmesh.fx)");
-            return false;
-        }
-    }
-    return s_raCreateEffectCompiler != 0;
-}
-
-long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
-                            const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,
-                            ID3DXEffectCompiler** compilerOut, ID3DXBuffer** parseErrorsOut)
-{
-    if (!raLoadEffectCompiler())
-        return static_cast<long>(0x80004005);                 // E_FAIL, as the shipped body returns
-
-    return s_raCreateEffectCompiler(srcData, srcDataLen, defines, include, flags,
-                                    compilerOut, parseErrorsOut);
-}
 #endif
 
 
-// [RENDER] One effect compile: d3dcompiler_47 (FxCompiler.h) unless BF2_FX_COMPILER=d3dx, then
-// D3DX's CreateEffectCompiler + CompileEffect as retail. 0 and *blobOut on success; errors (may be
-// null) receives the compiler's messages either way. Any thread when d3dcompiler_47 is used.
+// [RENDER] One effect compile. Windows: d3dcompiler_47 (FxCompiler.h), in place of retail's
+// D3DXCreateEffectCompiler from d3dx9_24.dll; any thread. macOS: the native D3DX's compiler.
+// 0 and *blobOut on success; errors (may be null) receives the compiler's messages either way.
 long raCompileEffect(const char* source, unsigned int sourceLen, const D3DXMACRO* defines,
                      LPD3DXINCLUDE include, unsigned long flags, ID3DXBuffer** blobOut,
                      ID3DXBuffer** errors)
 {
     *blobOut = 0;
-    if (::dice::hfe::dx9rend::fxCompilerModern())
-    {
-        const long hr = ::dice::hfe::dx9rend::fxCompileEffect(source, sourceLen, 0, defines, include,
-                                                            flags, blobOut, errors);
-        return hr >= 0 && *blobOut ? 0 : (hr < 0 ? hr : static_cast<long>(0x80004005));
-    }
+#if !defined(__APPLE__)
+    const long hr = ::dice::hfe::dx9rend::fxCompileEffect(source, sourceLen, 0, defines, include,
+                                                        flags, blobOut, errors);
+    return hr >= 0 && *blobOut ? 0 : (hr < 0 ? hr : static_cast<long>(0x80004005));
+#else
     ID3DXEffectCompiler* compiler = 0;
     const long created = raCreateEffectCompiler(source, sourceLen, defines, include, flags,
                                                 &compiler, errors);
@@ -1610,6 +1563,7 @@ long raCompileEffect(const char* source, unsigned int sourceLen, const D3DXMACRO
         *blobOut = 0;
     }
     return hr != 0 ? hr : (*blobOut ? 0 : static_cast<long>(0x80004005));
+#endif
 }
 
 
@@ -1647,9 +1601,7 @@ long raPreprocessShader(const char*, unsigned int, const D3DXMACRO*, LPD3DXINCLU
     return static_cast<long>(0x80004001);                     // E_NOTIMPL
 }
 #else
-typedef HRESULT (WINAPI* RaD3dxPreprocessShaderFn)(LPCSTR, UINT, CONST D3DXMACRO*, LPD3DXINCLUDE,
-                                                   LPD3DXBUFFER*, LPD3DXBUFFER*);
-// d3dcompiler's D3DPreprocess. D3D_SHADER_MACRO, ID3DInclude and ID3DBlob have the layouts of
+// d3dcompiler_47's D3DPreprocess. D3D_SHADER_MACRO, ID3DInclude and ID3DBlob have the layouts of
 // D3DXMACRO, ID3DXInclude and ID3DXBuffer, so the D3DX types are passed through.
 typedef HRESULT (WINAPI* RaD3dPreprocessFn)(LPCVOID, SIZE_T, LPCSTR, CONST D3DXMACRO*, LPD3DXINCLUDE,
                                             LPD3DXBUFFER*, LPD3DXBUFFER*);
@@ -1657,29 +1609,14 @@ typedef HRESULT (WINAPI* RaD3dPreprocessFn)(LPCVOID, SIZE_T, LPCSTR, CONST D3DXM
 long raPreprocessShader(const char* srcData, unsigned int srcDataLen, const D3DXMACRO* defines,
                         LPD3DXINCLUDE include, ID3DXBuffer** textOut, ID3DXBuffer** errorsOut)
 {
-    // The compiler's module: D3DXPreprocessShader must expand exactly as its compiler does.
-    // Its own handle: sharing s_raD3dxModule made raCreateEffectCompiler skip resolving its entry
-    // point (it resolves only when it loads the module itself) and call null.
-    // [FIX] Wine's d3dx9_24 (like _25 and _26) does not export D3DXPreprocessShader, so the key
-    // was never computed and the cache never used under Wine. There it falls back to
-    // d3dcompiler_47's D3DPreprocess: the key only has to be a deterministic expansion of the
-    // effect through the same include handler and defines.
-    static RaD3dxPreprocessShaderFn d3dxPreprocess = 0;
-    static RaD3dPreprocessFn        d3dPreprocess = 0;
-    static bool                     resolved = false;
-    if (!resolved)
-    {
-        resolved = true;
-        if (const HMODULE module = ::LoadLibraryA("d3dx9_24.dll"))
-            d3dxPreprocess = reinterpret_cast<RaD3dxPreprocessShaderFn>(
-                ::GetProcAddress(module, "D3DXPreprocessShader"));
-        if (!d3dxPreprocess)
-            if (const HMODULE module = ::LoadLibraryA("d3dcompiler_47.dll"))
-                d3dPreprocess = reinterpret_cast<RaD3dPreprocessFn>(
-                    ::GetProcAddress(module, "D3DPreprocess"));
-    }
-    if (d3dxPreprocess)
-        return d3dxPreprocess(srcData, srcDataLen, defines, include, textOut, errorsOut);
+    // [FIX] Retail used d3dx9_24's D3DXPreprocessShader, which neither Microsoft's x64 build nor
+    // Wine's exports. The key only has to be a deterministic expansion of the effect through the
+    // same include handler and defines; the compiler's own preprocessor gives it.
+    static const RaD3dPreprocessFn d3dPreprocess = []() -> RaD3dPreprocessFn {
+        const HMODULE module = ::LoadLibraryA("d3dcompiler_47.dll");
+        return module ? reinterpret_cast<RaD3dPreprocessFn>(::GetProcAddress(module, "D3DPreprocess"))
+                      : 0;
+    }();
     if (d3dPreprocess)
         return d3dPreprocess(srcData, srcDataLen, 0, defines, include, textOut, errorsOut);
     return static_cast<long>(0x80004005);                     // E_FAIL
@@ -1724,7 +1661,7 @@ std::string raEffectContentKey(const char* source, unsigned int sourceLen, const
     }
     const unsigned int flagWord = static_cast<unsigned int>(flags);
     hash = raFnv1a(hash, &flagWord, sizeof(flagWord));
-    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;   // [RENDER]
+    const unsigned char compilerByte = 47;   // [RENDER] d3dcompiler_47 (retail keys had none)
     hash = raFnv1a(hash, &compilerByte, 1);
 
     char hex[17];
@@ -1912,8 +1849,8 @@ std::string raEffectSourceKey(const char* source, unsigned int sourceLen, const 
     hash = raFnv1a(hash, &flagWord, sizeof(flagWord));
     const unsigned char obfuscatedByte = obfuscated ? 1 : 0;
     hash = raFnv1a(hash, &obfuscatedByte, 1);
-    // [RENDER] The compiler: blobs from D3DX's and from d3dcompiler_47 never stand in for each other.
-    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;
+    // [RENDER] The compiler, d3dcompiler_47: blobs from D3DX's compiler never stand in for its.
+    const unsigned char compilerByte = 47;
     hash = raFnv1a(hash, &compilerByte, 1);
 
     char hex[18];
@@ -1932,7 +1869,7 @@ std::string raEffectSourceKey(const char* source, unsigned int sourceLen, const 
 // the key compileEffect computes, so its source, includes, defines and flags are the ones the
 // serial compile would see. The include watches the serial include handler registers are
 // registered from the list of files the worker opened. A job whose compile failed, or that asked
-// for a file it was not given, is dropped and the serial compile runs. Windows only; d3dcompiler_47 (FxCompiler.h) unless BF2_FX_COMPILER=d3dx.
+// for a file it was not given, is dropped and the serial compile runs. Windows only; d3dcompiler_47 (FxCompiler.h).
 namespace {
 
 // PE 0x100376C8: insert before registering, and ignore the returned resolved path.
@@ -2012,79 +1949,20 @@ bool g_raPrefetchStarted = false;
 std::set<std::string> g_raManifestNames;                  // main thread only
 bool g_raManifestRead = false;
 
-// D3DX's effect compiler runs one compile at a time per loaded module (8 threads on one module:
-// no faster than serial; on 8 copies: 4.6 times faster). Each worker therefore loads its own copy
-// of the module the main thread compiles with: the same file under another name in a temp
-// directory. Null when the copy cannot be made or loaded; the worker then uses the shared module.
-RaD3dxCreateEffectCompilerFn raLoadPrivateCompiler(unsigned int index)
-{
-    char source[MAX_PATH];
-    if (!s_raD3dxModule || !::GetModuleFileNameA(s_raD3dxModule, source, MAX_PATH))
-        return 0;
-    char directory[MAX_PATH];
-    const DWORD length = ::GetTempPathA(MAX_PATH, directory);
-    if (length == 0 || length > MAX_PATH - 40)
-        return 0;
-    ::strcat_s(directory, "openbf2-d3dx");
-    ::CreateDirectoryA(directory, 0);
-    char target[MAX_PATH];
-    ::sprintf_s(target, "%s\\d3dx9_24_w%u.dll", directory, index);
-    if (!::CopyFileA(source, target, FALSE))
-    {
-        // Another running game may hold the copy open; it is the same file if the size matches.
-        WIN32_FILE_ATTRIBUTE_DATA a, b;
-        if (!::GetFileAttributesExA(source, GetFileExInfoStandard, &a)
-            || !::GetFileAttributesExA(target, GetFileExInfoStandard, &b)
-            || a.nFileSizeLow != b.nFileSizeLow || a.nFileSizeHigh != b.nFileSizeHigh)
-            return 0;
-    }
-    const HMODULE module = ::LoadLibraryA(target);
-    return module ? reinterpret_cast<RaD3dxCreateEffectCompilerFn>(
-                        ::GetProcAddress(module, "D3DXCreateEffectCompiler"))
-                  : 0;
-}
-
-void raPrefetchCompile(RaPrefetchJob& job, RaD3dxCreateEffectCompilerFn create)
+void raPrefetchCompile(RaPrefetchJob& job)
 {
     ::dice::hfe::loadtrace::Scope trace("fx.worker", job.name.c_str());   // [DEV] BF2_LOAD_TRACE
     RaMemoryInclude include(job);
-    ID3DXEffectCompiler* compiler = 0;
+    ID3DXBuffer* blob = 0;
     ID3DXBuffer* errors = 0;
-    if (::dice::hfe::dx9rend::fxCompilerModern())   // [RENDER] d3dcompiler_47
-    {
-        ID3DXBuffer* blob = 0;
-        if (raCompileEffect(job.source.c_str(), static_cast<unsigned int>(job.source.size()),
-                            job.defines, &include, job.flags, &blob, &errors) == 0)
-            job.blob = blob;
-        if (errors)
-            errors->Release();
-        return;
-    }
-    const long created = create
-        ? create(job.source.c_str(), static_cast<UINT>(job.source.size()), job.defines, &include,
-                 job.flags, &compiler, &errors)
-        : raCreateEffectCompiler(job.source.c_str(), static_cast<unsigned int>(job.source.size()),
-                                 job.defines, &include, job.flags, &compiler, &errors);
-    if (created == 0 && compiler)
-    {
-        if (errors)
-        {
-            errors->Release();
-            errors = 0;
-        }
-        ID3DXBuffer* blob = 0;
-        if (compiler->CompileEffect(job.flags, &blob, &errors) == 0)
-            job.blob = blob;
-        else if (blob)
-            blob->Release();
-    }
-    if (compiler)
-        compiler->Release();
+    if (raCompileEffect(job.source.c_str(), static_cast<unsigned int>(job.source.size()),
+                        job.defines, &include, job.flags, &blob, &errors) == 0)
+        job.blob = blob;
     if (errors)
         errors->Release();
 }
 
-void raPrefetchWorker(RaPrefetchPool* pool, RaD3dxCreateEffectCompilerFn create)
+void raPrefetchWorker(RaPrefetchPool* pool)
 {
     for (;;)
     {
@@ -2095,7 +1973,7 @@ void raPrefetchWorker(RaPrefetchPool* pool, RaD3dxCreateEffectCompilerFn create)
             job = pool->queue.front();
             pool->queue.pop_front();
         }
-        raPrefetchCompile(*job, create);
+        raPrefetchCompile(*job);
         {
             std::lock_guard<std::mutex> lock(pool->mutex);
             job->done = true;
@@ -2112,21 +1990,10 @@ void raPrefetchQueue(RaPrefetchJob* job)
         unsigned int threads = std::thread::hardware_concurrency();
         threads = threads > 1 ? threads - 1 : 1;
         // [RENDER] d3dcompiler_47 runs compiles side by side in one module: a worker per core
-        // but the main thread's. D3DX's compiler needs a renamed copy of its module per worker.
-        const bool modern = ::dice::hfe::dx9rend::fxCompilerModern();
-        if (!modern && threads > 8)
-            threads = 8;
-        unsigned int privateCompilers = 0;
+        // but the main thread's.
         for (unsigned int i = 0; i < threads; ++i)
-        {
-            const RaD3dxCreateEffectCompilerFn create = modern ? 0 : raLoadPrivateCompiler(i);
-            privateCompilers += create ? 1 : 0;
-            std::thread(raPrefetchWorker, g_raPrefetchPool, create).detach();
-        }
-        ::fprintf(stderr, "[EFFECTPREFETCH] %u worker threads, %s\n", threads,
-                  modern ? "d3dcompiler_47"
-                         : (privateCompilers == threads ? "each with its own D3DX compiler module"
-                                                         : "some sharing D3DX's compiler module"));
+            std::thread(raPrefetchWorker, g_raPrefetchPool).detach();
+        ::fprintf(stderr, "[EFFECTPREFETCH] %u worker threads, d3dcompiler_47\n", threads);
         ::fflush(stderr);
     }
     g_raPrefetchJobs[job->name] = job;
@@ -2376,7 +2243,7 @@ ID3DXBuffer* EffectManager::compileEffectSource(const char* source, unsigned int
     {
         // sub_1003C610 - the lazily-bound D3DXCreateEffectCompiler in d3dx9_24.dll, with `pInclude`
         // set to this object's +0x44 sub-object, whose +0x00 is the off_101E139C include table.
-        // [RENDER] d3dcompiler_47 instead (raCompileEffect).
+        // [RENDER] d3dcompiler_47 instead on Windows (raCompileEffect).
         blob = 0;
         if (raCompileEffect(source, sourceLen, defines, reinterpret_cast<LPD3DXINCLUDE>(m_sub),
                             *flags, &blob, errors) != 0)
@@ -2712,7 +2579,7 @@ void* EffectManager::compileEffect(const std::string& name, int unused, void** e
                 raSeedManifest(cacheDirectory, manifestPath, listed);
         }
         raNoteManifest(manifestPath, name);
-        if (!g_raPrefetchStarted && raLoadEffectCompiler())
+        if (!g_raPrefetchStarted && ::dice::hfe::dx9rend::fxCompilerAvailable())
         {
             g_raPrefetchStarted = true;
             ::dice::hfe::loadtrace::Scope prepTrace("fx.prefetch", "queue");   // [DEV] BF2_LOAD_TRACE

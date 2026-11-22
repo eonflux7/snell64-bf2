@@ -7,7 +7,6 @@
 #include "FxCompiler.h"
 
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -32,17 +31,11 @@ D3DCompileFn compileEntry()
 {
     // Resolved once; LoadLibrary and the static's initialisation are thread-safe.
     static const D3DCompileFn entry = []() -> D3DCompileFn {
-        const char* const choice = std::getenv("BF2_FX_COMPILER");
-        if (choice && ::_stricmp(choice, "d3dx") == 0)
-        {
-            std::fprintf(stderr, "[FXCOMPILER] BF2_FX_COMPILER=d3dx: D3DX's effect compiler\n");
-            return 0;
-        }
         const HMODULE module = ::LoadLibraryA("d3dcompiler_47.dll");
         const D3DCompileFn fn = module
             ? reinterpret_cast<D3DCompileFn>(::GetProcAddress(module, "D3DCompile")) : 0;
         std::fprintf(stderr, fn ? "[FXCOMPILER] d3dcompiler_47 D3DCompile fx_2_0\n"
-                                : "[FXCOMPILER] d3dcompiler_47.dll not loaded: D3DX's effect compiler\n");
+                                : "[FXCOMPILER] d3dcompiler_47.dll not loaded: effects do not compile\n");
         std::fflush(stderr);
         return fn;
     }();
@@ -86,7 +79,7 @@ ID3DXBuffer* withoutDeprecation(ID3DXBuffer* messages)
 
 } // anonymous namespace
 
-bool fxCompilerModern()
+bool fxCompilerAvailable()
 {
     return compileEntry() != 0;
 }
@@ -117,7 +110,7 @@ long fxCompileEffect(const char* source, unsigned int sourceSize, const char* so
     return hr;
 }
 #else
-bool fxCompilerModern()
+bool fxCompilerAvailable()
 {
     return false;
 }

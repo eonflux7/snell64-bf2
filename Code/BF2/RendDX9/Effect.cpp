@@ -1560,7 +1560,7 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
     for (std::size_t i = 0; i + 1 < macros.size(); ++i)
         definesHash = fxsFnv(definesHash, macros[i], ::strlen(macros[i]) + 1);
     definesHash = fxsFnv(definesHash, &flags, sizeof flags);
-    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;   // [RENDER]
+    const unsigned char compilerByte = 47;   // [RENDER] d3dcompiler_47
     definesHash = fxsFnv(definesHash, &compilerByte, 1);
     const unsigned long long sourceHash = fxsFnv(definesHash, source, sourceSize);
     const std::string cachePath = fxsCachePath(path, definesHash);
@@ -1574,11 +1574,10 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
     {
         ::dice::hfe::loadtrace::Scope trace("fx.src.compile", path);   // [DEV] BF2_LOAD_TRACE
         FxsRecordingInclude recording(include);
-        ID3DXEffectCompiler* compiler = 0;
         ID3DXBuffer* messages = 0;
         HRESULT hr;
         bool clean;
-        if (::dice::hfe::dx9rend::fxCompilerModern())
+#if !defined(__APPLE__)
         {
             // [RENDER] d3dcompiler_47 (FxCompiler.h). Its warnings differ from D3DX's (the X3206
             // truncations D3DX did not report), so a successful compile counts as clean.
@@ -1590,8 +1589,9 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
                 ::fprintf(stderr, "[FXCOMPILER] %s: hr=0x%08lx %.600s\n", path, static_cast<unsigned long>(hr),
                           messages ? static_cast<const char*>(messages->GetBufferPointer()) : "");
         }
-        else
+#else
         {
+            ID3DXEffectCompiler* compiler = 0;
             hr = D3DXCreateEffectCompiler(static_cast<const char*>(source), sourceSize,
                                           reinterpret_cast<const D3DXMACRO*>(macros.data()),
                                           &recording, flags, &compiler, &messages);
@@ -1601,6 +1601,7 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
                 compiler->Release();
             clean = hr >= 0 && blob && (!messages || messages->GetBufferSize() <= 1);
         }
+#endif
         if (messages)
             messages->Release();
         if (!clean)

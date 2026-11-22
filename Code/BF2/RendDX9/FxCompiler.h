@@ -2,7 +2,7 @@
 // D3DX's effect compiler (render milestone 15, docs/lanes/render.md#15-shader-pipeline).
 // The April 2005 compiler in d3dx9_24/25 takes 20 to 30 times as long on the renderer's shaders
 // and runs one compile at a time per loaded module; D3DCompile may be called from any thread.
-// D3DXCreateEffect loads its output as it loads D3DX's. BF2_FX_COMPILER=d3dx keeps D3DX's compiler.
+// D3DXCreateEffect (d3dx9_43) loads its output as it loads D3DX's.
 #pragma once
 
 #include "../../RendDX9Abi/D3dx9Sdk.h"
@@ -11,8 +11,8 @@ namespace dice {
 namespace hfe {
 namespace dx9rend {
 
-// True when D3DCompile is used: d3dcompiler_47.dll loaded and BF2_FX_COMPILER is not "d3dx".
-bool fxCompilerModern();
+// True when d3dcompiler_47.dll loaded. Without it no effect compiles; cached ones still load.
+bool fxCompilerAvailable();
 
 // Compiles effect source to an effect binary for D3DXCreateEffect. flags are D3DXSHADER_* bits;
 // effect-only bits (D3DXFX_NOT_CLONEABLE, D3DXFX_LARGEADDRESSAWARE) are dropped. include has

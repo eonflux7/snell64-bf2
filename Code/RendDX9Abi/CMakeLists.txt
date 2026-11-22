@@ -13,9 +13,10 @@ include("${PROJECT_SOURCE_DIR}/Code/Build/plugin_common.cmake")
 set(_abi "${_code}/RendDX9Abi")
 set(_out "${CMAKE_BINARY_DIR}/renddx9")
 
-# ---- D3DX: the April 2005 DirectX SDK, or the .def fallback (Code/Build/dxsdk.cmd, same rules) -------
-# BF2_D3DX (environment): auto (default) takes the SDK when present, else the fallback; sdk requires
-# it; def forces the fallback.
+# ---- D3DX: d3dx9_43 through the .def fallback, or the April 2005 DirectX SDK ---------------------------
+# BF2_D3DX (environment): auto (default) and def link d3dx9_43.dll, the June 2010 runtime's D3DX,
+# through D3dx9_43.def and the fallback headers (render milestone 15); sdk requires the April 2005
+# SDK and links its d3dx9.lib, which binds retail's d3dx9_25.dll (retail-parity builds only).
 set(_d3dx_mode "$ENV{BF2_D3DX}")
 if(NOT _d3dx_mode)
     set(_d3dx_mode auto)
@@ -24,7 +25,7 @@ if(NOT _d3dx_mode MATCHES "^(auto|sdk|def)$")
     message(FATAL_ERROR "RendDX9: BF2_D3DX must be auto, sdk or def (is \"${_d3dx_mode}\")")
 endif()
 set(_dxsdk "")
-if(NOT _d3dx_mode STREQUAL "def")
+if(_d3dx_mode STREQUAL "sdk")
     set(_candidates)
     if(DEFINED ENV{DXSDK_DIR})
         file(TO_CMAKE_PATH "$ENV{DXSDK_DIR}" _dxsdk_env)
@@ -46,14 +47,16 @@ if(NOT _d3dx_mode STREQUAL "def")
             set(_dxsdk "${_try}")
         endif()
     endforeach()
-    if(NOT _dxsdk AND _d3dx_mode STREQUAL "sdk")
+    if(NOT _dxsdk)
         message(FATAL_ERROR "RendDX9: BF2_D3DX=sdk but no April 2005 DirectX SDK was found (docs/archive/building.md, \"DirectX SDK\")")
     endif()
 endif()
 if(_dxsdk)
     message(STATUS "RendDX9: DirectX SDK ${_dxsdk} (D3DX 25, ${_machine})")
+    set(_d3dx_dll d3dx9_25.dll)
 else()
-    message(STATUS "RendDX9: no DirectX SDK - D3DX from Code/RendDX9Abi/D3dx9_25.def and D3dxFallbackInclude")
+    message(STATUS "RendDX9: no DirectX SDK - D3DX from Code/RendDX9Abi/D3dx9_43.def and D3dxFallbackInclude")
+    set(_d3dx_dll d3dx9_43.dll)
 endif()
 
 # ---- shared by both images ----------------------------------------------------------------------------
@@ -88,8 +91,8 @@ endif()
 if(_dxsdk)
     set(_d3dx_lib "${_dxsdk}/Lib/${_machine}/d3dx9.lib")
 else()
-    _bf2_implib(d3dx9_25 "${_abi}/D3dx9_25.def")
-    set(_d3dx_lib "${_libdir}/d3dx9_25.lib")
+    _bf2_implib(d3dx9_43 "${_abi}/D3dx9_43.def")
+    set(_d3dx_lib "${_libdir}/d3dx9_43.lib")
 endif()
 add_custom_target(bf2_plugin_implibs DEPENDS ${_implibs})
 
@@ -134,7 +137,7 @@ target_compile_definitions(bf2_textureatlas_native PRIVATE
     BF2_IMAGE_TEXTUREATLASBUILDER DEDICATED=0 WIN32 _WINDOWS NDEBUG
     _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 target_include_directories(bf2_textureatlas_native PRIVATE ${_d3dx_includes})
-# No d3d9.lib: the device arrives through create(). d3dx9_25.dll is delay-loaded, as in RendDX9.
+# No d3d9.lib: the device arrives through create(). The D3DX DLL is delay-loaded, as in RendDX9.
 target_link_libraries(bf2_textureatlas_native PRIVATE "${_d3dx_lib}" kernel32.lib delayimp.lib)
 if(_dxsdk)
     # DxErr9.lib is a VC7.1 object: its DXTrace needs __vsnprintf and MessageBox, which /OPT:REF drops.
@@ -142,7 +145,7 @@ if(_dxsdk)
         "${_dxsdk}/Lib/${_machine}/DxErr9.lib" legacy_stdio_definitions.lib user32.lib)
 endif()
 target_link_options(bf2_textureatlas_native PRIVATE
-    /OPT:REF /OPT:ICF /DELAYLOAD:d3dx9_25.dll legacy_stdio_float_rounding.obj)
+    /OPT:REF /OPT:ICF /DELAYLOAD:${_d3dx_dll} legacy_stdio_float_rounding.obj)
 if(NOT BF2_BUILD_X64)
     # x86: the shipped base, and the .def that pins the twelve exports to the shipped ordinals. x64 exports
     # the same twelve names through the dllexport classes in ITextureAtlas.h.
@@ -150,7 +153,7 @@ if(NOT BF2_BUILD_X64)
         "/DEF:${_abi}/TextureAtlasBuilderExports.def")
 endif()
 bf2_plugin_abicheck(bf2_textureatlas_native textureatlasbuilder "${_tab_out}"
-    "-DFALLBACK=${_fallback}" "-DABI=${_abi}")
+    "-DFALLBACK=${_fallback}" "-DABI=${_abi}" "-DD3DX_DLL=${_d3dx_dll}")
 
 # ---- RendDX9.dll: renddx9.cmd ----------------------------------------------------------------------
 # The G2w seam flavour stays with the script (root CMakeLists.txt).
@@ -208,12 +211,12 @@ if(BF2_BUILD_X64)
 endif()
 
 # ---- link: the script's STEP 3 ---------------------------------------------------------------------
-# d3dx9_25.dll is delay-loaded, so a missing (or 32-bit only) D3DX reaches BF2Render::init's message box
+# The D3DX DLL is delay-loaded, so a missing (or 32-bit only) D3DX reaches BF2Render::init's message box
 # instead of failing this DLL's load. TextureAtlasBuilder.dll is a static import, as in retail.
 target_link_libraries(bf2_renddx9_native PRIVATE
     "${_d3dx_lib}" ${_renddx9_implibs} kernel32.lib user32.lib gdi32.lib d3d9.lib delayimp.lib)
 target_link_options(bf2_renddx9_native PRIVATE
-    /DELAYLOAD:d3dx9_25.dll)
+    /DELAYLOAD:${_d3dx_dll})
 if(NOT _dxsdk)
     # Effect.cpp asks for the SDK's dxerr9.lib by #pragma; the fallback compiles DxErr9StandIn.cpp.
     target_link_options(bf2_renddx9_native PRIVATE /NODEFAULTLIB:dxerr9.lib)
@@ -224,4 +227,5 @@ if(NOT BF2_BUILD_X64)
 endif()
 
 # ---- the script's STEP 4: the image's ABI invariants, checked on every link ------------------------
-bf2_plugin_abicheck(bf2_renddx9_native renddx9 "${_out}" "-DFALLBACK=${_fallback}" "-DABI=${_abi}")
+bf2_plugin_abicheck(bf2_renddx9_native renddx9 "${_out}" "-DFALLBACK=${_fallback}" "-DABI=${_abi}"
+    "-DD3DX_DLL=${_d3dx_dll}")

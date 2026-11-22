@@ -303,12 +303,10 @@ const char* fxGetElementString(ID3DXEffectCompiler* fx, D3DXHANDLE handle, unsig
 }
 
 
-// Lazily uses d3dx9_24.dll to avoid compiler recursion in the April 2005 D3DX version.
-// The failure diagnostic retains its original debug-DLL spelling.
-
-#if defined(__APPLE__)
-// [CHOSEN, not recovered] Native compiler entry; no Win32 DLL recursion workaround.
-// PE 0x1003C610; platform D3DX entry selection below.
+// PE 0x1003C610: retail loaded D3DXCreateEffectCompiler lazily from d3dx9_24.dll, to avoid a
+// recursion in the April 2005 compiler on some .fx files. [RENDER] The linked D3DX's entry instead
+// (d3dx9_43 on Windows, render milestone 15): it only reflects the .mfx metadata, which has no
+// shader functions; the variants it generates compile with d3dcompiler_47.
 long createEffectCompiler(const char* srcData, unsigned int srcDataLen,
     const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,
     ID3DXEffectCompiler** compilerOut, ID3DXBuffer** parseErrorsOut)
@@ -316,40 +314,6 @@ long createEffectCompiler(const char* srcData, unsigned int srcDataLen,
     return D3DXCreateEffectCompiler(srcData, srcDataLen, defines, include,
         static_cast<DWORD>(flags), compilerOut, parseErrorsOut);
 }
-#else
-typedef HRESULT (WINAPI* D3dxCreateEffectCompilerFn)(LPCSTR, UINT, CONST D3DXMACRO*,
-                                                     LPD3DXINCLUDE, DWORD,
-                                                     LPD3DXEFFECTCOMPILER*, LPD3DXBUFFER*);
-
-HMODULE s_d3dxModule = 0;                       // dword_1023E108
-D3dxCreateEffectCompilerFn s_createEffectCompiler = 0;   // dword_1023E10C
-
-// PE 0x1003C610
-long createEffectCompiler(const char* srcData, unsigned int srcDataLen,
-                          const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,
-                          ID3DXEffectCompiler** compilerOut, ID3DXBuffer** parseErrorsOut)
-{
-    if (!s_d3dxModule)
-    {
-        s_d3dxModule = ::LoadLibraryA("d3dx9_24.dll");
-        if (s_d3dxModule)
-        {
-            s_createEffectCompiler = reinterpret_cast<D3dxCreateEffectCompilerFn>(
-                ::GetProcAddress(s_d3dxModule, "D3DXCreateEffectCompiler"));
-        }
-        if (!s_d3dxModule || !s_createEffectCompiler)
-        {
-            ::renddx9abi::logf("RaShaderPermutator.cpp:574: Failed to load D3DX9d_24.dll, we need "
-                               "this to avoid the April 2005 DxSDK bug(recursive call on parsing "
-                               "some .fx files (skinnedmesh.fx)");
-            return static_cast<long>(0x80004005);   // E_FAIL, as the shipped body returns
-        }
-    }
-
-    return s_createEffectCompiler(srcData, srcDataLen, defines, include, flags,
-                                  compilerOut, parseErrorsOut);
-}
-#endif
 
 
 // The three text passes' patterns, transcribed verbatim from the image. Each is constructed with

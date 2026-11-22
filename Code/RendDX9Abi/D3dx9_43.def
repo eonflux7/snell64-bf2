@@ -1,0 +1,55 @@
+; [RENDER] Import-library definition for d3dx9_43.dll, the June 2010 DirectX runtime's D3DX and
+; the last one: what the Ninja build's RendDX9.dll and TextureAtlasBuilder.dll link (render
+; milestone 15, docs/lanes/render.md#15-shader-pipeline). D3dx9_25.def stays for the scripts'
+; retail-parity builds; BF2_D3DX=sdk links the April 2005 SDK's d3dx9.lib (d3dx9_25.dll) instead.
+;
+; The same names as D3dx9_25.def; each is a d3dx9_43.dll export. Every COM interface the renderer
+; declares (Platform/Gfx/D3DX9Subset.h, D3dx9Fallback.h) is a leading part of its June 2010
+; declaration: the later SDKs only appended methods (ID3DXEffect after SetStateManager,
+; ID3DXEffectCompiler after CompileEffect, ID3DXMesh after OptimizeInplace,
+; ID3DXRenderToSurface after EndScene). On x86, D3dx9Fallback.h maps each decorated __stdcall
+; reference (_Name@bytes) onto the plain name this library defines.
+
+LIBRARY d3dx9_43.dll
+EXPORTS
+    D3DXAssembleShader
+    D3DXComputeBoundingBox
+    D3DXComputeBoundingSphere
+    D3DXComputeNormals
+    D3DXConvertMeshSubsetToSingleStrip
+    D3DXCreateBox
+    D3DXCreateBuffer
+    D3DXCreateCylinder
+    D3DXCreateEffect
+    D3DXCreateEffectCompiler
+    D3DXCreateEffectPool
+    D3DXCreateLine
+    D3DXCreateMesh
+    D3DXCreateMeshFVF
+    D3DXCreatePolygon
+    D3DXCreateRenderToSurface
+    D3DXCreateSphere
+    D3DXCreateTexture
+    D3DXCreateTextureFromFileExA
+    D3DXCreateTextureFromFileInMemory
+    D3DXCreateTorus
+    D3DXDisassembleEffect
+    D3DXFillTexture
+    D3DXFilterTexture
+    D3DXFloat32To16Array
+    D3DXGetImageInfoFromFileA
+    D3DXGetImageInfoFromFileInMemory
+    D3DXGetShaderConstantTable
+    D3DXGetShaderVersion
+    D3DXLoadSurfaceFromMemory
+    D3DXLoadSurfaceFromSurface
+    D3DXMatrixInverse
+    D3DXMatrixLookAtLH
+    D3DXMatrixMultiply
+    D3DXMatrixOrthoLH
+    D3DXMatrixRotationZ
+    D3DXMatrixScaling
+    D3DXMatrixTranslation
+    D3DXMatrixTranspose
+    D3DXSaveSurfaceToFileA
+    D3DXSaveTextureToFileA

@@ -5,13 +5,17 @@
 #   cmake -DPLUGIN=renddx9|textureatlasbuilder|swiffplayer|bf2audio -DDUMPBIN=<dumpbin.exe> -DDLL=<dll>
 #         -DARCH=x64|x86 -DFALLBACK=ON|OFF -DABI=<Code/RendDX9Abi> -DWORK=<dir>
 #         -P Code/Build/plugin_abicheck.cmake
-# FALLBACK (no DirectX SDK) and ABI are read by the D3DX users, renddx9 and textureatlasbuilder.
+# FALLBACK (no DirectX SDK), ABI and D3DX_DLL (the D3DX the image links; default d3dx9_25.dll, the
+# scripts' retail-parity builds) are read by the D3DX users, renddx9 and textureatlasbuilder.
 foreach(_v PLUGIN DUMPBIN DLL ARCH WORK)
     if(NOT DEFINED ${_v})
         message(FATAL_ERROR "plugin_abicheck.cmake: -D${_v} is required")
     endif()
 endforeach()
 file(MAKE_DIRECTORY "${WORK}")
+if(NOT DEFINED D3DX_DLL)
+    set(D3DX_DLL d3dx9_25.dll)
+endif()
 
 function(_dumpbin out)
     execute_process(COMMAND "${DUMPBIN}" /nologo ${ARGN} "${DLL}"
@@ -72,17 +76,17 @@ macro(_require_shared_heap)
         _fail("native shared CRT heap MISSING")
     endif()
 endmacro()
-# Retail imports d3dx9_25.dll; another D3DX DLL means another effect compiler. Delay-loaded here.
+# The D3DX the build chose (retail: d3dx9_25.dll; the Ninja build: d3dx9_43.dll), delay-loaded.
 macro(_require_d3dx25)
-    _require(_deps_lower "d3dx9_25.dll" "d3dx9_25.dll MISSING - D3DX must be the April 2005 generation")
-    _require(_deps_lower "delay load dependencies" "d3dx9_25.dll NOT delay-loaded")
+    _require(_deps_lower "${D3DX_DLL}" "${D3DX_DLL} MISSING - the image must link the D3DX the build chose")
+    _require(_deps_lower "delay load dependencies" "${D3DX_DLL} NOT delay-loaded")
     if(FALLBACK)
-        # The fallback's import names must be d3dx9_25.dll's plain export names: a decorated name links
+        # The fallback's import names must be the DLL's plain export names: a decorated name links
         # and then fails to load with ERROR_PROC_NOT_FOUND.
-        _dumpbin(_d3dx /imports:d3dx9_25.dll)
+        _dumpbin(_d3dx /imports:${D3DX_DLL})
         string(REGEX MATCH "D3DX[A-Za-z0-9_]*@" _decorated "${_d3dx}")
         if(_decorated)
-            _fail("d3dx9_25.dll import names DECORATED (${_decorated}...)")
+            _fail("${D3DX_DLL} import names DECORATED (${_decorated}...)")
         endif()
     endif()
 endmacro()
@@ -157,7 +161,7 @@ elseif(PLUGIN STREQUAL "textureatlasbuilder")
     foreach(_fn D3DXCreateTexture D3DXCreateTextureFromFileExA D3DXGetImageInfoFromFileA
                 D3DXLoadSurfaceFromSurface D3DXSaveTextureToFileA)
         if(NOT _imports MATCHES "[ \t]${_fn}[ \t]*(\r?\n|$)")
-            _fail("d3dx9_25 ${_fn} import MISSING")
+            _fail("${D3DX_DLL} ${_fn} import MISSING")
         endif()
     endforeach()
 
