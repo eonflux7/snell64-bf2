@@ -170,10 +170,11 @@ double clamp01(double v) { return v < 0.0 ? 0.0 : v > 1.0 ? 1.0 : v; }
 double remap(double v, double a, double b, double c, double d) { return c + (v - a) / (b - a) * (d - c); }
 
 // Dagor's get_cloud_shape (generate_clouds2.dshl): Perlin dilated by Worley, eroded by three
-// Worley octaves; dilation 0.3, erosion 1, gamma 1.25.
+// Worley octaves; dilation 0.3, erosion 1, gamma 1.25. Five Perlin octaves, not seven: the
+// texture holds 128 texels across, and the sixth and seventh (128 and 256 cells) only alias.
 double cloudShape(double x, double y, double z)
 {
-    const double perlin = clamp01(remap(perlinFbm(x, y, z, 4, 7, 11u), -0.9, 0.9, 0.0, 1.0));
+    const double perlin = clamp01(remap(perlinFbm(x, y, z, 4, 5, 11u), -0.9, 0.9, 0.0, 1.0));
     const double wr = worley3(x, y, z, 7, 21u);
     const double wg = worley3(x, y, z, 6, 31u), wb = worley3(x, y, z, 11, 41u), wa = worley3(x, y, z, 23, 51u);
     const double perlinWorley = remap(perlin, (1.0 - wr) * 0.3, 1.0, 0.0, 1.0);
