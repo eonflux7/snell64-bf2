@@ -630,6 +630,7 @@ void panoramaStep(void* effect)
     float c[8][4];
     fillConstants(c, s.panoInputs, 0);
     fillPanoramaConstants(c, s.panoInputs, s.panoSeconds);
+    c[4][1] = static_cast<float>(s.panoramas % 64);   // the march's jitter changes per panorama
     float atmosphere[16][4];
     rendererAtmosphereConstants(atmosphere);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
