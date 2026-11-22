@@ -112,6 +112,34 @@ void report(const char* operation)
     std::fflush(stderr);
 }
 
+// [CHOSEN, not recovered] Fullscreen display mode for a client size (issue #36). On Windows a
+// fullscreen IDirect3DDevice9::Reset with new back-buffer dimensions changes the display mode, and
+// the swapchain follows. DXVK's SDL3 WSI (3.1.1) applies a mode only when it enters fullscreen;
+// a later Reset records the mode (setWindowMode) without applying it, and each Present sizes the
+// Vulkan swapchain from SDL_GetWindowSizeInPixels. An SDL exclusive-fullscreen window keeps the
+// pixel size of its fullscreen mode (Wayland emulates the smaller modes with a viewport), so the
+// engine's 800x600 start mode stayed the swapchain size after the switch to the panel's
+// 1280x800: the back buffer was scaled down into it and the compositor scaled that up again.
+// The host owns the window and applies the mode itself whenever the client size changes while
+// fullscreen; the refresh rate is SDL's default for the display.
+void applyFullscreenMode(SDL_Window* window, int width, int height)
+{
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+    SDL_DisplayMode mode;
+    if (!display || !SDL_GetClosestFullscreenDisplayMode(display, width, height, 0.0f, true, &mode)) {
+        report("closest fullscreen mode");
+        return;
+    }
+    const SDL_DisplayMode* current = SDL_GetWindowFullscreenMode(window);
+    if (current && current->displayID == mode.displayID && current->w == mode.w && current->h == mode.h &&
+        current->pixel_density == mode.pixel_density && current->refresh_rate == mode.refresh_rate)
+        return;
+    if (!SDL_SetWindowFullscreenMode(window, &mode)) { report("fullscreen mode"); return; }
+    std::fprintf(stderr, "[SDL host] fullscreen mode %dx%d@%.2fHz for client %dx%d\n",
+                 mode.w, mode.h, static_cast<double>(mode.refresh_rate), width, height);
+    std::fflush(stderr);
+}
+
 struct Cursor
 {
     std::vector<SDL_Cursor*> frames;
@@ -408,6 +436,7 @@ bool ClientHost::createWindow(const HostWindowDesc& desc)
                                      SDL_WINDOW_VULKAN | (desc.fullscreen ? SDL_WINDOW_FULLSCREEN : 0) |
                                      (m_impl->scriptedFocus ? SDL_WINDOW_NOT_FOCUSABLE : 0));
     if (!m_impl->window) { report("create window"); return false; }
+    if (desc.fullscreen) applyFullscreenMode(m_impl->window, desc.width, desc.height);
     m_impl->width = desc.width;
     m_impl->height = desc.height;
     m_impl->hidden = desc.hideCursor;
@@ -445,7 +474,10 @@ void ClientHost::setTitle(const std::string& title) { if (hasWindow() && !SDL_Se
 void ClientHost::resizeClient(int width, int height)
 {
     if (!hasWindow() || width <= 0 || height <= 0) return;
-    if (!isFullscreen() && !SDL_SetWindowSize(m_impl->window, width, height)) { report("resize"); return; }
+    if (isFullscreen()) {
+        applyFullscreenMode(m_impl->window, width, height);
+        if (!SDL_SyncWindow(m_impl->window)) report("sync fullscreen mode");
+    } else if (!SDL_SetWindowSize(m_impl->window, width, height)) { report("resize"); return; }
     m_impl->width = width;
     m_impl->height = height;
     m_impl->dispatch([=](IHostEventListener& listener) { listener.onResize(width, height, false); });
@@ -453,6 +485,7 @@ void ClientHost::resizeClient(int width, int height)
 void ClientHost::setFullscreen(bool fullscreen)
 {
     if (!hasWindow()) return;
+    if (fullscreen) applyFullscreenMode(m_impl->window, m_impl->width, m_impl->height);
     if (!SDL_SetWindowFullscreen(m_impl->window, fullscreen)) { report("fullscreen"); return; }
     if (!fullscreen && !SDL_SetWindowSize(m_impl->window, m_impl->width, m_impl->height)) report("restore window size");
 }

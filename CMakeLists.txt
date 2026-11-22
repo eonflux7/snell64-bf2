@@ -2447,7 +2447,7 @@ if(BF2_LINUX_CLIENT)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         DEPENDS bf2_native_vtable_check bf2_meme_dispatch_check
             bf2_linux_forward_contract bf2_linux_fx_runtime bf2_linux_fx_compiler bf2_linux_fx_equivalence bf2_linux_fx_packed_colors
-            bf2_linux_d3dx_cpu bf2_linux_d3dx_assembly bf2_linux_host_check bf2_linux_cursor_check bf2_native_host_keymap bf2_linux_audio_check
+            bf2_linux_d3dx_cpu bf2_linux_d3dx_assembly bf2_linux_host_check bf2_linux_cursor_check bf2_linux_fullscreen_check bf2_native_host_keymap bf2_linux_audio_check
             bf2_linux_openal_check bf2_linux_plugin_contract bf2_linux_profile_check bf2_linux_path_check
             bf2_linux_swiff_image_check
             ${BF2_LINUX_NUMERIC_CHECKS}

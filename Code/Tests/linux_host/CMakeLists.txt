@@ -13,7 +13,8 @@ set(BF2_HOST_TEST_SOURCES
     "${BF2_HOST_TEST_ROOT}/Platform/macOS/MacSystem.cpp")
 add_executable(bf2_linux_host_check main.cpp input_layout.cpp ${BF2_HOST_TEST_SOURCES})
 add_executable(bf2_linux_cursor_check cursor.cpp ${BF2_HOST_TEST_SOURCES})
-foreach(target bf2_linux_host_check bf2_linux_cursor_check)
+add_executable(bf2_linux_fullscreen_check fullscreen.cpp ${BF2_HOST_TEST_SOURCES})
+foreach(target bf2_linux_host_check bf2_linux_cursor_check bf2_linux_fullscreen_check)
     target_compile_features(${target} PRIVATE cxx_std_14)
     target_compile_definitions(${target} PRIVATE DEDICATED=0 BF2_LINUX_CLIENT=1)
     target_compile_options(${target} PRIVATE "-include${BF2_HOST_TEST_ROOT}/Core/BuildConfig.h")
@@ -23,6 +24,12 @@ target_link_options(bf2_linux_cursor_check PRIVATE
     "-Wl,--wrap=SDL_CreateColorCursor" "-Wl,--wrap=SDL_CreateSystemCursor"
     "-Wl,--wrap=SDL_DestroyCursor" "-Wl,--wrap=SDL_SetCursor"
     "-Wl,--wrap=SDL_ShowCursor" "-Wl,--wrap=SDL_HideCursor")
+target_link_options(bf2_linux_fullscreen_check PRIVATE
+    "-Wl,--wrap=SDL_CreateWindow" "-Wl,--wrap=SDL_GetClosestFullscreenDisplayMode"
+    "-Wl,--wrap=SDL_SetWindowFullscreenMode" "-Wl,--wrap=SDL_GetWindowFullscreenMode")
+add_test(NAME linux_host_fullscreen COMMAND bf2_linux_fullscreen_check)
+set_tests_properties(linux_host_fullscreen PROPERTIES ENVIRONMENT
+    "SDL_VIDEODRIVER=dummy;BF2_INPUT_SCRIPT=;BF2_CAPTURE_DIR=")
 add_test(NAME linux_host_cursor COMMAND bf2_linux_cursor_check)
 set_tests_properties(linux_host_cursor PROPERTIES ENVIRONMENT
     "SDL_VIDEODRIVER=dummy;BF2_INPUT_SCRIPT=;BF2_CAPTURE_DIR=")
