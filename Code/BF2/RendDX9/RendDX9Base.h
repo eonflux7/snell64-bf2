@@ -912,7 +912,7 @@ struct CloudsInfo
     float coverage, seconds, baseM, topM, lwc, dropletUm;
     float noiseMs, weatherMs;
     unsigned int buildFrames, builds;
-    IDirect3DTexture9* panorama;        // the newest complete, 1024 x 512 A16B16G16R16F; 0 none
+    IDirect3DTexture9* panorama;        // the newest complete, 2048 x 1024 A16B16G16R16F; 0 none
     unsigned int panoramas;             // drawn so far
     IDirect3DTexture9* nearResolved;    // the near clouds' last resolve, A16B16G16R16F; 0 none
     float nearDistance;                 // m, renderer.cloudNear

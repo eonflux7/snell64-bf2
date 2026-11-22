@@ -770,7 +770,7 @@ bool toolsWriteClouds(const char* base, const char*& message)
     // The panorama (task 3): decoded (rgb / (1 - luminance)), the light it adds and its
     // transmittance; per band of elevation, the mean transmittance and the cloud share.
     Table pano;
-    if (readTable(c.panorama, pano, why) && pano.w == 1024 && pano.h == 512)
+    if (readTable(c.panorama, pano, why) && pano.w == 2 * pano.h)
     {
         std::fprintf(f, "[panorama] %u drawn; rows by elevation (deg): mean transmittance | share < 0.5 | "
                         "mean added luminance\n", c.panoramas);

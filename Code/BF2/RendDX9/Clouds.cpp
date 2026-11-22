@@ -20,9 +20,9 @@
 //             transmittance toward the sun at the last scattering octave's extinction, g the
 //             ambient's visibility from above (sky), b from below (ground)
 //
-// Task 3 (contract 14): the panorama, 1024 x 512 A16B16G16R16F over the upper hemisphere from the
+// Task 3 (contract 14): the panorama, 2048 x 1024 A16B16G16R16F over the upper hemisphere from the
 // level's origin (RaCloudPanorama.fxh), marched through the live set by technique RaCloudPanorama
-// a band of 64 rows a frame. Three in a ring: the sky (rendererCloudsBindSky) blends the previous
+// a band of 128 rows a frame. Three in a ring: the sky (rendererCloudsBindSky) blends the previous
 // and the newest complete one by the progress of the one being drawn, so a new panorama fades in
 // over the 8 frames the next one takes (Dagor's daSkiesPanorama). Each is blended into the newest
 // complete one (weight kPanoHistoryWeight), so its march's jitter averages out across panoramas
@@ -84,7 +84,7 @@ const unsigned int kLightAtlas = kLightXz * kLightTiles;                    // 2
 const double kWorldSize = 65536.0;   // m, the tiled weather world
 const double kRebuildSeconds = 10.0;
 const unsigned int kFieldTilesPerFrame = 2, kLightTilesPerFrame = 8;
-const unsigned int kPanoW = 1024, kPanoH = 512, kPanoBands = 8;             // RaCloudPanorama.fxh
+const unsigned int kPanoW = 2048, kPanoH = 1024, kPanoBands = 8;             // RaCloudPanorama.fxh
 const double kPlanetRadius = 6360000.0;   // m, the atmosphere's ground radius (Atmosphere.cpp)
 const double kPanoReach = 150000.0;       // m: the march stops here (full haze near the horizon)
 const double kDetailTileM = 1500.0;       // m: the detail noise's tile

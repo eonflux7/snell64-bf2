@@ -309,7 +309,7 @@ later (owner); until then it is measured, not capped.
   daSkies2, below): Perlin-Worley shape and erosion noise, the cloud light table and sky as
   ambient, aerial perspective. Near clouds are marched from the camera per screen pixel at reduced
   resolution with temporal reprojection, stopped at the scene's depth; far ones come from a
-  cloud panorama (about 1024x512; the 192x108 sky-view table is too coarse for cloud edges),
+  cloud panorama (2048x1024, read with a Catmull-Rom filter; the 192x108 sky-view table is too coarse for cloud edges),
   updated over several frames, drifting with the wind. Each panorama is blended into the previous
   one (weight 0.25) with a march offset that moves per panorama, so its jitter averages out
   instead of showing as grain about five screen pixels across, changing every 8 frames. The marches are real loops: unrolled, the
@@ -447,13 +447,13 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   low coverage they bunch in one ~20 km weather region (Dagor's weather frequency, 2 per world).
   `tools.clouds` dumps every volume.
 - *The panorama* (`Clouds.cpp`, `RaClouds.fx` technique `RaCloudPanorama`, `RaCloudPanorama.fxh`,
-  contracts 14–15), the far field since task 4. 1024x512 `A16B16G16R16F` over the whole sphere
+  contracts 14–15), the far field since task 4. 2048x1024 `A16B16G16R16F` over the whole sphere
   seen from the camera's position, latched at a panorama's first band, past the handoff distance
   (`renderer.cloudNear`): u the azimuth, v 0.5 + 0.5 sign(e) sqrt(|e| / 90°) for the elevation e
   (row 0 the nadir, the horizon halfway), finer toward the horizon. Below the horizon it holds
   clouds only while the camera is inside or above the slab (`physics.airDensityZeroAtHeight` is
   10 km in PR, so jets reach both presets' slabs). rgb the light the clouds and the air in front of them add, stored as
-  rgb / (1 + luminance); a the clouds' transmittance. Drawn a band of 64 rows a frame into a ring
+  rgb / (1 + luminance); a the clouds' transmittance. Drawn a band of 128 rows a frame into a ring
   of three, each from the volume set and time latched at its first band (a build waits rather
   than overwrite the set a panorama reads); the sky (`RaSky`) blends the previous and the newest
   by the next one's progress, so a panorama fades in over 8 frames, in the compressed space, and
@@ -753,7 +753,7 @@ and add its row here.
 | 11 | One light (render milestone 11, task 8): the atmosphere's sun at the ground (`RaAtmosphere[9]`, the sky, disc and haze) is the surfaces' sun, the authored colour^2.2 x 2^2.2; the sky is physical under it, unscaled (the sky gain is gone, `RaAtmosphere[4].w` is 1); `RaSkySH` and the sky cube are in those units, unscaled, so a shader uses them as they are next to `Ra_SunIrradiance` |
 | 12 | Water reflections (render milestone 11, task 12): just before the water queue draws, above water, with this frame's prepass, the scene colour is copied into a single-sample texture of its size and format on the reserved sampler s12 (bilinear, clamp), and pixel register c191 is `RaWaterSsr` (1, 1 / width, 1 / height, 0); zero otherwise and after the water. While water draws, s15 holds the opaque linear depth only (water's own goes to the multisampled target, resolved later) |
 | 13 | Sky clouds' volumes (render milestone 12, task 2): effect `Shaders/RaClouds`, techniques `RaCloudBuildField`, `RaCloudBuildCoarse`, `RaCloudBuildLight`, drawn by the engine (`Clouds.cpp`) a viewport per atlas tile into its own targets; parameters by semantic `RaClouds` (`float4[8]`: field world origin, size; slab base, top; toward the sun, LWC at density 1; droplet diameter, mid layer's density, shape tiles), `RaCloudWeather`, `RaCloudShape`, `RaCloudDetail` (volume textures), `RaCloudField`, `RaCloudCoarse`, `RaCloudLight`. Layouts in the shaders' `RaCloudField.fxh` and below |
-| 14 | Sky clouds' panorama (render milestone 12, task 3): technique `RaCloudPanorama` in `Shaders/RaClouds`, drawn by the engine a band of rows at a time into its own targets, with `RaClouds` [4].y a jitter seed and [5]–[7] the panorama's (observer, drift, high cloud, wind; layout in the effect), `RaAtmosphere` rows 0–10 (camera rows zero), `RaSkyViewTable`, `RaCloudLightTable`. `RaSky` gets `RaSkyClouds` (`float4`: x the newest panorama's weight, y 1 while live) and `RaCloudPanoramaOld`, `RaCloudPanoramaNew` (1024x512 `A16B16G16R16F`, linear, u wrapping); layout and decoding in the shaders' `RaCloudPanorama.fxh` |
+| 14 | Sky clouds' panorama (render milestone 12, task 3): technique `RaCloudPanorama` in `Shaders/RaClouds`, drawn by the engine a band of rows at a time into its own targets, with `RaClouds` [4].y a jitter seed and [5]–[7] the panorama's (observer, drift, high cloud, wind; layout in the effect), `RaAtmosphere` rows 0–10 (camera rows zero), `RaSkyViewTable`, `RaCloudLightTable`. `RaSky` gets `RaSkyClouds` (`float4`: x the newest panorama's weight, y 1 while live) and `RaCloudPanoramaOld`, `RaCloudPanoramaNew` (2048x1024 `A16B16G16R16F`, linear, u wrapping); layout and decoding in the shaders' `RaCloudPanorama.fxh` |
 | 15 | Reachable clouds (render milestone 12, task 4): `RaClouds` grows to 20 float4s ([8] the observer's x, z, the reference height and the handoff distance; [9]–[18] the near passes'; layout in `RaClouds.fx`), and [5].z is the observer's (camera's) y. The panorama covers the whole sphere from the camera (`RaCloudPanorama.fxh`). Techniques `RaCloudNear` (two targets), `RaCloudNearResolve`, `RaCloudNearComposite` with `RaCloudNearCurrent`, `RaCloudNearDepth`, `RaCloudNearHistory`, and the scene's linear depth on s15 |
 
 Samplers 9–13 and 15 are reserved for renderer frame resources, and pixel registers
