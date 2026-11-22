@@ -753,7 +753,7 @@ const unsigned int kWaterSceneSampler = 12;
 // cascades, drawn each frame before the depth prepass (rendererWaterFrame) into three 256 x 256
 // A16B16G16R16F slope maps with mips (slope x, slope z and their squares). rendererWaterBindWaves
 // binds them to kWaterWaveSampler .. + 2 (16x anisotropic, wrap) for the water queue and returns
-// true, then RaWaterSsr.w is 1. renderer.waterWaves 0 leaves retail's normal volume;
+// true, then RaWaterSsr.w is 1 (0 before the first frame builds them: a flat plane);
 // renderer.waterWind (m/s) and renderer.waterFetch (km) set the sea, the level's WaterScroll its
 // direction. The targets go at a device reset.
 const unsigned int kWaterWaveSampler = 6;
@@ -770,7 +770,6 @@ void rendererWaterFrame();
 bool rendererWaterBindWaves();
 void rendererWaterUnbindWaves();
 void rendererWaterRelease();
-bool& rendererWaterWavesEnabled();
 float& rendererWaterWind();
 float& rendererWaterFetch();
 void rendererWaterSceneBegin();

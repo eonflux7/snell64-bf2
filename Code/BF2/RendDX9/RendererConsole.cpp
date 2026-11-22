@@ -1470,10 +1470,7 @@ void setCloudNear(float value) { rendererCloudNearDistance() = clampf(value, 0.0
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudNear, float, true, getCloudNear(), setCloudNear, 0.0f, 40000.0f,
                                  kRendererConsoleTag)
 
-// [RENDER] Water's waves (render milestone 16): the FFT ocean on or retail's normal volume, and its sea.
-bool getWaterWaves() { return rendererWaterWavesEnabled(); }
-void setWaterWaves(bool value) { rendererWaterWavesEnabled() = value; }
-BF2_CONSOLE_PROPERTY_FN(waterWaves, bool, true, getWaterWaves(), setWaterWaves, kRendererConsoleTag)
+// [RENDER] Water's waves (render milestone 16): the FFT ocean's sea.
 float getWaterWind() { return rendererWaterWind(); }
 void setWaterWind(float value) { rendererWaterWind() = clampf(value, 1.0f, 30.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterWind, float, true, getWaterWind(), setWaterWind, 1.0f, 30.0f,
@@ -1506,7 +1503,6 @@ const char* rendererVariableHelp(const char* name)
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
-        { "waterWaves", "Water's waves from an FFT ocean spectrum; 0 retail's tiled normal volume" },
         { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
         { "waterFetch", "Water's waves: the fetch, how far the wind has blown over water, km (1-1000)" },
         { "waterFoam", "Water's foam on the crests: times the whitecap coverage measured for the wind (0-4); 0 none" },

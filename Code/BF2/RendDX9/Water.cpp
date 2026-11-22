@@ -109,7 +109,6 @@ struct Wind
 
 struct State
 {
-    bool enabled;
     float windSpeed, fetchKm;
     // CPU-built spectrum.
     std::thread thread;
@@ -150,7 +149,6 @@ State& st()
     if (!g_state)
     {
         g_state = new State();
-        g_state->enabled = true;
         g_state->windSpeed = 7.0f;
         g_state->fetchKm = 60.0f;
         g_state->foamScale = 1.0f;
@@ -540,7 +538,6 @@ void logFoamCoverage()
 
 } // namespace
 
-bool& rendererWaterWavesEnabled() { return st().enabled; }
 float& rendererWaterFoam() { return st().foamScale; }
 float& rendererWaterWind() { return st().windSpeed; }
 float& rendererWaterFetch() { return st().fetchKm; }
@@ -550,7 +547,7 @@ void rendererWaterFrame()
     State& s = st();
     s.ready = false;
     s.foamReady = false;
-    if (!device() || !s.enabled || !geom::terrain())
+    if (!device() || !geom::terrain())
         return;
     if (!s.started)
     {

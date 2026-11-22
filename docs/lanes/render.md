@@ -610,8 +610,9 @@ As built:
   Each frame: the spectrum at t (frequencies rounded to whole cycles of 1000 s, so t wraps without a
   jump), 16 Stockham passes over a 768 x 256 `A32B32G32R32F` pair, then each cascade's slopes and
   their squares into its mipmapped map (mips by `StretchRect`); 20 draws and 24 blits. The water
-  shader sums the three slopes into its normal. `renderer.waterWaves` (1; 0 retail's normal
-  volume), `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
+  shader sums the three slopes into its normal; retail's tiled normal volume (`WaterMap`,
+  `WaterMapFrame0`/`1`) is no longer read, and before the first frame the water is a flat plane.
+  `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
   the level's `WaterScroll`, +x when it has none. The Falklands at the defaults: significant height
   1.17 m, mean square slope 0.026. Geometry stays flat (owner, 2026-11-22: normals only for now).
 - *Filtered normals and the sun path* (task 3). The slope maps hold the slopes along and across the
@@ -625,7 +626,7 @@ As built:
   The sun's highlight is anisotropic GGX over the slopes about the flat surface, centred on the
   mean slope, α² = 2σ², height-correlated Smith masking, Schlick's Fresnel at F0 0.02, times the
   sun's irradiance (`Ra_SunIrradiance`, as every surface) and visibility; the retail Blinn
-  highlight with the level's `SpecularColor` stays only under water and with `renderer.waterWaves 0`.
+  highlight with the level's `SpecularColor` stays only under water.
 - *Rough reflections* (task 3, owner 2026-11-22: keep them physical). The same variance is the
   reflection's roughness (α² = 2σ², the two axes' geometric mean): the sky cube read at its mip,
   the screen-space hit read from the scene copy's mip whose texels are the reflected cone's width
