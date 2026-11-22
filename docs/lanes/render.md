@@ -363,27 +363,41 @@ Taken ahead of milestone 12 (owner, 2026-11-22): every later milestone edits sha
 after a shader edit took about 10 minutes on test_bootcamp. Goal: as little shader compiling as
 possible, at load and after an edit.
 
-Measured before the milestone (test_bootcamp `gpm_cq 16`, every effect stale): 426 s of the load was
-the main thread waiting for 611 Ra effects compiling on 8 workers (6.3 s each on average, 20 s at
-most, 3,872 s in all), and about 100 s more was `compileEffectFile` compiling `particles`,
-`roadcompiled`, `trail`, undergrowth and the rest on the main thread. The time is D3DX's April 2005
-effect compiler (`d3dx9_24`, `d3dx9_25`): the same bundled-mesh permutation takes 17.4 s there and
-0.56 s with `d3dcompiler_47` (fx_2_0). All 586 Ra permutations (bm 448, sm 24, stm 114) compile with
-`d3dcompiler_47` in 21 s on 12 threads in one module, and `d3dx9_25`'s `D3DXCreateEffect` loads
-every result with the same parameters, and all 1,489 techniques validate. `d3dx9_43` (PR's own
-RendDX9 links it) brings only the 2010 `d3dcompiler_43`, so it is not used.
+Before: with every effect stale, 426 s of the test_bootcamp load was the main thread waiting for 611
+Ra effects compiling on 8 workers (6.3 s each on average, 3,872 s in all), and about 100 s more was
+`compileEffectFile` (`particles`, `roadcompiled`, `trail`, undergrowth) on the main thread. The time
+was D3DX's April 2005 effect compiler (`d3dx9_24`, `d3dx9_25`): one bundled-mesh permutation took
+17.4 s there and 0.56 s with `d3dcompiler_47`. `d3dx9_43` (PR's own RendDX9 links it) would bring only
+the 2010 `d3dcompiler_43`, so it is not used.
 
-Tasks:
-1. `d3dcompiler_47` compiles every effect (`FxCompiler.cpp`): Ra effects on the main thread and on
-   the prefetch workers (a worker per core but one, no module copies), and `compileEffectFile`.
-   The compiler is part of both cache keys. `BF2_FX_COMPILER=d3dx` keeps D3DX's compiler until
-   acceptance. D3DX stays the effect runtime; its compiler reads the `.mfx` metadata only.
-2. Measure a cold load and an edit cycle; decide from them whether an offline shader pack (all
-   permutations built before launch, only changed ones rebuilt) is still worth building.
-3. Fewer permutations: flags that only add a texture fetch become runtime branches or default
-   textures, keyed by the renderer's material classes.
-4. Decided last: whether D3DX effects give way to plain vertex and pixel shaders with the
-   renderer's own parameter and state binding.
+Built:
+1. `d3dcompiler_47` (`D3DCompile`, fx_2_0) compiles every effect (`FxCompiler.cpp`): Ra effects on
+   the main thread and on the prefetch workers (a worker per core but one, all in one module), and
+   `compileEffectFile`. D3DX stays the effect runtime: `d3dx9_25`'s `D3DXCreateEffect` loads the
+   output (all 586 Ra permutations, bm 448, sm 24, stm 114: the same parameters, all 1,489 techniques
+   valid), and its compiler only reads the `.mfx` metadata. The compiler is part of both cache keys.
+   `d3dcompiler_47` refuses a parameter named like a technique, which D3DX allowed (`skydome.fx`,
+   `postproduction_nv3x.fx`: the parameters were renamed; the engine finds them by semantic).
+   `BF2_FX_COMPILER=d3dx` keeps D3DX's compiler until acceptance. The client needs Microsoft's x64
+   `d3dcompiler_47.dll` beside BF2.exe (the Windows SDK redistributable; Wine's builtin is vkd3d,
+   not fxc); without it the D3DX compiler is used.
+2. `rashaderbm.fx`'s depth techniques read the lit pass's alpha without its lighting
+   (`PS_BundledMesh_Alpha`): the 448 bm permutations compile in 134 s instead of 196 s of CPU. The
+   same split in `rashaderstm.fx` saved 5 % and was not kept.
+
+Measured (test_bootcamp `gpm_cq 16`, launch to in game): every effect stale 30 s (about 10 minutes
+before), after an edit to `rashaderbm.fx` 22 s, nothing stale 17 s. The compiles run during the
+level's console scripts (`part:Objects`); the main thread waits for them for under a second.
+
+Decided from these numbers (2026-11-22):
+- No offline shader pack. Building every permutation before launch would save at most the 5 s an
+  edit to the bm shader costs, and would need Ra's permutation generation and cache key outside
+  the game.
+- No permutation collapse for now. Merging the bm flags that only add a texture fetch needs
+  per-draw material constants in the draw path for the same 5 s. Worth it if a shader family's
+  compile grows again.
+- Plain vertex and pixel shaders in place of D3DX effects: owner's decision; compile time is not a
+  reason (the same compiler, the same shaders).
 
 ### 12. Clouds
 
@@ -841,6 +855,9 @@ After the deletion: 8.39 / 8.48 (another load on the machine during the run), 15
 ## Effect cache
 
 Ra effects are cached as `.cfx` files per mod (`Documents/Battlefield 2/mods/<mod>/cache`;
-retail shared one cache across mods). A cache entry is keyed by an FNV hash of the preprocessed
-source and its defines (`.cfx.key`), so editing an included header invalidates every effect that
-includes it. The effect preprocessor loads its own D3DX handle.
+retail shared one cache across mods). An entry is keyed (`.cfx.key`) by an FNV hash of the source,
+every file reachable through its `#include` lines, the defines, the flags and the compiler, so
+editing an included header invalidates every effect that includes it. `effects.lst` lists the
+effects a level asked for; at a level's first effect compile the stale ones compile on worker
+threads ([perf-load.md](perf-load.md#state)). Effects compiled by `compileEffectFile` are cached the
+same way under `cache/fxsrc/`. Both compile with `d3dcompiler_47` ([milestone 15](#15-shader-pipeline)).

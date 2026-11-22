@@ -1932,7 +1932,7 @@ std::string raEffectSourceKey(const char* source, unsigned int sourceLen, const 
 // the key compileEffect computes, so its source, includes, defines and flags are the ones the
 // serial compile would see. The include watches the serial include handler registers are
 // registered from the list of files the worker opened. A job whose compile failed, or that asked
-// for a file it was not given, is dropped and the serial compile runs. Windows only (the compiler entry is resolved from d3dx9_24.dll).
+// for a file it was not given, is dropped and the serial compile runs. Windows only; d3dcompiler_47 (FxCompiler.h) unless BF2_FX_COMPILER=d3dx.
 namespace {
 
 // PE 0x100376C8: insert before registering, and ignore the returned resolved path.

@@ -73,8 +73,9 @@ main thread asked for the effects.
   bytecode and read or inflate files; every device call stays on the main thread.
 - Console scripts, template creation and Python run in order and change global state. They stay
   serial; only the file work under them can move to other threads.
-- D3DX's effect compiler runs one compile at a time per loaded module, so parallel compiles need a
-  renamed copy of the module per worker.
+- Effects compile with `d3dcompiler_47`, which runs compiles side by side in one module (render
+  milestone 15). Under `BF2_FX_COMPILER=d3dx`, D3DX's compiler runs one compile at a time per loaded
+  module, so each worker gets a renamed copy of it.
 
 ## State
 
@@ -89,6 +90,7 @@ with the caches and prefetch off). Every change below was accepted in game and i
 | Ra cache key falls back to `D3DPreprocess` under Wine | `fix` | Filled cache: 186 s to 37 s |
 | Ra cache key from source and includes, no preprocessor | `perf` | Keys 16.6 s to 2.2 s per load |
 | Ra effect prefetch: stale effects in `effects.lst` compile on 8 workers | `perf` | Full recompile 186 s to 31 s |
+| Effects compile with `d3dcompiler_47`, a worker per core but one (render milestone 15) | `render` | test_bootcamp, every effect stale: about 10 min to 30 s |
 | `effects.lst` appended to, not replaced (it held one name); a new cache directory seeds it from the newest sibling's | `perf` | Not yet measured |
 | Each include file's info looked up once per frame (`FXSTAT`) | `perf` | −4.2 s (menu switch and Geometries) |
 | Bytecode cache for `compileEffectFile`, `@HOME@/<mod>/cache/fxsrc/` (`FXSRC`) | `perf` | Boot to menu 10.6 s to 8.75 s |

@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built); 15 (shader pipeline) in progress, task 1 built | Milestone 15 task 2, then 11 task 10 | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
+| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built); 15 (shader pipeline) built, awaiting the owner | Milestone 11 task 10, static meshes | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -59,6 +59,10 @@ Tasks:
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
+- Shader pipeline (render milestone 15, [render.md](lanes/render.md#15-shader-pipeline)): effects
+  compile with `d3dcompiler_47`. test_bootcamp to in game: every effect stale 30 s (was about 10
+  min), after a bm shader edit 22 s, warm 17 s; views `gloss`, `gloss2`, `glass` unchanged. Open:
+  plain shaders in place of D3DX effects (owner's call). `BF2_FX_COMPILER=d3dx` goes at acceptance.
 - Atmosphere tab (`tools.atmosphere`, milestone 11 task 2).
 - Sky cube (milestone 11 task 7): `tools.atmosphere NAME` writes `NAME-skycube.png` (faces across,
   mips down) on Muttrah City; nothing in the scene reads it until task 8.
