@@ -360,6 +360,10 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
   1–2 km overhead). The 65 km tiling may show toward the horizon (a ray through a deck at 2 km
   runs over 100 km): checked in the prototype, a coarser far field if it does. Dagor's droplet phase
   (`clouds_droplet_phase.hlsli`) and octave setup can be ported with attribution.
+- **High cloud as a flat layer.** Cirrus, cirrocumulus and cirrostratus are too thin to shadow
+  themselves and finer than a 128 m field holds: like Dagor's strata layer (`strata_clouds.dshl`),
+  they are a procedural layer at their altitude (streaks along the wind and shear), drawn into the
+  same panorama with the same phase function and sky light. The volumes carry low and mid cloud.
 - **Not done:** a coarse atmospheric simulation at load (Goswami and Neyret 2017; Vimont et al.
   2020) writing the weather map. Its gain is clouds tied to terrain (sea breezes, ridge caps), which
   a sky at infinity does not show; reconsidered only if a mountain level looks wrong. Full cloud

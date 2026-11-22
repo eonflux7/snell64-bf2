@@ -27,7 +27,7 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started
 3. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
    slabs, genera and heights; per-cell life phase; the density field and the sun-transmittance and
    ambient volume as 2D slice atlases, rendered by pixel shaders over frames; an ⅛ field for empty
-   space.
+   space; high cloud (Ci/Cc/Cs) as a procedural flat layer at its altitude.
 4. Cloud panorama (about 1024x512, updated over frames) marching the baked atlases with detail
    noise at sample time, ambient from the sky-view table, aerial perspective; drawn behind the sky.
    Coverage console variable.
