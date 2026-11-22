@@ -679,23 +679,58 @@ As built:
 
 ### 13. HDR bloom + auto-exposure
 
-An energy-conserving bloom without threshold, and exposure that adapts between interiors and open
-terrain, both before the frame grade. The tonemap's output dithered before its 8-bit encode: the sky's dark blue
-bands without it (milestone 11). Bloom spreads the sun disc (luminance capped at 100) into its glare. Night layers need it: with the fixed exposure (then −1.25 stops; 0 since 2026-11-21)
-The Falklands night terrain reaches the tonemap at about 0.0155, and Khronos Neutral's toe
-(6.25·x² below 0.08) shows it at 5/255, where retail drew about 30/255. The adaptation needs an
-upper limit so night stays dark (about retail's level), and the toe may need softening for what
-stays below 0.08. Night particles (milestone 7) are checked here, on The Falklands night layer
-(`gpm_cq 32`), once night exposure is settled.
+Proposed 2026-11-22 (agent), for the owner's decision. Today the frame grade (`realitygrade.fxh`,
+FSQuadDrawer pass 0) takes the linear scene at a fixed 0 stops, through Khronos PBR Neutral, to a
+plain 2.2 encode, undithered. Everything here runs in that pass or just before it, on the resolved
+single-sample float scene, in pixel shaders (D3D9 has no compute). Thermals and the debug views
+bypass all of it: the TIS encode is not a radiance. Under water it all applies.
 
-The compressed (Karis) resolve, moved here from milestone 10 (owner, 2026-11-20), decided by an A/B
-once auto-exposure runs: at a window seen from a dark interior and at foliage against the sky. It
-pays only where an edge's samples straddle the tonemap's shoulder, which at the fixed exposure
-(0 stops since 2026-11-21) is little beyond the sky and specular glints (milestone
-11 handles those). Cost found in a first attempt: every scene pixel shader encodes through a flag
-in an engine-owned pixel register, the resolve expands in the depth rebuild's full-screen pass, and
-every pass blending before the resolve (decals, particles, water, first-person transparents,
-additive light passes) blends compressed values, with additive sums clamped at the expansion.
+1. **Dither and the encode.** Triangular-PDF noise of one 8-bit step added after the tonemap,
+   before quantising: the sky's dark blue and the sun's glare band without it (milestone 11). Blue
+   noise from a 64x64 tile, offset each frame, would hide better; a hash costs nothing to ship.
+   The encode becomes the sRGB curve the rest of the pipeline decodes with (check: the shaders
+   decode `colour^2.2`, so this goes with whatever the owner sees as darker shadows).
+2. **Scene luminance.** A 64-bin log-luminance histogram of the scene, without readback: the scene
+   down to 256x128 (log2 luminance in one channel), then 32 K points drawn with vertex texture
+   fetch, each additively into its bin of a 64x1 `R32F` target (the D3D9 form of a compute
+   histogram; Frostbite, Unreal). Range −14 to +10 stops. Metering: the mean of the bins between
+   the 50th and 95th percentile (the sky's sun and the darkest corners left out), centre-weighted.
+   Cost estimate: under 0.1 ms at 1080p.
+3. **Auto-exposure.** A 1x1 `R32F` ping-pong holds the adapted luminance; each frame moves it
+   toward the metered value exponentially, faster into light (≈ 3 /s) than into dark (≈ 1 /s),
+   frame-rate independent. Exposure = key / adapted, as compensation in stops around 0.18 grey,
+   clamped to a range: the upper limit is what keeps night dark (about retail's 30/255 on The
+   Falklands' night layer, where the terrain reaches the tonemap at 0.0155 now and the Neutral
+   toe draws it at 5/255); the toe softened only if the clamp alone cannot. The grade reads the
+   exposure from the 1x1 texture; particle emissives (`FX_PARTICLE_EMISSIVE`) read it too.
+   Console: `renderer.exposure` (auto 1 / manual 0, the A/B until acceptance),
+   `renderer.exposureBias` (stops), `renderer.exposureMin`/`Max` (stops), `renderer.exposureSpeed`.
+   A level change and a device reset snap to the metered value, no fade from black.
+4. **Bloom.** Energy-conserving, no threshold (Jimenez, *Next Generation Post Processing in Call
+   of Duty: Advanced Warfare*, 2014): the scene down a 6-level chain with the 13-tap filter, the
+   first level Karis-averaged against fireflies, back up with a 3x3 tent, each level added to the
+   one above; the result mixed into the scene at a few percent before exposure, so it is light
+   scattered in the lens, not added light. The sun disc (luminance capped at 100) becomes its
+   glare, bright windows and muzzle flashes their halo, with nothing tuned per source. It drops
+   retail's `Glow` post pass (the glow materials' blur into the frame) and with it the sky's glow
+   pass; checked first that nothing else draws into the glow target. Console:
+   `renderer.bloom` (0 off), `renderer.bloomStrength`. Cost estimate: 0.2–0.3 ms at 1080p.
+5. **Night.** With exposure running: The Falklands night layer (`gpm_cq 32`) against retail's
+   brightness, the toe if needed; night particles (milestone 7) checked there.
+6. **Compressed (Karis) resolve: decided by A/B** (moved here from milestone 10, owner,
+   2026-11-20): at a window seen from a dark interior and at foliage against the sky. It pays only
+   where an edge's samples straddle the tonemap's shoulder, which auto-exposure makes more common
+   (an interior exposed up puts the window far past it). Cost found in a first attempt: every
+   scene pixel shader encodes through a flag in an engine-owned pixel register, the resolve
+   expands in the depth rebuild's full-screen pass, and every pass blending before the resolve
+   (decals, particles, water, first-person transparents, additive light passes) blends compressed
+   values, with additive sums clamped at the expansion. Dropped if the A/B shows no gain.
+7. **Judged by eye** on Muttrah City (street to open ground), Fallujah West (interiors), Saaremaa,
+   The Falklands (water glitter, night); GPU cost with the final GPU pass.
+
+Order: 1 alone (small, visible); 2 and 3 together (the meter is only seen through the exposure);
+4; 5 and 6 need 3. A `tools.exposure` dump writes the histogram, the metered and adapted values
+and the exposure per frame, to check 2–3 by.
 
 ### 14. GTAO + lightmap channel ownership
 

@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted; 12 (clouds) paused | Milestone 16 (water): tasks done; acceptance cleanup | [render.md](lanes/render.md#16-water) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): proposed | [render.md](lanes/render.md#16-water) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -14,28 +14,18 @@ design and as-built facts live in the lane's document, the story in commit messa
 | `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
 | `fix` | G–O, Q, R fixed | A, C–F open (packaging, build) | [fix.md](lanes/fix.md) |
 
-## Current: `render` milestone 16, water
+## Current: `render` milestone 13, HDR bloom and auto-exposure
 
-Planned (owner, 2026-11-22; [render.md](lanes/render.md#16-water)); as built there.
+Proposed (agent, 2026-11-22), awaiting the owner's decision; the design and each task's detail in
+[render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
 
-1. The ring around the camera (the lightmap's sun term read as visibility past the cascades) and
-   the reflections' streaks (false hits behind thin objects): built (agent: The Falklands,
-   views `wy316` toward the sun, `wy136` the islands, clouds off).
-2. Wave spectrum: three FFT cascades on the GPU (`Water.cpp`, contract 17; `renderer.waterWaves`,
-   `waterWind`, `waterFetch`): built (agent: The Falklands `wy316`, `wlow`; animates).
-3. Filtered normals (LEAN) and a GGX sun lobe from the slope variance: built (agent: The Falklands
-   `wy316`, `wlow`; a smooth glitter path, no sparkle up close), and rough reflections from the
-   same variance (agent: `wy136`, `wy316`, `wlow` A/B, clouds off). The far sea reads green until
-   task 4's body; the path clips to white until milestone 13's tonemapping.
-4. The water body: refraction, depth from the scene, absorption and in-scatter, crest light: built
-   (agent: The Falklands `wy136`, `wlow`, `wy316` against task 3, clouds off; the crest light not
-   seen yet, it wants a low sun). Found on the way: fix R (16 KB pixel shader buffer).
-5. Foam at shores and on crests: built (agent: The Falklands `wlow` at 7 and 15 m/s, `wy136`, `wshore`
-   (the small island zoomed), `whigh`, `wy316`; `renderer.waterFoam` 0 for none); reworked after
-   the owner's look for tiling and aliasing.
-6. Geometry: normals only for now (owner, 2026-11-22).
-7. Judged by eye on The Falklands and Saaremaa: done (owner, 2026-11-22). GPU cost with the final
-   GPU pass. Left for acceptance: delete `renderer.waterWaves 0` (retail's normals) and its path.
+1. Dither after the tonemap (and the encode's curve).
+2. Scene luminance: a log histogram by vertex-texture scatter, percentile metering.
+3. Auto-exposure: adapted luminance on the GPU, clamped; `renderer.exposure*`; `tools.exposure`.
+4. Bloom: Jimenez's down/up chain, no threshold; drops retail's `Glow` pass.
+5. Night: The Falklands night layer against retail; night particles.
+6. Compressed (Karis) resolve, by A/B.
+7. Judged by eye; GPU cost with the final GPU pass.
 
 ## Paused: `render` milestone 12, clouds
 
