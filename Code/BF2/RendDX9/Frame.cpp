@@ -187,6 +187,7 @@ const DWORD kLinearDepthSampler = 15;
 float g_sunCascadeConstants[kSunCascadeVec4s * 4] = {};   // RASM for this frame's world view
 float g_aerialConstants[8] = {};    // RaAerial, RaAerialHaze for this frame's world view
 const float kNoSunCascades[kSunCascadeVec4s * 4] = {};
+float g_cloudShadowConstants[kCloudShadowVec4s * 4] = {};   // RaCloudShadow for this frame's world view
 bool g_sunCascadesLive = false;     // RASM is published: the world pass or its transparents draw
 bool g_softParticleDepth = false;   // s15 holds this frame's prepass depth and the world pass draws
 // Milestone 8, transparent depth rebuild.
@@ -219,6 +220,7 @@ void publishSunCascadeConstants(bool zero)
         return;
     stateManagerSetSunCascadeConstants(zero ? kNoSunCascades : g_sunCascadeConstants);
     stateManagerSetAerial(zero ? kNoSunCascades : g_aerialConstants);
+    stateManagerSetCloudShadow(zero ? kNoSunCascades : g_cloudShadowConstants);
 }
 
 // The linear depth targets for the scene depth `depth`: same size, same sample count.
@@ -286,6 +288,9 @@ void rendererBindParticleLighting(void* effect)
     effectGetShaderParameterBorrowedTyped(fx, kDir)->setValue(&towardSun, 0);
     effectGetShaderParameterBorrowedTyped(fx, kCascades)->setValue(
         g_sunCascadesLive ? g_sunCascadeConstants : kNoSunCascades, kSunCascadeVec4s);
+    static const std::string kCloudShadow("RaCloudShadow");
+    effectGetShaderParameterBorrowedTyped(fx, kCloudShadow)->setValue(
+        g_sunCascadesLive ? g_cloudShadowConstants : kNoSunCascades, kCloudShadowVec4s);
     static const std::string kSkySh("RaSkyShVertex");
     effectGetShaderParameterBorrowedTyped(fx, kSkySh)->setValue(rendererSkyShFrame(), kSkyShVec4s);
     // The atlas as a texture parameter: D3DX binds it to the vertex sampler it assigned. Set on
@@ -293,6 +298,9 @@ void rendererBindParticleLighting(void* effect)
     if (ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect)))
         if (const D3DXHANDLE atlas = d3dx->GetParameterBySemantic(0, "RaSunCascadeAtlas"))
             d3dx->SetTexture(atlas, rendererSunShadowAtlas());
+    if (ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect)))
+        if (const D3DXHANDLE map = d3dx->GetParameterBySemantic(0, "RaCloudShadowMap"))
+            d3dx->SetTexture(map, rendererCloudShadowMap());
 
     // Soft particles: 1 / fade distance while the main world pass draws over this frame's prepass
     // depth (s15), and 1 / its size; 0 elsewhere, so first person and other views keep hard edges.
@@ -338,6 +346,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     rendererSunShadowsRender(time, g_sunCascadeConstants);
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
     rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
+    rendererCloudShadowConstants(reinterpret_cast<float(*)[4]>(g_cloudShadowConstants));
     rendererAtmosphereAerialConstants(g_aerialConstants);
     {
         IRenderView* const view = rendererGetRenderView();

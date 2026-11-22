@@ -18,6 +18,14 @@
 //     It does not depend on the level and is built once.
 // Each frame the cube and the table are bound to the reserved samplers kSkyCubeSampler and
 // kSkyBrdfSampler, and the irradiance to the engine's pixel registers kSkyShRegister.. (contract 10).
+//
+// Render milestone 12 task 7: with the clouds as the ground sees them (a small panorama from
+// Clouds.cpp, rgb the light they add, a the transmittance), the sky above the horizon is the clear
+// sky times a plus rgb, the ground's sun is dimmed by the clouds' mean transmittance toward the
+// sun's elevation, and the build also gives the haze's light under the clouds
+// (rendererSkyCubeCloudLight). Overcast then lights every surface with a grey, even sky through
+// the same irradiance and reflections. The build runs on a worker thread from a copy of its source
+// (about 110 ms) and is uploaded on the main thread when done; the last cube stays bound meanwhile.
 #ifdef BF2_IMAGE_RENDDX9
 
 #define NOMINMAX
@@ -28,9 +36,11 @@
 #include "RendDX9Base.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 namespace dice {
@@ -255,6 +265,47 @@ struct Radiance
     F3 sunHorizontal;
     F3 ground;           // the lit ground's radiance
 
+    // The clouds toward d (RaCloudPanorama.fxh's mapping, bilinear, u wrapping): rgb added, a
+    // transmittance. None without a cloud panorama.
+    void cloudsAt(const F3& d, F3& add, float& t) const
+    {
+        add = f3(0, 0, 0);
+        t = 1.0f;
+        if (!src->clouds)
+            return;
+        const double e = std::asin(std::min(std::max(static_cast<double>(d.y), -1.0), 1.0));
+        const double vv = std::sqrt(std::fabs(e) / (0.5 * kPi));
+        const double u = std::atan2(static_cast<double>(d.z), static_cast<double>(d.x)) / (2.0 * kPi) + 0.5;
+        const double v = 0.5 + 0.5 * (e < 0.0 ? -vv : vv);
+        const unsigned int w = src->cloudsW, h = src->cloudsH;
+        double fx = u * w - 0.5;
+        fx -= std::floor(fx / w) * w;
+        const double fy = std::min(std::max(v * h - 0.5, 0.0), h - 1.0);
+        const unsigned int x0 = std::min(static_cast<unsigned int>(fx), w - 1), y0 = static_cast<unsigned int>(fy);
+        const unsigned int x1 = (x0 + 1) % w, y1 = std::min(y0 + 1, h - 1);
+        const float wx = static_cast<float>(fx - x0), wy = static_cast<float>(fy - y0);
+        const unsigned int idx[4] = { y0 * w + x0, y0 * w + x1, y1 * w + x0, y1 * w + x1 };
+        const float k[4] = { (1 - wx) * (1 - wy), wx * (1 - wy), (1 - wx) * wy, wx * wy };
+        float a = 0.0f;
+        for (int i = 0; i < 4; ++i)
+        {
+            const float* const c = src->clouds + idx[i] * 4;
+            add = add + f3(c[0], c[1], c[2]) * k[i];
+            a += c[3] * k[i];
+        }
+        t = a;
+    }
+
+    // The sky with its clouds toward d, at or above the horizon (d below it: the horizon's).
+    F3 clouded(const F3& d) const
+    {
+        const F3 up = d.y >= 0.0f ? d : normalize(f3(d.x, 0.0f, d.z));
+        F3 add;
+        float t;
+        cloudsAt(up, add, t);
+        return sky(up) * t + add;
+    }
+
     F3 skyView(double u, double v) const
     {
         const double fx = std::min(std::max(u * src->skyViewW - 0.5, 0.0), src->skyViewW - 1.0);
@@ -291,7 +342,7 @@ struct Radiance
 
     F3 operator()(const F3& d) const
     {
-        const F3 horizonOrSky = sky(d);
+        const F3 horizonOrSky = clouded(d);
         if (d.y >= 0.0f)
             return horizonOrSky;
         // Seen from kGroundViewHeight: the ground at height / sin(depression), hazed over that path
@@ -318,7 +369,7 @@ F3 skyIrradianceUp(const Radiance& radiance)
             const double phi = (j + 0.5) * 2.0 * kPi / kAzimuth;
             const F3 d = f3(static_cast<float>(std::sin(theta) * std::cos(phi)), static_cast<float>(std::cos(theta)),
                             static_cast<float>(std::sin(theta) * std::sin(phi)));
-            e = e + radiance.sky(d) * static_cast<float>(w);
+            e = e + radiance.clouded(d) * static_cast<float>(w);
             weight += w;
         }
     }
@@ -564,28 +615,79 @@ void bindSampler(unsigned int stage, IDirect3DBaseTexture9* texture, bool mips)
 
 } // anonymous namespace
 
-void rendererSkyCubeBuild(const SkyCubeSource& src)
+namespace
 {
-    if (!device() || !src.skyView || !src.skyViewW || !src.skyViewH)
-        return;
+
+// A build's copy of its source and its results (worker thread).
+struct Job
+{
+    std::vector<float> skyView, clouds;
+    SkyCubeSource src;
+    std::vector<CubeMip> mips;
+    float sh[7][4];
+    float up[3];
+    F3 ground;
+    SkyCubeCloudLight cloudLight;
+    float ms;
+};
+
+Job* g_job = 0;              // running
+Job* g_pending = 0;          // requested during the run
+std::atomic<bool> g_jobDone(false);
+SkyCubeCloudLight g_cloudLight = { 1.0f, { 0.0f, 0.0f, 0.0f } };
+
+// The clouds' mean transmittance toward the sun's elevation (over every azimuth, +-3 degrees).
+float cloudSunTransmittance(const Radiance& radiance, const SkyCubeSource& src)
+{
+    if (!src.clouds)
+        return 1.0f;
+    const int kAzimuth = 64;
+    const double sunE = std::asin(std::max(static_cast<double>(src.toSun[1]), std::sin(2.0 * kPi / 180.0)));
+    double t = 0.0;
+    int n = 0;
+    for (int i = -2; i <= 2; ++i)
+    {
+        const double e = sunE + i * 1.5 * kPi / 180.0;
+        for (int j = 0; j < kAzimuth; ++j)
+        {
+            const double phi = (j + 0.5) * 2.0 * kPi / kAzimuth;
+            const F3 d = f3(static_cast<float>(std::cos(e) * std::cos(phi)), static_cast<float>(std::sin(e)),
+                            static_cast<float>(std::cos(e) * std::sin(phi)));
+            F3 add;
+            float a;
+            radiance.cloudsAt(d, add, a);
+            t += a;
+            ++n;
+        }
+    }
+    return static_cast<float>(t / n);
+}
+
+void compute(Job& job)
+{
     const LARGE_INTEGER zero = {};
     LARGE_INTEGER t0 = zero, t1 = zero, freq = zero;
     QueryPerformanceCounter(&t0);
-
-    if (!g.brdfBuilt)
-        g.brdfBuilt = uploadBrdf();
-
+    const SkyCubeSource& src = job.src;
     Radiance radiance;
     radiance.src = &src;
     const double r = src.groundRadiusKm + src.altitudeKm;
     radiance.beta = std::acos(std::sqrt(src.altitudeKm * (2.0 * src.groundRadiusKm + src.altitudeKm)) / r);
     radiance.zenithHorizon = kPi - radiance.beta;
     radiance.sunHorizontal = f3(src.toSun[0], 0.0f, src.toSun[2]);
-    const float sunCos = std::max(src.toSun[1], 0.0f);
+    // The air under the clouds: the sun's share through them, and the clouded sky's mean radiance
+    // for the rest (Ra_HazeLight).
+    const float sunT = cloudSunTransmittance(radiance, src);
     const F3 skyUp = skyIrradianceUp(radiance);
+    job.cloudLight.sunTransmittance = sunT;
+    job.cloudLight.hazeLight[0] = src.clouds ? (1.0f - sunT) * skyUp.x : 0.0f;
+    job.cloudLight.hazeLight[1] = src.clouds ? (1.0f - sunT) * skyUp.y : 0.0f;
+    job.cloudLight.hazeLight[2] = src.clouds ? (1.0f - sunT) * skyUp.z : 0.0f;
+    const float sunCos = std::max(src.toSun[1], 0.0f) * sunT;
     radiance.ground = f3(src.groundAlbedo[0] * (src.sun[0] * sunCos + skyUp.x),
                          src.groundAlbedo[1] * (src.sun[1] * sunCos + skyUp.y),
                          src.groundAlbedo[2] * (src.sun[2] * sunCos + skyUp.z));
+    job.ground = radiance.ground;
 
     // The radiance at the top mip, then its box chain for the prefilter's sources.
     std::vector<CubeMip> chain(1);
@@ -597,9 +699,9 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
                 chain[0].at(face, x, y) = radiance(texelDirection(face, x, y, kCubeSize));
     buildChain(chain);
 
-    std::vector<CubeMip> mips(kCubeMips);
+    job.mips.resize(kCubeMips);
     for (unsigned int level = 0; level < kCubeMips; ++level)
-        prefilter(chain, level, mips[level]);
+        prefilter(chain, level, job.mips[level]);
 
     // The irradiance, sky and ground together, as drawn.
     F3 c[9], ground[9];
@@ -609,18 +711,88 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
     for (int i = 0; i < 9; ++i)
         c[i] = c[i] + ground[i];
     const F3 up = evalSh(c, f3(0, 1, 0));
-    g.irradianceUp[0] = up.x;
-    g.irradianceUp[1] = up.y;
-    g.irradianceUp[2] = up.z;
-    packSh(c, g.sh);
-
-    g.live = uploadCube(mips);
+    job.up[0] = up.x;
+    job.up[1] = up.y;
+    job.up[2] = up.z;
+    packSh(c, job.sh);
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&freq);
-    g.buildMs = freq.QuadPart ? static_cast<float>(1000.0 * (t1.QuadPart - t0.QuadPart) / freq.QuadPart) : 0.0f;
-    std::fprintf(stderr, "[SKYCUBE] %s in %.0f ms: irradiance up %.4f %.4f %.4f, ground %.4f %.4f %.4f\n",
-                 g.live ? "built" : "FAILED", g.buildMs, up.x, up.y, up.z,
-                 radiance.ground.x, radiance.ground.y, radiance.ground.z);
+    job.ms = freq.QuadPart ? static_cast<float>(1000.0 * (t1.QuadPart - t0.QuadPart) / freq.QuadPart) : 0.0f;
+}
+
+void startJob(Job* job)
+{
+    g_job = job;
+    g_jobDone = false;
+    // Detached: the job is only read back through g_jobDone, and a game closing mid-build ends it.
+    std::thread([job]() {
+        compute(*job);
+        g_jobDone = true;
+    }).detach();
+}
+
+// A finished build: uploaded and made live; the pending request starts.
+void finishJob()
+{
+    if (!g_job || !g_jobDone)
+        return;
+    Job* const job = g_job;
+    g_job = 0;
+    const bool uploaded = uploadCube(job->mips);
+    if (uploaded)
+    {
+        std::memcpy(g.sh, job->sh, sizeof(g.sh));
+        std::memcpy(g.irradianceUp, job->up, sizeof(g.irradianceUp));
+        g.live = true;
+        g_cloudLight = job->cloudLight;
+    }
+    g.buildMs = job->ms;
+    std::fprintf(stderr, "[SKYCUBE] %s in %.0f ms%s: irradiance up %.4f %.4f %.4f, ground %.4f %.4f %.4f; "
+                 "clouds' sun transmittance %.3f, haze light %.4f %.4f %.4f\n",
+                 uploaded ? "built" : "FAILED", job->ms, job->src.clouds ? " with clouds" : "",
+                 job->up[0], job->up[1], job->up[2], job->ground.x, job->ground.y, job->ground.z,
+                 job->cloudLight.sunTransmittance, job->cloudLight.hazeLight[0], job->cloudLight.hazeLight[1],
+                 job->cloudLight.hazeLight[2]);
+    delete job;
+    if (g_pending)
+    {
+        Job* const next = g_pending;
+        g_pending = 0;
+        startJob(next);
+    }
+}
+
+} // anonymous namespace
+
+void rendererSkyCubeBuild(const SkyCubeSource& src)
+{
+    if (!device() || !src.skyView || !src.skyViewW || !src.skyViewH)
+        return;
+    if (!g.brdfBuilt)
+        g.brdfBuilt = uploadBrdf();
+    Job* const job = new Job();
+    job->src = src;
+    job->skyView.assign(src.skyView, src.skyView + static_cast<size_t>(src.skyViewW) * src.skyViewH * 3);
+    job->src.skyView = &job->skyView[0];
+    if (src.clouds && src.cloudsW && src.cloudsH)
+    {
+        job->clouds.assign(src.clouds, src.clouds + static_cast<size_t>(src.cloudsW) * src.cloudsH * 4);
+        job->src.clouds = &job->clouds[0];
+    }
+    else
+        job->src.clouds = 0;
+    if (g_job)
+    {
+        delete g_pending;   // superseded
+        g_pending = job;
+    }
+    else
+        startJob(job);
+}
+
+SkyCubeCloudLight rendererSkyCubeCloudLight()
+{
+    return g_cloudLight;
 }
 
 namespace
@@ -633,6 +805,7 @@ void rendererSkyCubeFrame(bool use)
 {
     if (!device())
         return;
+    finishJob();
     const bool live = use && g.live;
     g_skyShFrame = live ? &g.sh[0][0] : &kSkyShOff[0][0];
     stateManagerSetSkySh(g_skyShFrame);

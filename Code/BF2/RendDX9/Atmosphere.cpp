@@ -518,6 +518,11 @@ struct State
     bool effectMissing;
     bool atlasLive;          // this frame's atlas is drawn and bound to s9
     float cutRange;          // rendererViewDistanceCutRange
+    // Render milestone 12 task 7: the clouded sky from the ground (rendererAtmosphereCloudSky).
+    std::vector<float> skyViewRgb;   // the last sky view, for the sky cube
+    std::vector<float> cloudSky;     // rgba, decoded; empty: clear
+    unsigned int cloudSkyW, cloudSkyH;
+    bool cubeDirty;          // the clouds changed: rebuild the sky cube from the same sky view
 };
 
 State g = {};
@@ -828,15 +833,20 @@ void updateTables()
                      kSkyViewW, kSkyViewH, sky);
         g.skyViewDirty = !uploadTable(g.skyView, sky, kSkyViewW, kSkyViewH);
         // The sky cube and irradiance (task 7) from this sky view.
-        std::vector<float> rgb(sky.size() * 3);
+        g.skyViewRgb.resize(sky.size() * 3);
         for (size_t i = 0; i < sky.size(); ++i)
         {
-            rgb[i * 3 + 0] = static_cast<float>(sky[i].x);
-            rgb[i * 3 + 1] = static_cast<float>(sky[i].y);
-            rgb[i * 3 + 2] = static_cast<float>(sky[i].z);
+            g.skyViewRgb[i * 3 + 0] = static_cast<float>(sky[i].x);
+            g.skyViewRgb[i * 3 + 1] = static_cast<float>(sky[i].y);
+            g.skyViewRgb[i * 3 + 2] = static_cast<float>(sky[i].z);
         }
+        g.cubeDirty = true;
+    }
+    if (g.cubeDirty && !g.skyViewRgb.empty())
+    {
+        g.cubeDirty = false;
         SkyCubeSource src;
-        src.skyView = &rgb[0];
+        src.skyView = &g.skyViewRgb[0];
         src.skyViewW = kSkyViewW;
         src.skyViewH = kSkyViewH;
         src.groundRadiusKm = kGroundRadius;
@@ -848,6 +858,10 @@ void updateTables()
             src.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
         }
         src.hazeDensity = hazeDensity();
+        // Milestone 12 task 7: with the clouds as the ground sees them.
+        src.clouds = g.cloudSky.empty() ? 0 : &g.cloudSky[0];
+        src.cloudsW = g.cloudSkyW;
+        src.cloudsH = g.cloudSkyH;
         rendererSkyCubeBuild(src);
     }
 }
@@ -887,11 +901,20 @@ void fillConstants(float c[16][4])
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
         { hazeDensity(), 1.0f / g_hazeFalloff, float(g.refHeight), in.fogEnd },
-        { 0.0f, 0.0f, 0.0f, 0.0f },   // unused
+        { 0.0f, 0.0f, 0.0f, 1.0f },   // the air's light under the clouds, below
         { in.sun[0], in.sun[1], in.sun[2], 0.0f },
         { in.sky[0], in.sky[1], in.sky[2], 0.0f },
     };
     std::memcpy(c, rows, sizeof(rows));
+    // Render milestone 12 task 7: the air under the clouds (Ra_HazeLight, RaAtmosphere.fxh).
+    if (!g.cloudSky.empty())
+    {
+        const SkyCubeCloudLight l = rendererSkyCubeCloudLight();
+        c[8][0] = l.hazeLight[0];
+        c[8][1] = l.hazeLight[1];
+        c[8][2] = l.hazeLight[2];
+        c[8][3] = l.sunTransmittance;
+    }
 }
 
 // Rows 11-14: the camera and the view rays at unit view depth through the screen's corners.
@@ -1087,6 +1110,24 @@ void rendererAtmosphereAerialConstants(float c[8])
     const double falloffs = std::min(-(cameraY - g.refHeight) / g_hazeFalloff, 30.0);
     c[4] = static_cast<float>(hazeDensity() * std::exp(falloffs));
     c[5] = 1.0f / g_hazeFalloff;
+}
+
+void rendererAtmosphereCloudSky(const float* rgba, unsigned int w, unsigned int h)
+{
+    if (rgba && w && h)
+    {
+        g.cloudSky.assign(rgba, rgba + static_cast<size_t>(w) * h * 4);
+        g.cloudSkyW = w;
+        g.cloudSkyH = h;
+    }
+    else
+    {
+        if (g.cloudSky.empty())
+            return;
+        std::vector<float>().swap(g.cloudSky);
+        g.cloudSkyW = g.cloudSkyH = 0;
+    }
+    g.cubeDirty = true;
 }
 
 void rendererAtmosphereRelease()

@@ -817,7 +817,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 15
+#define RA_CONTRACT_VERSION 16
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -925,8 +925,27 @@ struct CloudsInfo
     unsigned int panoramas;             // drawn so far
     IDirect3DTexture9* nearResolved;    // the near clouds' last resolve, A16B16G16R16F; 0 none
     float nearDistance;                 // m, renderer.cloudNear
+    IDirect3DTexture9* shadow;          // the live cloud shadow map, 1024^2 A16B16G16R16F; 0 none
+    float shadowCorner[2], shadowSize;  // its corner (world x, z at the reference height), size (m)
+    unsigned int shadowMaps;            // drawn so far
+    unsigned int skyLights;             // ground panoramas read back for the sky light
 };
 CloudsInfo rendererCloudsInfo();
+// [RENDER] Milestone 12 task 8 (contract 16): the cloud shadow map (Clouds.cpp), a Beer shadow map
+// over 32 km of the plane at the reference height around the camera, redrawn a band a frame about
+// once a second; its receiver constants RaCloudShadow (2 float4s, RaSunShadow.fxh) go to the
+// engine-owned pixel registers kCloudShadowRegister.. with RASM, and the map to the reserved
+// sampler kCloudShadowSampler (bilinear, clamp). All zero (transmittance 1) without clouds.
+const unsigned int kCloudShadowSampler = 14;
+const unsigned int kCloudShadowVec4s = 2;
+void rendererCloudShadowConstants(float c[2][4]);
+IDirect3DTexture9* rendererCloudShadowMap();   // the live map, 0 none
+// [RENDER] Milestone 12 task 7 (contract 16): a ground panorama of the clouds (256 x 128, rgb the
+// light they add, a the transmittance, decoded), drawn from the level's origin and read back about
+// every 30 s and at a change of settings, hands the clouded sky to the atmosphere, which rebuilds
+// the sky cube and its irradiance from it and lights the air under the clouds (RaAtmosphere[8]).
+// Null: clear.
+void rendererAtmosphereCloudSky(const float* rgba, unsigned int w, unsigned int h);
 // [RENDER] Milestone 11 task 7 (SkyCube.cpp, contract 10): the sky cube (prefiltered GGX, mip m
 // roughness m / 5), the sky's irradiance as SH9 and the split-sum BRDF table, built on the CPU
 // with the sky view into managed textures. Each frame the cube is bound to the reserved sampler
@@ -943,8 +962,24 @@ struct SkyCubeSource
     float sun[3];                  // the surfaces' sun (irradiance / pi)
     float groundAlbedo[3];         // linear
     double hazeDensity;            // 1/m at the reference height
+    // [RENDER] Milestone 12 task 7: the clouds from the ground (rendererAtmosphereCloudSky's
+    // panorama, RaCloudPanorama.fxh's mapping), composited over the sky; null for a clear sky.
+    const float* clouds;           // rgba per texel: rgb the light added, a the transmittance
+    unsigned int cloudsW, cloudsH;
 };
+// Built on a worker thread from a copy of `source`; the previous cube and irradiance stay bound
+// until the new ones are uploaded (rendererSkyCubeFrame). A request during a build is kept and
+// started when it ends.
 void rendererSkyCubeBuild(const SkyCubeSource& source);
+// The clouded sky's statistics from the last build: the clouds' mean transmittance S toward the
+// sun's elevation (1 clear) and the light they give the air under them, (1 - S) times the clouded
+// sky's mean radiance (its cosine-weighted mean over the upper hemisphere; 0 clear).
+struct SkyCubeCloudLight
+{
+    float sunTransmittance;
+    float hazeLight[3];
+};
+SkyCubeCloudLight rendererSkyCubeCloudLight();
 // Binds the cube, the table and RaSkySH; with `use` false (or before a build) unbinds them and
 // zeroes RaSkySH.
 void rendererSkyCubeFrame(bool use);
@@ -989,12 +1024,15 @@ const unsigned int kSkyShRegister = 192;
 const unsigned int kSkyShVec4s = 7;
 // [RENDER] Milestone 11 water reflections (contract 12): RaWaterSsr in c191 (rendererWaterSceneBegin).
 const unsigned int kWaterSsrRegister = 191;
-const unsigned int kEngineRegisterBegin = 191;
-const unsigned int kEngineRegisterEnd = 224;   // c191..c223 dropped from effect writes
+// [RENDER] Milestone 12 cloud shadows (contract 16): RaCloudShadow in c189..c190, published with RASM.
+const unsigned int kCloudShadowRegister = 189;
+const unsigned int kEngineRegisterBegin = 189;
+const unsigned int kEngineRegisterEnd = 224;   // c189..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);
 void stateManagerSetSkySh(const float* value /* RaSkySH, kSkyShVec4s float4s */);
 void stateManagerSetWaterSsr(const float* value /* RaWaterSsr, one float4 */);
+void stateManagerSetCloudShadow(const float* value /* RaCloudShadow, kCloudShadowVec4s float4s */);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

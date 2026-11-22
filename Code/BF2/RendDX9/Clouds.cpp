@@ -37,6 +37,12 @@
 // reprojected history (the camera's motion and the wind's drift) and composites it over the
 // scene after the sky, before the world's transparents.
 //
+// Tasks 7-8 (contract 16): a Beer shadow map of the clouds over 32 km around the camera (technique
+// RaCloudShadow, a band a frame, again about every second; the wind's drift since it was drawn is
+// applied by the receivers' constants), and a small ground panorama from the level's origin, read
+// back about every 30 s, from which the atmosphere rebuilds the sky cube, the sky light and the
+// haze's light under the clouds.
+//
 // The weather evolves (each region's clouds grow and decay over 10-30 minutes); every
 // kRebuildSeconds a new set is built into the other half of a double buffer, two field tiles and
 // eight light tiles a frame, then made live. Presets (desert, maritime) set the slab, the cloud
@@ -92,6 +98,13 @@ const double kHighStreak = 10.0;          // the high cloud's streaks: length ov
 const unsigned int kRows = 20;            // RaClouds' float4s (RaCloudField.fxh, RaClouds.fx)
 const float kNearHistoryWeight = 0.1f;    // the current frame's weight in the near clouds' history
 const float kPanoHistoryWeight = 0.25f;   // a new panorama's weight against the previous one
+const unsigned int kShadowSize = 1024, kShadowBands = 8;   // RaClouds.fx RA_CLOUD_SHADOW_SIZE
+const double kShadowWorld = 32768.0;      // m: the shadow map's side (32 m texels)
+const double kShadowSeconds = 1.0;        // a new shadow map starts this long after the last
+const double kSunRiseMin = 0.035;         // the sun's lowest y for the shadow map (RaClouds.fx)
+const unsigned int kSkyLightW = 256, kSkyLightH = 128;   // the ground panorama for the sky light
+const double kSkyLightSeconds = 30.0;     // its refresh
+const unsigned int kSkyLightReadDelay = 2;   // frames between its draw and its readback
 
 struct Preset
 {
@@ -376,6 +389,22 @@ struct State
     int nearLast;                     // the history resolved last frame; -1 none (invalid)
     float nearPrevRows[3][4];         // the previous frame's view (RaClouds[15..17])
     float nearPrevDrift[2];
+    // The cloud shadow map (task 8).
+    IDirect3DTexture9* shadow[2];
+    int shadowLive, shadowDraw, shadowSet;   // -1 none
+    unsigned int shadowBand, shadowMaps;
+    WeatherInputs shadowInputs, liveShadowInputs;
+    double shadowSeconds, liveShadowSeconds; // the wind's time each was drawn at
+    float shadowCorner[2], liveShadowCorner[2];
+    LARGE_INTEGER shadowStarted;
+    // The sky light's ground panorama (task 7).
+    IDirect3DTexture9* skyPano;
+    IDirect3DSurface9* skySys;        // system memory, for the readback
+    unsigned int skyStage;            // 0 idle; else frames since it was drawn, plus one
+    bool skyDue, skyHanded;
+    LARGE_INTEGER skyLast;
+    unsigned int skyLights;
+    std::vector<float> skyData;
 };
 
 State* g_state = 0;
@@ -393,6 +422,8 @@ State& st()
         g_state->panoNew = g_state->panoOld = g_state->panoDraw = g_state->panoSet = -1;
         g_state->nearDistance = 16000.0f;
         g_state->nearLast = -1;
+        g_state->shadowLive = g_state->shadowDraw = g_state->shadowSet = -1;
+        g_state->skyDue = true;
     }
     return *g_state;
 }
@@ -439,6 +470,13 @@ void releaseSets()
     release(s.nearHistory[1]);
     s.nearW = s.nearH = 0;
     s.nearLast = -1;
+    release(s.shadow[0]);
+    release(s.shadow[1]);
+    s.shadowLive = s.shadowDraw = s.shadowSet = -1;
+    s.shadowBand = 0;
+    release(s.skyPano);   // the system-memory copy survives a reset
+    s.skyStage = 0;
+    s.skyDue = true;
 }
 
 bool createTarget(unsigned int w, unsigned int h, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -590,8 +628,8 @@ void buildStep(void* effect)
 {
     State& s = st();
     const int target = s.live == 0 ? 1 : 0;
-    if (s.panoBand != 0 && s.panoSet == target)
-        return;   // the panorama being drawn still reads it
+    if ((s.panoBand != 0 && s.panoSet == target) || (s.shadowBand != 0 && s.shadowSet == target))
+        return;   // the panorama or the shadow map being drawn still reads it
     VolumeSet& v = s.sets[target];
     float c[kRows][4];
     fillConstants(c, s.built, s.next);
@@ -622,6 +660,11 @@ void buildStep(void* effect)
         {
             s.stage = kIdle;
             s.live = target;
+            if (s.builds == 0 || s.built.preset != s.liveInputs.preset || s.built.coverage != s.liveInputs.coverage
+                || s.built.baseM != s.liveInputs.baseM || s.built.topM != s.liveInputs.topM
+                || s.built.midBaseM != s.liveInputs.midBaseM || s.built.midTopM != s.liveInputs.midTopM
+                || s.built.midDensity != s.liveInputs.midDensity || s.built.midCoverage != s.liveInputs.midCoverage)
+                s.skyDue = true;   // new settings: the sky light now, not at its next refresh
             s.liveInputs = s.built;
             s.lastBuildFrames = s.buildFrames;
             ++s.builds;
@@ -676,6 +719,46 @@ void cameraPosition(float p[3])
     p[2] = m[14];
 }
 
+// Binds the effect's cloud volumes and tables for a march (the panorama, the shadow map).
+void bindMarchTextures(ID3DXEffect* d3dx, const VolumeSet& v, IDirect3DTexture9* history)
+{
+    State& s = st();
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
+        { "RaCloudShape", s.shape }, { "RaCloudDetail", s.detail }, { "RaCloudField", v.field },
+        { "RaCloudCoarse", v.coarse }, { "RaCloudLight", v.light }, { "RaCloudLightTable", a.cloudLight },
+        { "RaSkyViewTable", a.skyView }, { "RaCloudPanoramaHistory", history },
+    };
+    for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
+        if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, textures[i].semantic))
+            d3dx->SetTexture(h, textures[i].texture);
+}
+
+// One full-screen pass of the current technique into `target`'s rows [y, y + rows).
+void drawRows(void* effect, IDirect3DTexture9* target, unsigned int w, unsigned int y, unsigned int rows)
+{
+    IDirect3DSurface9* surface = 0;
+    target->GetSurfaceLevel(0, &surface);
+    stateManagerSetRenderTarget(0, surface);
+    flushRenderTargetsSeam();
+    const D3DVIEWPORT9 viewport = { 0, y, w, rows, 0.0f, 1.0f };
+    device()->SetViewport(&viewport);
+    effectBegin(effect);
+    effectBeginPass(effect, 0);
+    geom::fsQuadDrawerDrawCurrentEffect();
+    effectEnd(effect);
+    if (surface)
+        surface->Release();
+}
+
+// The wind's unit direction for a preset.
+void windDirection(const Preset& p, double& dx, double& dz)
+{
+    const double len = std::sqrt(p.windX * p.windX + p.windZ * p.windZ);
+    dx = p.windX / len;
+    dz = p.windZ / len;
+}
+
 // One band of the panorama being drawn; a finished one joins the ring as the newest.
 void panoramaStep(void* effect)
 {
@@ -700,7 +783,6 @@ void panoramaStep(void* effect)
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
     if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudPanorama"))
         return;
-    const AtmosphereInfo a = rendererAtmosphereInfo();
     float c[kRows][4];
     fillConstants(c, s.panoInputs, 0);
     fillPanoramaConstants(c, s.panoInputs, s.panoSeconds, s.panoObserver, nearHandoff());
@@ -708,34 +790,16 @@ void panoramaStep(void* effect)
     // Blended into the newest complete panorama, so the jitter averages out (RaClouds.fx).
     IDirect3DTexture9* const history = s.panoNew >= 0 ? s.pano[s.panoNew] : 0;
     c[4][2] = history ? kPanoHistoryWeight : 1.0f;
+    c[4][3] = static_cast<float>(kPanoH);   // the target's height
     float atmosphere[16][4];
     rendererAtmosphereConstants(atmosphere);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
-    struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
-        { "RaCloudShape", s.shape }, { "RaCloudDetail", s.detail }, { "RaCloudField", v.field },
-        { "RaCloudCoarse", v.coarse }, { "RaCloudLight", v.light }, { "RaCloudLightTable", a.cloudLight },
-        { "RaSkyViewTable", a.skyView }, { "RaCloudPanoramaHistory", history },
-    };
-    for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
-        if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, textures[i].semantic))
-            d3dx->SetTexture(h, textures[i].texture);
-
-    IDirect3DSurface9* surface = 0;
-    s.pano[s.panoDraw]->GetSurfaceLevel(0, &surface);
-    stateManagerSetRenderTarget(0, surface);
-    flushRenderTargetsSeam();
+    bindMarchTextures(d3dx, v, history);
     const unsigned int rows = kPanoH / kPanoBands;
-    const D3DVIEWPORT9 viewport = { 0, s.panoBand * rows, kPanoW, rows, 0.0f, 1.0f };
-    device()->SetViewport(&viewport);
-    effectBegin(effect);
-    effectBeginPass(effect, 0);
-    geom::fsQuadDrawerDrawCurrentEffect();
-    effectEnd(effect);
-    if (surface)
-        surface->Release();
+    drawRows(effect, s.pano[s.panoDraw], kPanoW, s.panoBand * rows, rows);
 
     if (++s.panoBand == kPanoBands)
     {
@@ -745,6 +809,170 @@ void panoramaStep(void* effect)
         if (++s.panoramas == 1)
             std::fprintf(stderr, "[CLOUDS] first panorama drawn\n");
     }
+}
+
+
+// One band of the cloud shadow map (task 8); a finished one goes live. A new one starts
+// kShadowSeconds after the last, centred on where the camera's sun ray meets the reference plane.
+void shadowStep(void* effect)
+{
+    State& s = st();
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    const double rise = std::max(static_cast<double>(a.toSun[1]), kSunRiseMin);
+    if (s.shadowBand == 0)
+    {
+        if (s.shadowLive >= 0 && secondsSince(s.shadowStarted) < kShadowSeconds)
+            return;
+        for (int i = 0; i < 2; ++i)
+            if (!createTarget(kShadowSize, kShadowSize, D3DFMT_A16B16G16R16F, s.shadow[i]))
+                return;
+        s.shadowDraw = s.shadowLive == 0 ? 1 : 0;
+        s.shadowSet = s.live;
+        s.shadowInputs = s.liveInputs;
+        s.shadowSeconds = secondsSince(s.start);
+        QueryPerformanceCounter(&s.shadowStarted);
+        float camera[3];
+        cameraPosition(camera);
+        const double texel = kShadowWorld / kShadowSize;
+        const double up = camera[1] - a.refHeight;
+        const double cx = camera[0] - up * a.toSun[0] / rise, cz = camera[2] - up * a.toSun[2] / rise;
+        s.shadowCorner[0] = static_cast<float>(std::floor(cx / texel) * texel - 0.5 * kShadowWorld);
+        s.shadowCorner[1] = static_cast<float>(std::floor(cz / texel) * texel - 0.5 * kShadowWorld);
+    }
+    const VolumeSet& v = s.sets[s.shadowSet];
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
+    if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudShadow"))
+        return;
+    float c[kRows][4];
+    const float origin[3] = { 0.0f, 0.0f, 0.0f };
+    fillConstants(c, s.shadowInputs, 0);
+    fillPanoramaConstants(c, s.shadowInputs, s.shadowSeconds, origin, 0.0f);
+    c[8][0] = s.shadowCorner[0];
+    c[8][1] = s.shadowCorner[1];
+    c[8][2] = a.refHeight;
+    c[8][3] = static_cast<float>(kShadowWorld);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
+    bindMarchTextures(d3dx, v, 0);
+    const unsigned int rows = kShadowSize / kShadowBands;
+    drawRows(effect, s.shadow[s.shadowDraw], kShadowSize, s.shadowBand * rows, rows);
+    if (++s.shadowBand == kShadowBands)
+    {
+        s.shadowBand = 0;
+        s.shadowLive = s.shadowDraw;
+        s.liveShadowInputs = s.shadowInputs;
+        s.liveShadowSeconds = s.shadowSeconds;
+        s.liveShadowCorner[0] = s.shadowCorner[0];
+        s.liveShadowCorner[1] = s.shadowCorner[1];
+        if (++s.shadowMaps == 1)
+            std::fprintf(stderr, "[CLOUDS] first shadow map drawn\n");
+    }
+}
+
+float halfToFloat(unsigned short h)
+{
+    const unsigned int sign = (h >> 15) & 1u, exponent = (h >> 10) & 0x1fu, mantissa = h & 0x3ffu;
+    float v;
+    if (exponent == 0)
+        v = std::ldexp(static_cast<float>(mantissa), -24);
+    else if (exponent == 31)
+        v = mantissa ? 0.0f : 65504.0f;
+    else
+        v = std::ldexp(static_cast<float>(mantissa | 0x400u), static_cast<int>(exponent) - 25);
+    return sign ? -v : v;
+}
+
+// The sky light's ground panorama (task 7): drawn when due, read back kSkyLightReadDelay frames
+// later (so the copy does not wait on the draw) and handed to the atmosphere.
+void skyLightStep(void* effect)
+{
+    State& s = st();
+    if (s.skyStage == 0)
+    {
+        if (!s.skyDue && secondsSince(s.skyLast) < kSkyLightSeconds)
+            return;
+        if (!createTarget(kSkyLightW, kSkyLightH, D3DFMT_A16B16G16R16F, s.skyPano))
+            return;
+        const VolumeSet& v = s.sets[s.live];
+        ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
+        if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudPanorama"))
+            return;
+        const AtmosphereInfo a = rendererAtmosphereInfo();
+        // From the level's origin, 2 m over the reference height: the sky every surface sees.
+        const float observer[3] = { 0.0f, a.refHeight + 2.0f, 0.0f };
+        float c[kRows][4];
+        fillConstants(c, s.liveInputs, 0);
+        fillPanoramaConstants(c, s.liveInputs, secondsSince(s.start), observer, 0.0f);
+        c[4][1] = 0.0f;                                  // jitter seed
+        c[4][2] = 1.0f;                                  // no history
+        c[4][3] = static_cast<float>(kSkyLightH);        // the target's height
+        float atmosphere[16][4];
+        rendererAtmosphereConstants(atmosphere);
+        if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
+            d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
+        if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
+            d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
+        bindMarchTextures(d3dx, v, 0);
+        drawRows(effect, s.skyPano, kSkyLightW, 0, kSkyLightH);
+        s.skyStage = 1;
+        s.skyDue = false;
+        QueryPerformanceCounter(&s.skyLast);
+        return;
+    }
+    if (++s.skyStage <= kSkyLightReadDelay)
+        return;
+    s.skyStage = 0;
+    if (!s.skySys && device()->CreateOffscreenPlainSurface(kSkyLightW, kSkyLightH, D3DFMT_A16B16G16R16F,
+                                                           D3DPOOL_SYSTEMMEM, &s.skySys, 0) < 0)
+    {
+        s.skySys = 0;
+        return;
+    }
+    IDirect3DSurface9* source = 0;
+    s.skyPano->GetSurfaceLevel(0, &source);
+    const bool copied = source && device()->GetRenderTargetData(source, s.skySys) >= 0;
+    if (source)
+        source->Release();
+    D3DLOCKED_RECT locked;
+    if (!copied || s.skySys->LockRect(&locked, 0, D3DLOCK_READONLY) < 0)
+        return;
+    s.skyData.resize(kSkyLightW * kSkyLightH * 4);
+    for (unsigned int y = 0; y < kSkyLightH; ++y)
+    {
+        const unsigned short* const row = reinterpret_cast<const unsigned short*>(
+            static_cast<const unsigned char*>(locked.pBits) + y * locked.Pitch);
+        for (unsigned int x = 0; x < kSkyLightW; ++x)
+        {
+            float* const out = &s.skyData[(y * kSkyLightW + x) * 4];
+            const float r = halfToFloat(row[x * 4 + 0]), g = halfToFloat(row[x * 4 + 1]), b = halfToFloat(row[x * 4 + 2]);
+            // Ra_CloudDecompress (RaCloudPanorama.fxh)
+            const float k = 1.0f / std::max(1.0f - (0.2126f * r + 0.7152f * g + 0.0722f * b), 1e-4f);
+            out[0] = r * k;
+            out[1] = g * k;
+            out[2] = b * k;
+            out[3] = halfToFloat(row[x * 4 + 3]);
+        }
+    }
+    s.skySys->UnlockRect();
+    rendererAtmosphereCloudSky(&s.skyData[0], kSkyLightW, kSkyLightH);
+    s.skyHanded = true;
+    if (++s.skyLights == 1)
+        std::fprintf(stderr, "[CLOUDS] first sky light read back\n");
+}
+
+// The live shadow map on the reserved sampler (0 when there is none).
+void bindShadowSampler()
+{
+    State& s = st();
+    IDirect3DTexture9* const map = s.enabled && s.shadowLive >= 0 ? s.shadow[s.shadowLive] : 0;
+    IDirect3DDevice9* const d = device();
+    d->SetTexture(kCloudShadowSampler, map);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+    d->SetSamplerState(kCloudShadowSampler, D3DSAMP_SRGBTEXTURE, FALSE);
 }
 
 } // anonymous namespace
@@ -764,6 +992,12 @@ void rendererCloudsBindSky(void* d3dxEffect)
         // The newest fades in while the next is drawn: full by its last band.
         v.x = static_cast<float>(s.panoBand) / (kPanoBands - 1);
         v.y = 1.0f;
+        // How far the camera is under the slab (contract 16): 1 below its base, 0 above its top.
+        float camera[3];
+        cameraPosition(camera);
+        const double base = rendererAtmosphereInfo().refHeight + s.liveInputs.slabBase();
+        const double top = rendererAtmosphereInfo().refHeight + s.liveInputs.slabTop();
+        v.z = static_cast<float>(std::min(std::max((top - camera[1]) / std::max(top - base, 1.0), 0.0), 1.0));
         if (const D3DXHANDLE t = d3dx->GetParameterBySemantic(0, "RaCloudPanoramaOld"))
             d3dx->SetTexture(t, s.pano[s.panoOld]);
         if (const D3DXHANDLE t = d3dx->GetParameterBySemantic(0, "RaCloudPanoramaNew"))
@@ -989,7 +1223,19 @@ void rendererCloudSettingsChanged() { st().settingsChanged = true; }
 void rendererCloudsFrame()
 {
     State& s = st();
-    if (!device() || !s.enabled || !rendererAtmosphereInfo().fitted)
+    if (!device())
+        return;
+    struct BindShadow   // at every return below
+    {
+        ~BindShadow() { bindShadowSampler(); }
+    } bindShadow;
+    if (!s.enabled && s.skyHanded)
+    {
+        rendererAtmosphereCloudSky(0, 0, 0);   // the clear sky's light again
+        s.skyHanded = false;
+        s.skyDue = true;
+    }
+    if (!s.enabled || !rendererAtmosphereInfo().fitted)
         return;
     if (!s.started)
     {
@@ -1094,7 +1340,11 @@ void rendererCloudsFrame()
     if (building)
         buildStep(effect);
     if (panorama)
+    {
         panoramaStep(effect);
+        shadowStep(effect);
+        skyLightStep(effect);
+    }
 
     stateManagerPop();
     stateManagerSetRenderTarget(0, savedTarget);
@@ -1106,6 +1356,36 @@ void rendererCloudsFrame()
     if (savedDepth)
         savedDepth->Release();
     effectRelease(static_cast<Effect*>(effect));
+}
+
+void rendererCloudShadowConstants(float c[2][4])
+{
+    std::memset(c, 0, sizeof(float) * 8);
+    State& s = st();
+    if (!s.enabled || s.shadowLive < 0 || !s.shadow[s.shadowLive])
+        return;
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    const double rise = std::max(static_cast<double>(a.toSun[1]), kSunRiseMin);
+    // The wind's drift since the map was drawn: a receiver reads it that much upwind.
+    const Preset& p = kPresets[s.liveShadowInputs.preset];
+    double dx, dz;
+    windDirection(p, dx, dz);
+    const double since = secondsSince(s.start) - s.liveShadowSeconds;
+    const double inv = 1.0 / kShadowWorld;
+    c[0][0] = static_cast<float>(inv);
+    c[0][1] = static_cast<float>(-(s.liveShadowCorner[0] + dx * p.windMs * since) * inv);
+    c[0][2] = static_cast<float>(-(s.liveShadowCorner[1] + dz * p.windMs * since) * inv);
+    c[0][3] = 1.0f;
+    c[1][0] = static_cast<float>(a.toSun[0] / rise);
+    c[1][1] = static_cast<float>(a.toSun[2] / rise);
+    c[1][2] = a.refHeight;
+    c[1][3] = rendererSkyCubeCloudLight().sunTransmittance;
+}
+
+IDirect3DTexture9* rendererCloudShadowMap()
+{
+    State& s = st();
+    return s.enabled && s.shadowLive >= 0 ? s.shadow[s.shadowLive] : 0;
 }
 
 void rendererCloudsRelease()
@@ -1152,6 +1432,12 @@ CloudsInfo rendererCloudsInfo()
     i.panoramas = s.panoramas;
     i.nearResolved = s.nearLast >= 0 ? s.nearHistory[s.nearLast] : 0;
     i.nearDistance = s.nearDistance;
+    i.shadow = s.shadowLive >= 0 ? s.shadow[s.shadowLive] : 0;
+    i.shadowCorner[0] = s.liveShadowCorner[0];
+    i.shadowCorner[1] = s.liveShadowCorner[1];
+    i.shadowSize = static_cast<float>(kShadowWorld);
+    i.shadowMaps = s.shadowMaps;
+    i.skyLights = s.skyLights;
     return i;
 }
 
