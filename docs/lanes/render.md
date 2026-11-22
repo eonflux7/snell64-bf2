@@ -245,7 +245,7 @@ Left, outside the milestone:
 - Decals' sky is not occluded (the hemi map holds only the ground's sky visibility); first-person
   models take the open sky rather than the visibility under the camera; weapons' metal and fabric
   under colour-map gloss have no class of their own.
-- View distance: the far ground ring (land past the surrounding ring shows sky; below the horizon
+- View distance: the far ground ring (milestone 17; land past the surrounding ring shows sky; below the horizon
   the sky repeats its horizon row), vegetation past overgrowth's range, jets and anti-air not
   checked, the far scenery's cost.
 - Banding in the dark blue and the sun's glare: milestone 13 (dither, bloom).
@@ -750,6 +750,54 @@ GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: 
 range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
 cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
 higher resolution unless the reference views show the baked sky term failing.
+
+### 17. Far terrain
+
+Planned by the owner, 2026-11-22: cheap ground past the map for air combat, so a jet at altitude
+never looks down at the void. Where it stands: the level's surrounding ring (eight sectors around
+the primary heightmap, 8-bit heights, each the primary's size; none on some levels) is lit like the
+terrain (sun N.L at its vertex normals, the sky's SH, aerial perspective) but has no shadows and
+coarse normals. Past the ring is nothing: the sky shows, and below the horizon the sky repeats its
+horizon row (left open by milestone 11). Sea levels already run sea cells to the horizon. Visual
+only: no collision or gameplay out there.
+
+- **How far.** With the realistic haze (8 km visibility, 1200 m falloff), a level ray keeps about
+  5 % contrast at 25 km, so the far ground has to hold up to roughly 30–50 km, not to the
+  geometric horizon (about 200 km from 3 km up). Task 1 measures it.
+- **One draw.** A static camera-centred grid of concentric rings, cells growing with distance,
+  snapped to its own cell size so it does not swim. The vertex shader displaces it from one
+  height-and-colour texture per level (vertex texture fetch) and lowers it for the Earth's curvature
+  (d²/2R, 125 m at 40 km), which hides the outer edge under the haze. It skips the area the ring
+  (or the primary map, on levels without one) covers, and its heights are pinned to the ring's edge
+  there. Shaded like the ring, by the shared lighting model, with normals from the height texture
+  per pixel.
+- **Generated per level, no hand work.** From the level's own data at load (or cached): the
+  heightmaps' height range and roughness drive fBm/ridged noise with the same character, falling
+  off from the ring's edge to a per-level base height. Colours come from the level's colour map
+  along its border, binned by height and slope, spread by histogram-preserving stochastic tiling (no
+  mirroring or repeats visible from the air). Each edge is classed land, water or nothing, so a
+  coast continues as a coast and open sea stays sea.
+- **Real terrain as an override** (content, later, per level). A level that is a real place can ship
+  a baked texture in the same slot: elevation from Copernicus GLO-30/90, coloured by ESA WorldCover
+  land classes, each class taking a colour from the level's own colour map (satellite colours would
+  clash with the art). Levels are artistic takes on their places, so the bake blends to them over a
+  few km. The bake tool and the per-level files live outside this tree; the engine only reads the
+  file if it is there.
+- **Cheap additions.** Cloud shadows from milestone 12's field on the far ground (one texture read);
+  a detail texture fading in for a low pass near the edge. Past ~50 km, if needed, a horizon band
+  baked into the sky at load.
+
+Tasks:
+1. Measure: free fly at 1, 2 and 3 km over Muttrah City, Fallujah West, Saaremaa and a level
+   without a ring; shots of where the void shows and how far the haze leaves ground visible; set
+   the grid's radius from them.
+2. The grid, its texture slot and the curvature, with a flat ground at the base height and the
+   ring's edge colour: the void gone on every level.
+3. Generated heights and colours, edge classes (land, water, nothing).
+4. Shading: per-pixel normals, cloud shadows, the detail fade.
+5. The override file, and one real-place bake as the test.
+6. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
+   pass.
 
 ## Frame
 
