@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23), 5 (bakes) next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah placed by hand, the bake file and reader next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |

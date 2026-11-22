@@ -859,7 +859,13 @@ Tasks:
 5. The bake file and its reader, the placement fit, and one real-place bake as the test: the
    Falklands (jets; its playable area is the islands), else Kashan or Khamisiyah (jets, low
    relief); the two variants compared where they differ, on a mountain level with jets (Kunar
-   Province). The sea past the map then gets the far ground's curvature drop (the surrounding
+   Province). Placement as built (2026-11-23, tool outside this tree): an automatic search (masked NCC over
+   position, heading and scale on GLO-90) found no real match for Kunar Province (55 km around
+   Asadabad) or Muttrah City; levels are placed by hand in a window over the real ground with the
+   in-game map overlaid, the fit only refining. Placed: Kunar Province, Kashan Desert, Muttrah City
+   (all heading 0, scale 1). The least-squares height ratio means nothing where the shapes do not
+   correlate (Kunar 0.19): the scaled variant takes the ratio of the reliefs; on sea levels the
+   offset is pinned so the level's sea lands on 0 m. Next: the bake file and its reader. The sea past the map then gets the far ground's curvature drop (the surrounding
    water technique's vertex shader), so the two meet at their coasts to the horizon.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
