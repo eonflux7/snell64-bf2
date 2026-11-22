@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds), planned; task 1 next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds), planned; task 1 (cloud material) next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -18,22 +18,22 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started.
 
-1. Reference set: a script fetches chosen Poly Haven outdoor HDRIs (by preset and coverage, open
-   sky) at 2k–4k, computes each one's sun position and checks its sun is unclipped; an offline
-   analysis gives luminance ratios and cloud statistics per reference. The chosen list goes in
-   render.md.
-2. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
+1. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
    octave multiple scattering (ported from Dagor's, with attribution); sun and sky light at the
    cloud's altitude from a small table built from our atmosphere (Dagor's `clouds_light_color`).
-3. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
+2. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
    slabs, heights and a continuous cloud type (stratus to cumulonimbus: height profile, base
    rounding, anvil; Dagor's `gen_clouds_lut`); per-cell life phase; the density field and the
    sun-transmittance and ambient volume as 2D slice atlases, rendered by pixel shaders over frames;
    an ⅛ field for empty space; high cloud (Ci/Cc/Cs) as a procedural flat layer at its altitude.
-4. Cloud panorama (about 1024x512) marching the baked atlases with detail noise at sample time,
+3. Cloud panorama (about 1024x512) marching the baked atlases with detail noise at sample time,
    ambient from the sky-view table, aerial perspective; drawn behind the sky. Updated over 8
    frames and crossfaded between two panoramas, blended in a compressed (tonemapped) space so
    evolution does not pop or flicker (Dagor's `daSkiesPanorama`). Coverage console variable.
+4. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
+   maritime, coverage about 0.3/0.7/1.0, 2 sunsets; open sky) with each one's sun position and an
+   unclipped-sun check; a second script measures the luminance ratios. The list goes in render.md.
+   Cloud statistics only if the prototype looks wrong.
 5. Prototype judged on Kashan Desert (ground and air, coverage 0.3/0.7/1.0) against the references.
 6. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
    overcast reference's SH. The haze and sky light are dimmed by the sun ray's length through the

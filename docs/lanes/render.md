@@ -378,7 +378,8 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
 
 **Reference set.** Poly Haven's outdoor HDRIs (CC0; 647, 454 with an open sky: 225 partly cloudy,
 173 clear, 47 overcast, 7 fog; 285 from southern Africa, 225 from Europe, 120 without coordinates),
-fetched at 2k–4k by a script and not stored in the repo. The sun's position comes from each one's
+fetched at 2k–4k by a script and not stored in the repo; about 8 hand-picked ones, chosen just
+before the prototype is judged. The sun's position comes from each one's
 coordinates and date (or its brightest pixel), and the script checks its sun peak is unclipped. No
 skies from the Middle East: the dry southern African ones stand in for the desert preset. Uses, in
 order of value:
@@ -391,7 +392,7 @@ order of value:
 3. The coverage-driven lighting, checked before the clouds exist: the scene lit from a real
    overcast reference's SH against what our coverage value gives.
 4. Cloud statistics (coverage, size distribution) from a red/blue segmentation, masking about 5°
-   around the sun for flare.
+   around the sun for flare; only if the prototype's clouds look wrong (Dagor's noise is tuned).
 
 First task: a prototype of the sky clouds, the two presets (desert, maritime) and the coverage
 value, with the Mie phase and multiple scattering, before the lighting is coupled. Judged on Kashan
