@@ -566,6 +566,47 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   transmittance 0.11 (S 0.08–0.14), 90 % of the ground under 0.5. Open: the first-person passes
   (RASM zero) take no cloud shadow.
 
+### 16. Water
+
+Decided by the owner, 2026-11-22, with milestone 12 paused: the water shader is rewritten, not
+patched. What the owner sees on The Falklands: one pattern tiled uniformly (a single 3D normal
+volume repeating every ~30 m at one scale), flat and low in detail up close, a ring around the
+camera (task 1), and streaks in the reflections (task 1). Kept: the water's geometry and height
+(physics and boats float on a flat plane), the under-water look and thermals, the reflections'
+contract 12. The levels' water settings (`WaterColor`, `WaterScroll`, the lightmap's water depth)
+become inputs: the colour an absorption hint, the scroll the wind's direction and speed.
+
+- **Waves from a spectrum.** An ocean spectrum (JONSWAP, Tessendorf's FFT) evolved on the GPU each
+  frame into three tiling cascades whose sizes do not divide each other (about 500, 90 and 17 m,
+  256² each), summed by the shader so no period is visible; slopes, horizontal displacement and its
+  Jacobian (for foam). Wind and fetch per level, a default otherwise.
+- **Filtered normals and a sun path.** Each cascade's slope variance kept through its mips (LEAN
+  mapping) widens a GGX sun lobe as the waves shrink below a pixel: near water shows the waves, far
+  water a smooth glitter path, no aliasing. Replaces the retail Blinn highlight.
+- **The water body.** Refraction of the scene copy (s12) offset by the waves, the water's depth from
+  the scene's linear depth (s15), Beer absorption and in-scatter tinted by the level's colour
+  (replacing the lightmap's depth and the retail opacity), light through the wave crests facing
+  the sun.
+- **Foam.** At shores from the water's depth, on crests from the Jacobian; noise-broken, never a
+  tiled texture.
+- **Geometry (owner to decide).** Displacing a camera-centred grid by the spectrum near the camera
+  gives real wave shapes, but boats and the shore are on a flat plane; the default is normals only,
+  displacement kept small or left out.
+
+Tasks (in [STATUS.md](../STATUS.md)) close with the owner's look at The Falklands and Saaremaa and
+the GPU cost measured.
+
+As built:
+- *The ring* (task 1). Past the sun cascades water took the terrain lightmap's g as its sun
+  visibility, but g is visibility × N.L (`Ra_ResolveSunCosine`), 0.59 on flat water under The
+  Falklands' sun at 36°: the sun's highlight and the body dropped where the cascades end. Water
+  now divides the sun's height out (`RASM[17].y`, floored at 0.05).
+- *Reflection streaks* (task 1). The march took a hit wherever a point lay behind the scene within
+  `2 × step + 2 %` of its depth, tens of metres far out, so rays passing behind masts and poles
+  hit them and smeared them down the water. A hit now needs the step to have crossed the scene's
+  depth (thickness the step's own depth span, at least 5 cm + 0.2 % of the depth).
+- Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up.
+
 ### 13. HDR bloom + auto-exposure
 
 An energy-conserving bloom without threshold, and exposure that adapts between interiors and open
