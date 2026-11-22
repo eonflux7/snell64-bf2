@@ -345,6 +345,13 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   screen-space derivatives; sky specular occluded by the sky visibility (Lagarde). The frame
   grade's exposure went from −1.25 to 0 stops with it (owner: looks better), particle emissives
   following it. Not yet checked against the new sun: baked and dynamic point lights.
+- **Bundled meshes** (task 9, shader side only): the class is picked in the shader from the
+  permutation's flags and the material's `AlphaBlendEnable` (the class mapping lives with the
+  shaders); no engine change, no class index in the engine yet. Paint, glass and matte are keyed;
+  metal is not (no technique tells it apart), nor fabric (canvas under colour-map gloss takes
+  paint). Vehicles' sky light is occluded by the hemi map's alpha, faded with the height over the
+  terrain. Blended surfaces keep their reflection whatever their alpha. Left: first-person models'
+  sky visibility under the camera (engine side), weapons' metal.
 - **Left** (owner's look, 2026-11-20: good on Saaremaa, Kashan Desert, Burning Sands, The Falklands): the far ground ring (land past the ring
   shows sky); below the horizon the sky repeats its horizon row, flat (seen from the air until the
   ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets

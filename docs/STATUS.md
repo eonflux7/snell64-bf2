@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7, 8 built) | Milestone 11 task 9, bundled meshes | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
+| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built) | Milestone 11 task 10, static meshes | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -43,8 +43,8 @@ Tasks:
 8. Shared lighting model, one physical light (contract 11). Built; bundled meshes wired with a
    placeholder class; the owner's look on test_bootcamp: better. Left: foliage and particles'
    sky light (per vertex), point lights against the new sun.
-9. Bundled meshes (judged on test_bootcamp). Look for: paint and glass reflecting the sky,
-   strongest at grazing angles; vehicles lit from above and darker beneath; no edge sparkle.
+9. Bundled meshes (judged on test_bootcamp). Built (agent, views `gloss`, `gloss2`, `glass`,
+   shots `m11t9-*`); awaiting the owner's look. Left: render.md's "Built so far".
 10. Static meshes. Look for: glass and metal on buildings reflecting the sky; walls lit by the sky
     from its direction.
 11. Soldiers (hemi map), decals and terrain.
@@ -66,6 +66,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   24 resets without a crash (agent, Muttrah City).
 - Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
   Saaremaa.
+- Bundled meshes' material classes (milestone 11 task 9), test_bootcamp views `gloss`, `gloss2`,
+  `glass`: paint and glass reflect the sky, glass stays see-through; canvas tarps read a little
+  glossy (they take paint).
 - `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`).
 
 ## Open issues
