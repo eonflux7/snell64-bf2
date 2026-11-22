@@ -34,7 +34,8 @@ std::string extractFilePath(const std::string& path, char separator);
 namespace io {
 namespace {
 
-// Fills directory and size information from stat; timestamps are zero except in the macOS client.
+// Fills directory and size information from stat; timestamps are zero except in the macOS and Linux
+// clients.
 // The caller supplies the name.
 void buildFileInfo(FileInfo* info, const struct stat* st)
 {
@@ -47,7 +48,7 @@ void buildFileInfo(FileInfo* info, const struct stat* st)
     info->lastAccessTimeHigh = 0;
     info->lastWriteTimeLow   = 0;
     info->lastWriteTimeHigh  = 0;
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The client stands in for BF2.exe's Win32FileSystem, whose FileInfo
     // carries the WIN32_FIND_DATAW file times (PE 0x6767E0): FILETIME, 100 ns since 1601-01-01.
     // RendDX9's effect cache test (EffectManager::compileEffect, PE 0x10034F60) uses a .cfx only
@@ -60,9 +61,17 @@ void buildFileInfo(FileInfo* info, const struct stat* st)
         low  = static_cast<unsigned int>(ticks);
         high = static_cast<unsigned int>(ticks >> 32);
     };
+#if defined(__APPLE__)
     filetime(st->st_birthtimespec, info->creationTimeLow, info->creationTimeHigh);
     filetime(st->st_atimespec, info->lastAccessTimeLow, info->lastAccessTimeHigh);
     filetime(st->st_mtimespec, info->lastWriteTimeLow, info->lastWriteTimeHigh);
+#else
+    // The Linux client had the same zero times: the 22 effects with an .fx source were compiled
+    // again at every level load and "Optimizing shaders" showed on every start. struct stat has no
+    // birth time on Linux, so the creation time stays zero (nothing in the client reads it).
+    filetime(st->st_atim, info->lastAccessTimeLow, info->lastAccessTimeHigh);
+    filetime(st->st_mtim, info->lastWriteTimeLow, info->lastWriteTimeHigh);
+#endif
 #endif
 }
 
