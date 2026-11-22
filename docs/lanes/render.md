@@ -792,13 +792,30 @@ only: no collision or gameplay out there.
   land classes, each class taking a colour from the level's own colour map (satellite colours would
   clash with the art). Levels are artistic takes on their places, so the bake blends to them over a
   few km. The bake tool and the per-level files live outside this tree; the engine only reads the
-  file if it is there.
+  file if it is there. Placement is fitted, not hand-set: the tool searches GLO-90 around the
+  named place for the primary heightmap over position, rotation and scale; the fit gives the
+  level's latitude, longitude, heading, scale, height offset (a level's 0 m is not sea level) and
+  vertical ratio, and a poor fit means the name is borrowed and the level stays generated.
+  Undecided (owner): the bake at real heights (a step at the blend where real relief is 10-20x the
+  map's) or scaled by the fitted ratio.
+- **Which levels are real places** (review 2026-11-23, PR 1.9.0.0, 81 playable levels, by name,
+  not yet checked by the fit): about 33 real places of relief like the map's (Fallujah West,
+  Khamisiyah, Kashan, Debrecen, Normandy levels, Saaremaa, the Falklands, ...); about 18 real
+  places whose real relief far exceeds the map's (Mestia, Bamyan, Korengal, Kunar, Dovre, Adak,
+  Muttrah, ...); about 30 fictional, set in a real region. Of the 26 levels with jets, 16 are real
+  places and 10 fictional, so the generated ground carries a large share of air combat on its own.
+  Heights: about 45 levels use the 0.0025 vertical scale, capped at 163.8 m, and many reach it.
 - **Cheap additions.** Cloud shadows from milestone 12's field on the far ground (one texture read);
   a detail texture fading in for a low pass near the edge. Past ~50 km, if needed, a horizon band
   baked into the sky at load.
 
 Tasks:
-1. Measure (done, above). Every PR level has nine heightmaps; none was found without a ring.
+1. Measure (done, above). Every PR level has nine heightmaps, but not every ring is data:
+   Saaremaa's eight sectors are one placeholder file (byte-identical, no ring colormaps; the
+   engine gets no ring vertices), Op Barracuda's and Operation Bobcat's are all flat at 0, the
+   Falklands' whole cluster is flat (8 km, 64 m cells, sea off: its land is presumably meshes).
+   Many rings have flat sectors: Ascheberg, Grostok and Battle of Debrecen 7 of 8, Kafar Halab and
+   Operation Soul Rebel 5, Fallujah West and Brecourt Assault 4, others 1-3.
    As built for task 2 (`Geom/FarGround.cpp`, contract 21; `renderer.farGround` 0 draws the retail
    ring): seven levels of 64 x 64 cells, 16 m to 1 km, out to about 32 km from the camera, one draw
    of about 43,000 triangles; each level snapped on the CPU to twice its cell, its outer cells
@@ -817,10 +834,15 @@ Tasks:
    shows streaks, Fallujah West's sea.
 2. The grid, its texture slot and the curvature, drawn over the ring's area too, with a flat ground
    at the base height and the playable map's edge colour: the void gone on every level.
-3. Generated heights and colours, edge classes (land, water, nothing); sea cells only where the
+3. Generated heights and colours, edge classes (land, water, nothing); a flat or duplicated ring
+   sector counts as unknown, not flat land (growing noise from it builds terraces), and without a
+   usable ring the noise grows from the primary's edge; a sea level is only a sea when it lies
+   near the level's height range (-50, -10000, -9982 and -2222220000 mean no sea); sea cells only where the
    class says sea (fixes Fallujah West's sea).
 4. Shading: per-pixel normals, cloud shadows, the detail fade.
-5. The override file, and one real-place bake as the test.
+5. The override file, the placement fit, and one real-place bake as the test: the Falklands
+   (jets; its playable area is the islands, which the generated path would leave a flat plain),
+   else Kashan or Khamisiyah (jets, low relief).
 6. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
 
