@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–2 built; task 3 (cloud panorama) next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–3 built; task 4 (reference set) next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -23,11 +23,8 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
 2. Weather map and baked volumes (`Clouds.cpp`, `RaClouds.fx`, contract 13; `renderer.cloudPreset`,
    `renderer.cloudCoverage`): built (agent: `tools.clouds` on Kashan Desert at 0.3/0.7/1.0); high
    cloud's flat layer moves to task 3 with the panorama that draws it.
-3. Cloud panorama (about 1024x512) marching the baked atlases with detail noise at sample time,
-   ambient from the cloud light table (task 1), aerial perspective; drawn behind the sky. Updated
-   over 8 frames and crossfaded between two panoramas, blended in a compressed (tonemapped) space
-   so evolution does not pop or flicker (Dagor's `daSkiesPanorama`). With it the high cloud
-   (Ci/Cc/Cs) as a procedural flat layer, and the wind drift.
+3. Cloud panorama, high cloud and wind (contract 14; `renderer.clouds`): built (agent: Kashan
+   Desert at coverage 0.3/0.4/1.0, ground and 600 m, `tools.clouds`).
 4. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
    maritime, coverage about 0.3/0.7/1.0, 2 sunsets; open sky) with each one's sun position and an
    unclipped-sun check; a second script measures the luminance ratios. The list goes in render.md.
@@ -56,6 +53,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
   Saaremaa.
 - `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`).
+- Sky clouds (render milestone 12, tasks 1–3): Kashan Desert, views `m12-up`, `m12-up90`,
+  `m12-up180`, `m12-up270`, `kas_high`; `renderer.cloudCoverage` 0.3/0.4/1.0, `renderer.cloudPreset`
+  0/1, `renderer.clouds 0` for the clear sky.
 
 ## Open issues
 
