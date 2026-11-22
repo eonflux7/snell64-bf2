@@ -623,15 +623,26 @@ void rendererSkyCubeBuild(const SkyCubeSource& src)
                  radiance.ground.x, radiance.ground.y, radiance.ground.z);
 }
 
+namespace
+{
+const float kSkyShOff[7][4] = {};
+const float* g_skyShFrame = &kSkyShOff[0][0];   // what this frame's RaSkySH holds
+}
+
 void rendererSkyCubeFrame(bool use)
 {
     if (!device())
         return;
-    static const float kOff[7][4] = {};
     const bool live = use && g.live;
-    stateManagerSetSkySh(live ? &g.sh[0][0] : &kOff[0][0]);
+    g_skyShFrame = live ? &g.sh[0][0] : &kSkyShOff[0][0];
+    stateManagerSetSkySh(g_skyShFrame);
     bindSampler(kSkyCubeSampler, live ? g.cube : 0, true);
     bindSampler(kSkyBrdfSampler, live && g.brdfBuilt ? g.brdf : 0, false);
+}
+
+const float* rendererSkyShFrame()
+{
+    return g_skyShFrame;
 }
 
 SkyCubeInfo rendererSkyCubeInfo()

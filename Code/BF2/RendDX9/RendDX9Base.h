@@ -891,6 +891,9 @@ void rendererSkyCubeBuild(const SkyCubeSource& source);
 // Binds the cube, the table and RaSkySH; with `use` false (or before a build) unbinds them and
 // zeroes RaSkySH.
 void rendererSkyCubeFrame(bool use);
+// This frame's RaSkySH (kSkyShVec4s float4s; zeros while not live), for effects that read it in a
+// vertex shader as a parameter (RaSkyShVertex: particles, rendererBindParticleLighting).
+const float* rendererSkyShFrame();
 struct SkyCubeInfo
 {
     bool live;

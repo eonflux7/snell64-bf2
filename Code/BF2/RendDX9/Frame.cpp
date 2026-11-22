@@ -266,7 +266,8 @@ void* effectD3dxHandle(void* effect);   // Effect.cpp
 // RaShader::begin never reaches them; each renderer calls this as it binds its effect. The level's
 // one sun as every lit surface gets it (Lightmanager.staticSunColor, staticSkyColor as authored),
 // the direction toward the sun, the frame's RASM (zero outside the main world pass, so first
-// person and other views keep the baked hemi map sun visibility) and the cascade atlas.
+// person and other views keep the baked hemi map sun visibility), the cascade atlas and the sky's
+// irradiance (RaSkyShVertex, the frame's RaSkySH: vertex shaders cannot read the pixel registers).
 void rendererBindParticleLighting(void* effect)
 {
     Effect* const fx = static_cast<Effect*>(effect);
@@ -284,6 +285,8 @@ void rendererBindParticleLighting(void* effect)
     effectGetShaderParameterBorrowedTyped(fx, kDir)->setValue(&towardSun, 0);
     effectGetShaderParameterBorrowedTyped(fx, kCascades)->setValue(
         g_sunCascadesLive ? g_sunCascadeConstants : kNoSunCascades, kSunCascadeVec4s);
+    static const std::string kSkySh("RaSkyShVertex");
+    effectGetShaderParameterBorrowedTyped(fx, kSkySh)->setValue(rendererSkyShFrame(), kSkyShVec4s);
     // The atlas as a texture parameter: D3DX binds it to the vertex sampler it assigned. Set on
     // the D3DX effect directly, since the parameter path takes engine texture wrappers.
     if (ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect)))

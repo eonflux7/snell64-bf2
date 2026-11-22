@@ -41,10 +41,10 @@ Tasks:
    checked by an agent with `tools.atmosphere`. Retail environment maps deleted at acceptance
    where nothing else reads them.
 8. Shared lighting model, one physical light (contract 11). Built; bundled meshes wired with a
-   placeholder class; the owner's look on test_bootcamp: better. Left: foliage and particles'
-   sky light (per vertex), point lights against the new sun.
-9. Bundled meshes (judged on test_bootcamp). Built (agent, views `gloss`, `gloss2`, `glass`,
-   shots `m11t9-*`); awaiting the owner's look. Left: render.md's "Built so far".
+   placeholder class; the owner's look on test_bootcamp: better. Foliage and particles' sky
+   light built (agent), judged with task 10. Left: point lights against the new sun.
+9. Bundled meshes (judged on test_bootcamp). Done (owner: looks good). Left: render.md's
+   "Built so far".
 10. Static meshes. Look for: glass and metal on buildings reflecting the sky; walls lit by the sky
     from its direction.
 11. Soldiers (hemi map), decals and terrain.
@@ -72,9 +72,6 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   24 resets without a crash (agent, Muttrah City).
 - Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
   Saaremaa.
-- Bundled meshes' material classes (milestone 11 task 9), test_bootcamp views `gloss`, `gloss2`,
-  `glass`: paint and glass reflect the sky, glass stays see-through; canvas tarps read a little
-  glossy (they take paint).
 - `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`).
 
 ## Open issues
