@@ -212,7 +212,7 @@ class PackageReleaseTests(unittest.TestCase):
                         if role == "client":
                             self.assertIn(r"%LOCALAPPDATA%\OpenBF2\Registry.dat", readme)
                         if role == "client" and platform == "windows-x86":
-                            for entry in ("binkw32.dll", "d3dx9_25.dll", "bundled BF2OpenAL.dll",
+                            for entry in ("binkw32.dll", "32-bit d3dx9_43.dll", "bundled BF2OpenAL.dll",
                                           "OpenAL-Soft-NOTICE.txt", "application folder first", "pb\\",
                                           "working directory", "Checked against the code",
                                           "not runtime-tested here"):
@@ -222,7 +222,7 @@ class PackageReleaseTests(unittest.TestCase):
                         elif role == "client":
                             self.assertIn("cannot join servers that require PunkBuster", readme)
                             self.assertIn("Use the x86\n   client for those", readme)
-                            for entry in ("64-bit d3dx9_25.dll", "bundled 64-bit BF2OpenAL.dll", "OpenAL-Soft-NOTICE.txt",
+                            for entry in ("64-bit d3dx9_43.dll", "bundled 64-bit BF2OpenAL.dll", "OpenAL-Soft-NOTICE.txt",
                                           "Checked against the code",
                                           "not runtime-tested here"):
                                 self.assertIn(entry, readme)
@@ -388,7 +388,7 @@ class ReleasePackageTests(unittest.TestCase):
             "x64\\", "x86\\", "server\\", "editor\\", "licenses\\", "build-info.json",
             "Microsoft Visual C++ runtime", "x64 for x64\\", "x86 for x86\\, server\\ and editor\\",
             "not code-signed", "PunkBuster works only with the x86 client",
-            "64-bit d3dx9_25.dll", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/archive/registry-file.md",
+            "d3dx9_43.dll of the DirectX End-User Runtime", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/archive/registry-file.md",
             "other than 16567", "do not establish loading, joining or gameplay",
             'cd /d "C:\\Games\\Battlefield 2"', 'cd /d "C:\\Games\\Battlefield 2 Server"',
             'x64 client:\n      "C:\\OpenBF2\\openbf2-windows\\x64\\BF2.exe" +modPath mods/bf2 +fullscreen 0',
@@ -401,7 +401,7 @@ class ReleasePackageTests(unittest.TestCase):
             "does not use the game folder's 32-bit DLLs", "bundled 64-bit BF2OpenAL.dll",
             "x64\\OpenAL-Soft-NOTICE.txt", "cannot join servers that require PunkBuster", "Use the x86\n   client for those",
             # x86 client
-            "binkw32.dll, d3dx9_25.dll and PunkBuster's\n   pb\\ folder", "x86\\OpenAL-Soft-NOTICE.txt",
+            "binkw32.dll and PunkBuster's\n   pb\\ folder", "x86\\OpenAL-Soft-NOTICE.txt",
             "application folder first", "the x86 folder",
             "Checked against the code; not runtime-tested here",
             # server

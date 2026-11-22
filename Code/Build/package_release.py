@@ -102,14 +102,17 @@ def windows_client_notes(platform, notice="OpenAL-Soft-NOTICE.txt", folder="this
     """[CHOSEN, not recovered] A Windows client's dependencies, shared by the per-role README and
     the combined Windows README (which names the client's folder and notice path)."""
     if platform == "windows-x86":
-        text = ("The original folder supplies binkw32.dll, d3dx9_25.dll and PunkBuster's\n"
-                "pb\\ folder through this working directory where required. Sound uses\n"
+        text = ("The original folder supplies binkw32.dll and PunkBuster's\n"
+                "pb\\ folder through this working directory where required. It needs the\n"
+                "32-bit d3dx9_43.dll that the DirectX End-User Runtime installs in SysWOW64,\n"
+                "and d3dcompiler_47.dll, part of Windows 10 and later. Sound uses\n"
                 "the bundled BF2OpenAL.dll (OpenAL Soft; see {notice}), not\n"
                 "the game folder's retail copy: BF2.exe runs from {folder},\n"
                 "and Windows searches the application folder first.\n").format(notice=notice, folder=folder)
     else:
         text = ("This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
-                "64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
+                "64-bit d3dx9_43.dll that the DirectX End-User Runtime installs in System32,\n"
+                "and d3dcompiler_47.dll, part of Windows 10 and later.\n"
                 "Sound uses the bundled 64-bit BF2OpenAL.dll (OpenAL Soft; see\n"
                 "{notice}), so the default audio providers work.\n"
                 "No PunkBuster: PunkBuster exists only as 32-bit DLLs, so this x64\n"
@@ -486,8 +489,9 @@ def windows_readme(revision, source_url, included, omitted, licences):
         "- The Microsoft Visual C++ runtime of the folder's architecture: x64 for x64\\,\n"
         "  x86 for x86\\, server\\ and editor\\.\n"
         "- These Windows binaries are not code-signed.\n"
-        "- The x64 client needs the 64-bit d3dx9_25.dll of the DirectX End-User Runtime\n"
-        "  (System32); the x86 client and the editor use the game folder's 32-bit copy.\n"
+        "- The clients need d3dx9_43.dll of the DirectX End-User Runtime (64-bit in\n"
+        "  System32, 32-bit in SysWOW64) and Windows' d3dcompiler_47.dll; the editor uses\n"
+        "  the game folder's 32-bit d3dx9_25.dll.\n"
         "- PunkBuster works only with the x86 client.\n"
         "- The clients read CD keys from the retail registry or from a per-user\n"
         "  %LOCALAPPDATA%\\OpenBF2\\Registry.dat (docs/archive/registry-file.md).\n"

@@ -53,8 +53,10 @@ The client runs against an existing PR install through an overlay; the install i
 modified. Under Proton/DXVK:
 
 - set `DXVK_CONFIG="d3d9.useD32forD24 = True"` (reversed-Z needs float depth);
-- place Microsoft's x64 `d3dx9_24.dll` and `d3dx9_25.dll` beside `BF2.exe` and load them native
-  (`WINEDLLOVERRIDES=d3dx9_24,d3dx9_25=n`); Wine's builtins cannot compile effects.
+- place Microsoft's x64 `d3dx9_43.dll` and `d3dcompiler_43.dll` (DirectX June 2010 runtime) and
+  `d3dcompiler_47.dll` (Windows SDK redistributable) beside `BF2.exe` and load them native
+  (`WINEDLLOVERRIDES=d3dx9_43,d3dcompiler_43,d3dcompiler_47=n`); Wine's builtins cannot compile
+  effects.
 
 Play is offline and client-hosted. `BF2_AUTOHOST=<map>:<mode>:<size>` hosts straight from the menu.
 Every flag this project adds is listed in [dev.md](docs/lanes/dev.md).

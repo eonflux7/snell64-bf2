@@ -74,8 +74,7 @@ main thread asked for the effects.
 - Console scripts, template creation and Python run in order and change global state. They stay
   serial; only the file work under them can move to other threads.
 - Effects compile with `d3dcompiler_47`, which runs compiles side by side in one module (render
-  milestone 15). Under `BF2_FX_COMPILER=d3dx`, D3DX's compiler runs one compile at a time per loaded
-  module, so each worker gets a renamed copy of it.
+  milestone 15). D3DX's compiler, which retail used, runs one compile at a time per loaded module.
 
 ## State
 

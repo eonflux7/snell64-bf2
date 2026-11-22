@@ -367,24 +367,35 @@ Before: with every effect stale, 426 s of the test_bootcamp load was the main th
 Ra effects compiling on 8 workers (6.3 s each on average, 3,872 s in all), and about 100 s more was
 `compileEffectFile` (`particles`, `roadcompiled`, `trail`, undergrowth) on the main thread. The time
 was D3DX's April 2005 effect compiler (`d3dx9_24`, `d3dx9_25`): one bundled-mesh permutation took
-17.4 s there and 0.56 s with `d3dcompiler_47`. `d3dx9_43` (PR's own RendDX9 links it) would bring only
-the 2010 `d3dcompiler_43`, so it is not used.
+17.4 s there and 0.56 s with `d3dcompiler_47`.
 
 Built:
 1. `d3dcompiler_47` (`D3DCompile`, fx_2_0) compiles every effect (`FxCompiler.cpp`): Ra effects on
    the main thread and on the prefetch workers (a worker per core but one, all in one module), and
-   `compileEffectFile`. D3DX stays the effect runtime: `d3dx9_25`'s `D3DXCreateEffect` loads the
-   output (all 586 Ra permutations, bm 448, sm 24, stm 114: the same parameters, all 1,489 techniques
-   valid), and its compiler only reads the `.mfx` metadata. The compiler is part of both cache keys.
+   `compileEffectFile`. D3DX stays the effect runtime: `D3DXCreateEffect` loads the output (all 586
+   Ra permutations, bm 448, sm 24, stm 114: the same parameters, all 1,489 techniques valid), and
+   D3DX's compiler only reads the `.mfx` metadata. The compiler is part of both cache keys.
    `d3dcompiler_47` refuses a parameter named like a technique, which D3DX allowed (`skydome.fx`,
    `postproduction_nv3x.fx`: the parameters were renamed; the engine finds them by semantic).
-   `BF2_FX_COMPILER=d3dx` keeps D3DX's compiler until acceptance. The client needs Microsoft's x64
-   `d3dcompiler_47.dll` beside BF2.exe (the Windows SDK redistributable; Wine's builtin is vkd3d,
-   not fxc); without it the D3DX compiler is used.
 2. `rashaderbm.fx`'s depth techniques read the lit pass's alpha without its lighting
    (`PS_BundledMesh_Alpha`): the 448 bm permutations compile in 134 s instead of 196 s of CPU. The
    same split in `rashaderstm.fx` saved 5 % and was not kept.
+3. `d3dx9_43` (June 2010, the last D3DX; PR's own RendDX9 links it too) is the only D3DX, in place
+   of retail's `d3dx9_25` and `d3dx9_24`: RendDX9 and TextureAtlasBuilder link it
+   (`RendDX9Abi/D3dx9_43.def`, delay-loaded), the `.mfx` metadata reads through its
+   `D3DXCreateEffectCompiler`, and the cache key preprocesses with `d3dcompiler_47`'s
+   `D3DPreprocess`. The interfaces the renderer declares are leading parts of the June 2010 ones
+   (later SDKs only appended methods). `d3dx9_43` loads all 626 effects `d3dcompiler_47` compiles
+   from the shaders, 1,507 of 1,507 techniques valid, as `d3dx9_25` does. Against the `d3dx9_25`
+   build: the same Muttrah views (differences only in wind-blown palms and the fountain), Fallujah
+   West and Saaremaa load cleanly, frame time the same (7.73 to 7.82 ms against 7.71 to 7.81 ms on
+   the `new` path). The D3DX compile path, its per-worker module copies and `BF2_FX_COMPILER` are
+   deleted. `BF2_D3DX=sdk` still links the April 2005 SDK (`d3dx9_25`) for retail-parity builds;
+   the scripts' builds (G2w seam, editor) keep `d3dx9_25`.
 
+The client needs Microsoft's `d3dx9_43.dll`, its `d3dcompiler_43.dll` (which D3DX's own compiler
+loads) and `d3dcompiler_47.dll` beside BF2.exe or in the system (Wine's builtins are vkd3d, not
+fxc). Without `d3dcompiler_47` no effect compiles; cached ones still load.
 Measured (test_bootcamp `gpm_cq 16`, launch to in game): every effect stale 30 s (about 10 minutes
 before), after an edit to `rashaderbm.fx` 22 s, nothing stale 17 s. The compiles run during the
 level's console scripts (`part:Objects`); the main thread waits for them for under a second.
