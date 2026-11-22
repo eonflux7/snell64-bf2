@@ -111,6 +111,14 @@ Now stages outside the mirror go straight to the device, as `SetTextureStageStat
 the states it does not mirror. Not checked against the retail binary; no retail or PR effect samples
 in a vertex shader, so retail never reached it.
 
+### R. RaShader reads a pixel shader's bytecode into 16 KB of stack (fixed)
+To learn the bound pixel shader's model, `RaShader.cpp` (the shader's setup, step 3) asks
+`GetFunction` for the size and then copies the whole bytecode into a 16 KB stack array, unchecked.
+A pixel shader past 16 KB overran it, and the stack cookie failed (`__report_gsfailure`, exception
+c0000409 at level load), found when render milestone 16's water body grew its shader past that size.
+The buffer is now sized to the shader. Not checked against the retail binary beyond the recovered
+code's 16384-byte array; retail's and PR's shaders stay well under it, so retail never reached it.
+
 ## Build
 
 ### P. Plugin DLLs as incremental Ninja targets (`dd686d2c`, `64e160f2`, `d310968a`)

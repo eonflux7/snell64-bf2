@@ -1512,16 +1512,15 @@ bool RaShader::build()
     if (IDirect3DPixelShader9* const pixelShader =
             static_cast<IDirect3DPixelShader9*>(stateManagerCurrentPixelShader()))
     {
-#if defined(__APPLE__)
-        // [CHOSEN, not recovered] D3D shader tokens are 32-bit even on LP64.
-        DWORD function[16384 / sizeof(DWORD)];
-#else
-        unsigned long function[16384 / sizeof(unsigned long)];
-#endif
-        UINT          size = 0;
+        // [FIX] Retail copies the bytecode into a 16 KB stack buffer whatever its size; a pixel
+        // shader past 16 KB (render milestone 16's water) overran it. Sized to the shader instead.
+        // D3D shader tokens are 32-bit on every target.
+        UINT size = 0;
         pixelShader->GetFunction(0, &size);
-        pixelShader->GetFunction(function, &size);
-        shaderModel = static_cast<int>((::D3DXGetShaderVersion(function) >> 8) & 0xFFu);
+        std::vector<DWORD> function((size + sizeof(DWORD) - 1) / sizeof(DWORD) + 1, 0u);
+        if (size)
+            pixelShader->GetFunction(&function[0], &size);
+        shaderModel = static_cast<int>((::D3DXGetShaderVersion(&function[0]) >> 8) & 0xFFu);
     }
     stateManagerPop();
 
