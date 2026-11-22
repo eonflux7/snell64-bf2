@@ -761,9 +761,18 @@ coarse normals. Past the ring is nothing: the sky shows, and below the horizon t
 horizon row (left open by milestone 11). Sea levels already run sea cells to the horizon. Visual
 only: no collision or gameplay out there.
 
-- **How far.** With the realistic haze (8 km visibility, 1200 m falloff), a level ray keeps about
-  5 % contrast at 25 km, so the far ground has to hold up to roughly 30–50 km, not to the
-  geometric horizon (about 200 km from 3 km up). Task 1 measures it.
+- **How far.** With the realistic haze (8 km visibility, 1200 m falloff), a straight ray from
+  altitude h down to the ground keeps 5 % contrast up to a slant length of 3 / (σ0 · H/h · (1 −
+  e^(−h/H))): about 9 km from 1 km up, 13 km from 2 km, 17 km from 3 km, 25 km from 5 km. A grid
+  radius of 30 km covers jets; the curvature drop hides the rest.
+- **What is there now** (task 1, 2026-11-22; views `ft-*` on Kashan Desert, Fallujah West, Muttrah
+  City, Saaremaa). The rings are not land: on each level they are flat and one colour (Kashan grey,
+  Fallujah slate blue), at most a coastline and the river's or roads' meshes running on into them.
+  Past the ring: on Kashan the sky's repeated horizon row; on Fallujah West (a desert city) sea cells
+  with waves to the horizon, so the open-sea test is wrong there; on Muttrah City sea cells and ring
+  sectors shaded differently, the tiles' squares visible from 2 km. From 600 m up the playable map
+  reads as a slab with a cliff at its edge. So the far ground replaces the ring's look too: the ring
+  is an input (heights, coast), not something to extend.
 - **One draw.** A static camera-centred grid of concentric rings, cells growing with distance,
   snapped to its own cell size so it does not swim. The vertex shader displaces it from one
   height-and-colour texture per level (vertex texture fetch) and lowers it for the Earth's curvature
@@ -788,12 +797,11 @@ only: no collision or gameplay out there.
   baked into the sky at load.
 
 Tasks:
-1. Measure: free fly at 1, 2 and 3 km over Muttrah City, Fallujah West, Saaremaa and a level
-   without a ring; shots of where the void shows and how far the haze leaves ground visible; set
-   the grid's radius from them.
-2. The grid, its texture slot and the curvature, with a flat ground at the base height and the
-   ring's edge colour: the void gone on every level.
-3. Generated heights and colours, edge classes (land, water, nothing).
+1. Measure (done, above). Every PR level has nine heightmaps; none was found without a ring.
+2. The grid, its texture slot and the curvature, drawn over the ring's area too, with a flat ground
+   at the base height and the playable map's edge colour: the void gone on every level.
+3. Generated heights and colours, edge classes (land, water, nothing); sea cells only where the
+   class says sea (fixes Fallujah West's sea).
 4. Shading: per-pixel normals, cloud shadows, the detail fade.
 5. The override file, and one real-place bake as the test.
 6. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
