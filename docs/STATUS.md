@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds), planned; task 1 (cloud material) next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): task 1 built; task 2 (weather map, baked volumes) next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -16,11 +16,10 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 ## Current: `render` milestone 12, clouds
 
-Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started.
+Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so far there.
 
-1. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
-   octave multiple scattering (ported from Dagor's, with attribution); sun and sky light at the
-   cloud's altitude from a small table built from our atmosphere (Dagor's `clouds_light_color`).
+1. Cloud material (`RaCloud.fxh`: delta-scaled droplet phase, octaves) and the cloud light table: built
+   (agent: compiled, table dumped on Kashan Desert); nothing draws with it before task 3.
 2. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
    slabs, heights and a continuous cloud type (stratus to cumulonimbus: height profile, base
    rounding, anvil; Dagor's `gen_clouds_lut`); per-cell life phase; the density field and the

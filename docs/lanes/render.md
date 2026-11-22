@@ -400,6 +400,30 @@ Desert from the ground and the air at coverage 0.3, 0.7 and 1.0, against the ref
 uses 1, 2 and 4. Budget about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at
 acceptance.
 
+**Built so far.**
+- *Task 1, the cloud material* (`RaCloud.fxh`, shaders outside this tree). Density
+  in g/m³ of liquid water; extinction 3·LWC/D (D the droplet diameter in µm). Phase: Jendersie and
+  d'Eon's fit, delta-scaled: its HG part (g ≈ 0.995, under 0.1° wide, half the extinction:
+  the diffraction peak) is treated as unscattered, so extinction is times the Draine weight w
+  (0.50 at 20 µm) and the phase is the Draine lobe alone, evaluated directly (normalized, 1/sr).
+  Dagor keeps the spike, which would put about 2700/sr into a sub-pixel ring around the sun.
+  Multiple scattering: Dagor's three octaves (contribution 0.7, attenuation 0.3, eccentricity
+  0.6, weights normalized to 1); the first octave takes the droplet phase, the others a dual-lobe
+  HG; the light volume will store the last octave's transmittance and the include raises it to the
+  others'. Ambient: the sky from above, half desaturated (Frostbite, Dagor), and the ground from
+  below, averaged over the sphere. A test effect compiles to 113 ps_3_0 slots.
+- *Cloud light* (`Atmosphere.cpp`, `buildCloudLight`, after Dagor's `clouds_light_color`),
+  built with the fit (adds about 25 ms): `RaCloudLightTable`, 64x24 `A16B16G16R16F`, managed. 8
+  altitude tiles across (layer i at (i + 0.5)/8 of 12 km above the reference height), 3 rows of
+  tiles down: the sun's irradiance (the sun above the atmosphere times the transmittance there),
+  the sky's mean radiance from above (its cosine-weighted irradiance / π, from the sky model at
+  that radius and sun cosine) and the ground's radiance from below (albedo times the ground's sun
+  and sky irradiance / π, through the air up to the layer). A tile's 8x8 texels span ±280 km
+  around the level's origin, so the curvature lowers a far deck's sun. The haze is left out, and
+  the ground everywhere has the level's albedo. Kashan Desert (sun 50°): sun 7.3/7.4/7.1 at
+  0.75 km to 7.7/8.1/8.9 at 11 km; sky 0.07/0.15/0.36 to 0.02/0.04/0.12; ground 0.59/0.49/0.30.
+  `tools.atmosphere` dumps it (`[cloudlight]`). Nothing samples it before task 3.
+
 ### 13. HDR bloom + auto-exposure
 
 An energy-conserving bloom without threshold, and exposure that adapts between interiors and open
