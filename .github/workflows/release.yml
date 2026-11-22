@@ -40,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         working-directory: packages
         shell: bash
         run: |
@@ -67,6 +68,7 @@ jobs:
           # build.yml fails release runs without D3DX; check the archive itself as well.
           python3 - <<'EOF'
           import json
+          import os
           import tarfile
           import zipfile
 
@@ -79,6 +81,11 @@ jobs:
                   dll = entry.split("/")[0] + "/" + runtime
                   assert "openbf2-windows/" + dll in names, "openbf2-windows.zip lacks " + dll
           assert not info.get("omitted"), "openbf2-windows.zip omits " + ", ".join(info["omitted"])
+          # build.yml signs release runs' Windows binaries when the Certum secret is set; only a prerelease may
+          # ship unsigned (docs/ci-releases.md, Windows signing)
+          if info.get("windows_signing") != "certum":
+              assert os.environ["PRERELEASE"] == "true", "openbf2-windows.zip is not signed"
+              print("::warning title=Unsigned Windows release::openbf2-windows.zip and the installer are not signed")
           with tarfile.open("openbf2-linux-x86_64-client.tar.gz", "r:gz") as archive:
               names = set(archive.getnames())
               for entry in ("bin/OpenBF2", "bin/bf2_client", "lib/libdice_py.so", "lib/libaidll.so", "lib/libdxvk_d3d9.so.0"):

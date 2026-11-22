@@ -13,7 +13,7 @@ permissions:
 
 env:
   LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
-  LINUX_SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+  LINUX_SETUP_REVISION: 1a727c5d972377435ebe62bb7093512777ad3a60 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer and signing
 
 jobs:
   windows:
@@ -21,6 +21,7 @@ jobs:
     name: Windows ${{ matrix.arch }}
     runs-on: windows-2022
     timeout-minutes: 120
+    # The per-role ZIPs are unsigned here; release runs sign them in the windows-app job (one signing session).
     strategy:
       fail-fast: false
       matrix:
@@ -170,8 +171,6 @@ jobs:
           )
           exit /b 0
 
-      # Future Windows signing belongs here, before packaging and checksums.
-      # No signing credentials or signing step are configured yet.
       - name: Check packaging fixtures
         run: python Code/Tests/test_package_release.py
 
@@ -217,11 +216,13 @@ jobs:
   # [CHOSEN, not recovered] The Windows release package, openbf2-windows.zip: both clients (x64\, x86\),
   # the x86 dedicated server (server\) and the x86 editor (editor\), assembled from the two legs'
   # per-role ZIPs after checking their checksums and build-info hashes (Code/Build/package_release.py
-  # --release windows). Release runs need every component; other runs package what was built, so CI
-  # stays green without D3DX, and the README and build-info.json name what is missing.
+  # --release windows). Release runs need every component and, when signing is configured, take the ZIPs the
+  # windows-app job signed; other runs package what the legs built, unsigned, so CI stays green without D3DX (and
+  # without the installer), and the README and build-info.json name what is missing.
   windows-package:
     name: Windows package
-    needs: windows
+    needs: [windows, windows-app]
+    if: ${{ !cancelled() && needs.windows.result == 'success' && (needs.windows-app.result == 'success' || !(github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v'))) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
@@ -237,11 +238,11 @@ jobs:
         run: python3 Code/Tests/test_package_release.py
 
       # One folder per artifact: both legs carry the same pinned OpenAL Soft tarball, and the
-      # packager checks that the copies are identical.
+      # packager checks that the copies are identical. Signed release runs: the signed ZIPs only.
       - name: Download the Windows per-role packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: packages-windows-*
+          pattern: ${{ needs.windows-app.outputs.signed == 'true' && 'signed-packages-windows' || 'packages-windows-*' }}
           path: out/packages
 
       - name: Assemble the Windows package
@@ -268,22 +269,51 @@ jobs:
   # (windows/build-release.ps1; contract in its docs/windows-distribution.md); its toolchain (Boost, zlib, SDL3, the
   # official Qt for MSVC, DXSETUP's files from Microsoft's DirectX June 2010 redist, Inno Setup) comes from the
   # setup's ci/fetch-dependencies.sh at pinned versions and hashes. Release runs need both clients; other runs
-  # without a client (no D3DX source on the runner) skip the installer. Not code-signed yet.
+  # without a client (no D3DX source on the runner) skip the installer.
+  # Release runs sign here, in the protected `release` environment and one Certum SimplySign session
+  # (tools/windows/ci/simplysign.ps1): first both legs' per-role ZIPs (package_release.py --sign-windows, uploaded
+  # for the windows-package job), then the app's programs and DLLs, the installer and its uninstaller
+  # (build-release.ps1 -Sign; the clients come from the signed ZIPs). Without the environment's Certum secret a
+  # prerelease stays unsigned and a regular release fails. Other runs have no environment and stay unsigned
+  # (docs/ci-releases.md).
   windows-app:
     if: ${{ !inputs.linux_only }}
     name: Windows installer
     needs: windows
     runs-on: windows-2022
     timeout-minutes: 120
+    environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+      SETUP_REVISION: 1a727c5d972377435ebe62bb7093512777ad3a60 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer and signing
       BF2_RELEASE_RUN: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     defaults:
       run:
         shell: cmd
     steps:
-      # vsdevcmd.cmd: the MSVC x64 developer environment for the setup's build
+      # Release runs sign when the `release` environment has the CERTUM_OTPAUTH_URI secret. Without it a prerelease
+      # (or a manual run on a v* tag) stays unsigned with a warning, and a regular release fails before building.
+      - name: Decide on Windows signing
+        id: signing
+        if: env.BF2_RELEASE_RUN == 'true'
+        shell: pwsh
+        env:
+          HAS_CERTUM_SECRET: ${{ secrets.CERTUM_OTPAUTH_URI != '' }}
+          REGULAR_RELEASE: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+        run: |
+          if ($env:HAS_CERTUM_SECRET -eq 'true') {
+            'signed=true' >> $env:GITHUB_OUTPUT
+            'BF2_WINDOWS_SIGN=true' >> $env:GITHUB_ENV
+            exit 0
+          }
+          if ($env:REGULAR_RELEASE -eq 'true') { throw 'a release needs the release environment''s secret CERTUM_OTPAUTH_URI (docs/ci-releases.md, Windows signing); only a prerelease may ship unsigned' }
+          '::warning title=Unsigned Windows release::the release environment has no CERTUM_OTPAUTH_URI secret, so openbf2-windows.zip and the installer stay unsigned'
+          'signed=false' >> $env:GITHUB_OUTPUT
+
+      # vsdevcmd.cmd: the MSVC x64 developer environment for the setup's build; package_release.py and
+      # tools/windows/ci: signing
       - name: Check out the build helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -292,6 +322,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             Code/Build
+            tools/windows/ci
           sparse-checkout-cone-mode: true
 
       - name: Download the Windows client packages
@@ -352,12 +383,56 @@ jobs:
             $option.Substring(2) >> $env:GITHUB_ENV
           }
 
+      # Signed release runs: one SimplySign login (the `release` environment's CERTUM_OTPAUTH_URI secret, optionally
+      # the CERTUM_LOGIN and CERTUM_CERT_SHA1 variables) for every signature of the run. The client folders are
+      # unpacked again from the signed ZIPs, so the installer carries the same files as openbf2-windows.zip.
+      - name: Log in to SimplySign
+        if: steps.clients.outputs.complete == 'true' && env.BF2_WINDOWS_SIGN == 'true'
+        shell: pwsh
+        env:
+          CERTUM_OTPAUTH_URI: ${{ secrets.CERTUM_OTPAUTH_URI }}
+          CERTUM_LOGIN: ${{ vars.CERTUM_LOGIN }}
+          CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 }}
+        run: |
+          out/openbf2/tools/windows/ci/simplysign.ps1 login
+          "SETUP_SIGN_OPTION=-Sign" >> $env:GITHUB_ENV
+
+      - name: Sign the Windows per-role packages
+        if: steps.clients.outputs.complete == 'true' && env.BF2_WINDOWS_SIGN == 'true'
+        shell: pwsh
+        run: |
+          python out/openbf2/Code/Build/package_release.py --sign-windows certum --packages-dir out/packages --output-dir out/packages-signed --revision $env:GITHUB_SHA --repository $env:GITHUB_REPOSITORY --windows-sign-script out/openbf2/tools/windows/ci/sign.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -Recurse -Force out/clients
+          foreach ($arch in 'x64', 'x86') { Expand-Archive "out/packages-signed/openbf2-windows-$arch-client.zip" -DestinationPath out/clients }
+
+      - name: Upload the signed Windows per-role packages
+        if: steps.clients.outputs.complete == 'true' && env.BF2_WINDOWS_SIGN == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-packages-windows
+          path: |
+            out/packages-signed/*.zip
+            out/packages-signed/*.sha256
+            out/packages-signed/*.tar.bz2
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      # with -Sign (signed release runs), the setup's sign.ps1 takes the signtool, the certificate and Certum's
+      # timestamp server from the login's SETUP_* variables
       - name: Build, test and package the installer
         if: steps.clients.outputs.complete == 'true'
         run: |
           call out\openbf2\Code\Build\vsdevcmd.cmd x64
           if errorlevel 1 exit /b 1
-          powershell -NoProfile -ExecutionPolicy Bypass -File out\openbf2-setup\windows\build-release.ps1 out\clients\openbf2-windows-x64-client out\clients\openbf2-windows-x86-client "%GITHUB_WORKSPACE%\out\packages-app\openbf2-windows-setup.exe" "%GITHUB_WORKSPACE%\out\setup-build"
+          powershell -NoProfile -ExecutionPolicy Bypass -File out\openbf2-setup\windows\build-release.ps1 out\clients\openbf2-windows-x64-client out\clients\openbf2-windows-x86-client "%GITHUB_WORKSPACE%\out\packages-app\openbf2-windows-setup.exe" "%GITHUB_WORKSPACE%\out\setup-build" %SETUP_SIGN_OPTION%
+
+      - name: Log out of SimplySign
+        if: always() && env.BF2_WINDOWS_SIGN == 'true'
+        shell: pwsh
+        run: |
+          if (Test-Path out/openbf2/tools/windows/ci/simplysign.ps1) { out/openbf2/tools/windows/ci/simplysign.ps1 logout }
 
       - name: Upload the Windows installer
         if: steps.clients.outputs.complete == 'true'
@@ -755,7 +830,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: 5ba6a4c5c394e856e0105955c3b26c67b80acadd # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer
+      SETUP_REVISION: 1a727c5d972377435ebe62bb7093512777ad3a60 # 0.5.0 candidate: +onlineProviderConfig, Qt on macOS, Windows installer and signing
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements, the signing helper and the packager (for the build-info); the app

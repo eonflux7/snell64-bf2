@@ -12,6 +12,9 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
+import sys
+import tempfile
 import time
 import zipfile
 
@@ -296,6 +299,28 @@ HEADER = (
 )
 
 
+# [CHOSEN, not recovered] How the Windows binaries are signed: release CI signs the finished per-role ZIPs with
+# the project's Certum certificate in one signing session (--sign-windows certum, docs/ci-releases.md); other runs
+# leave them unsigned.
+WINDOWS_SIGNING_NOTE = {
+    "not configured": "These Windows binaries are not code-signed.",
+    "certum": "These Windows binaries are code-signed (Authenticode, Certum code signing certificate).",
+}
+
+
+def windows_sign(paths, script):
+    """Sign every program and DLL in `paths` that lacks a valid signature, then require a valid one on each.
+    `script` is tools/windows/ci/sign.ps1 (its environment names signtool and the certificate); a .py
+    stand-in runs under this Python, for the packaging fixtures."""
+    if script.suffix == ".py":
+        command = [sys.executable, str(script)]
+    else:
+        command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+    result = subprocess.run(command + [str(path) for path in paths])
+    if result.returncode != 0:
+        raise ValueError("Signing failed with exit code {} ({})".format(result.returncode, script))
+
+
 def role_readme(platform, role, name, executable, revision, source_url, macos_signing="adhoc", contents=""):
     """The README of one per-role package (also the Linux release package's, with its contents)."""
     diagnostic = role.endswith("-diagnostic")
@@ -309,7 +334,7 @@ def role_readme(platform, role, name, executable, revision, source_url, macos_si
             requirements += EDITOR_DEPENDENCIES
         elif role.startswith("client"):
             requirements += "The client's own dependencies are listed in the install steps below.\n"
-        requirements += "These Windows binaries are not code-signed.\n"
+        requirements += WINDOWS_SIGNING_NOTE["not configured"] + "\n"  # sign_windows replaces it
     elif platform.startswith("macos-"):
         requirements = ("macOS binaries are signed with a Developer ID (hardened runtime).\n"
                         if macos_signing == "developer-id" else "macOS binaries are ad-hoc signed.\n")
@@ -557,13 +582,81 @@ def read_component(path, package_name, revision):
     return metadata, entries
 
 
+def sign_windows(args):
+    """[CHOSEN, not recovered] Sign the Windows per-role ZIPs below --packages-dir in one signing session
+    (release CI: one login for every component and the installer) and write them, with new build-info hashes,
+    README signing note and .sha256, to --output-dir; the OpenAL Soft source tarball is copied beside them.
+    Every input is verified first, and nothing is written if signing fails."""
+    signing = args.sign_windows
+    packages = args.packages_dir.resolve()
+    output = args.output_dir.resolve()
+    if output == packages or packages in output.parents:
+        raise ValueError("--output-dir must be outside --packages-dir")
+    zips = sorted(path for path in packages.rglob("openbf2-windows-*.zip") if path.is_file())
+    if not zips:
+        raise ValueError("No Windows per-role ZIPs below {}".format(packages))
+    if len({path.name for path in zips}) != len(zips):
+        raise ValueError("Several copies of one Windows package below {}: {}".format(
+            packages, ", ".join(str(path) for path in zips)))
+    unsigned = WINDOWS_SIGNING_NOTE["not configured"]
+    with tempfile.TemporaryDirectory(prefix="openbf2-sign-") as work:
+        components = []
+        for path in zips:
+            metadata, entries = read_component(path, path.stem, args.revision)
+            if not metadata["platform"].startswith("windows-"):
+                raise ValueError("{} is not a Windows package".format(path))
+            if metadata.get("windows_signing") != "not configured":
+                raise ValueError("{} is already signed ({})".format(path, metadata.get("windows_signing")))
+            readme = entries["README.txt"][1].decode("utf-8")
+            if readme.count(unsigned) != 1:
+                raise ValueError("{}: README.txt lacks its signing note".format(path))
+            programs = {}
+            for entry in metadata["runtime_files"]:
+                if entry.lower().endswith((".exe", ".dll")):
+                    programs[entry] = Path(work, path.stem, entry)
+                    programs[entry].parent.mkdir(parents=True, exist_ok=True)
+                    programs[entry].write_bytes(entries[entry][1])
+            components.append((path, metadata, entries, readme, programs))
+        tarballs = {}
+        for tarball in sorted(packages.rglob("openal-soft-*.tar.bz2")):
+            checksum = tarball.with_name(tarball.name + ".sha256")
+            if not checksum.is_file() or checksum.read_text(encoding="ascii") != "{}  {}\n".format(
+                    sha256(tarball), tarball.name):
+                raise ValueError("{} does not match {}".format(tarball, checksum.name))
+            if sha256(tarballs.setdefault(tarball.name, tarball)) != sha256(tarball):
+                raise ValueError("Conflicting copies of {} below {}".format(tarball.name, packages))
+
+        windows_sign(sorted(path for *_, programs in components for path in programs.values()),
+                     getattr(args, "windows_sign_script", None) or args.source_dir / "tools/windows/ci/sign.ps1")
+
+        output.mkdir(parents=True, exist_ok=True)
+        for tarball in tarballs.values():
+            for source in (tarball, tarball.with_name(tarball.name + ".sha256")):
+                shutil.copyfile(source, output / source.name)
+        for path, metadata, entries, readme, programs in components:
+            data = {entry: content for entry, (_, content) in entries.items()}
+            data.update((entry, program.read_bytes()) for entry, program in programs.items())
+            metadata = dict(metadata, windows_signing=signing,
+                            runtime_files={entry: hashlib.sha256(data[entry]).hexdigest()
+                                           for entry in metadata["runtime_files"]})
+            data["build-info.json"] = (json.dumps(metadata, indent=2) + "\n").encode("utf-8")
+            data["README.txt"] = readme.replace(unsigned, WINDOWS_SIGNING_NOTE[signing]).encode("utf-8")
+            target = output / path.name
+            # the same entries in the same order, with their names, dates and modes
+            with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+                for entry, (info, _) in entries.items():
+                    archive.writestr(info, data[entry])
+            write_checksum(target)
+            print(target)
+
+
 def licence_list(entries, separator):
     width = max(len(entry) for entry in entries) + 2
     return "".join("  {}{}\n".format(entry.replace("/", separator).ljust(width), LICENCES.get(entry, ""))
                    .rstrip() + "\n" for entry in entries)
 
 
-def windows_readme(revision, source_url, included, omitted, licences):
+def windows_readme(revision, source_url, included, omitted, licences, signing="not configured"):
     """[CHOSEN, not recovered] The combined Windows README: the per-role READMEs' facts, per folder."""
     folders = [component[0] for component in included]
     text = ("OpenBF2: openbf2-windows\n\n" + HEADER).format(revision=revision, source=source_url)
@@ -583,7 +676,7 @@ def windows_readme(revision, source_url, included, omitted, licences):
         "  x86 in x86\\, server\\ and editor\\); no Visual C++ redistributable\n"
         "  needs to be installed. The UCRT (api-ms-win-crt-*.dll) is part of\n"
         "  Windows 10/11.\n"
-        "- These Windows binaries are not code-signed.\n"
+        "- " + WINDOWS_SIGNING_NOTE[signing] + "\n"
         "- The x64 client needs the 64-bit d3dx9_25.dll of the DirectX End-User Runtime\n"
         "  (System32); the x86 client and the editor use the game folder's 32-bit copy.\n"
         "- PunkBuster works only with the x86 client.\n"
@@ -676,6 +769,7 @@ def assemble_release(args):
     components = []
     included = []
     omitted = []
+    signings = set()
     for component in RELEASES[platform]:
         folder, role_platform, role, _ = component
         package_name = "openbf2-{}-{}".format(role_platform, role)
@@ -689,6 +783,7 @@ def assemble_release(args):
             print("Not built, left out of this CI package: {}".format(package_name))
             continue
         metadata, entries = read_component(path, package_name, args.revision)
+        signings.add(metadata.get("windows_signing", "not configured"))
         if role_platform.startswith("windows-"):
             missing = [name for name in VC_RUNTIME_REQUIRED if name not in metadata["runtime_files"]]
             if missing:
@@ -716,6 +811,10 @@ def assemble_release(args):
         included.append(component)
     if not included:
         raise ValueError("No component of {} below {}".format(name, args.packages_dir))
+    # one signing for the whole package: a mix of signed and unsigned components is refused
+    if len(signings) != 1 or not signings <= set(WINDOWS_SIGNING_NOTE):
+        raise ValueError("The components of {} differ in windows_signing: {}".format(name, ", ".join(sorted(signings))))
+    signing = signings.pop()
 
     # Both Windows clients bundle OpenAL Soft (LGPL): the release carries its exact source.
     companions = []
@@ -737,13 +836,13 @@ def assemble_release(args):
         "platform": platform,
         "revision": args.revision,
         "source": source_url,
-        **({"windows_signing": "not configured"} if platform == "windows" else {}),
+        **({"windows_signing": signing} if platform == "windows" else {}),
         "components": components,
         **({"omitted": omitted} if omitted else {}),
         "runtime_files": dict(sorted(runtime.items())),
     }
     if platform == "windows":
-        readme = windows_readme(args.revision, source_url, included, omitted, licences)
+        readme = windows_readme(args.revision, source_url, included, omitted, licences, signing)
     else:
         readme = linux_readme(args.revision, source_url, licences)
 
@@ -808,12 +907,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--platform", choices=PACKAGES, help="Package one platform's per-role ZIPs")
+    mode.add_argument("--sign-windows", choices=tuple(signing for signing in WINDOWS_SIGNING_NOTE
+                                                      if signing != "not configured"),
+                      help="Sign the Windows per-role ZIPs below --packages-dir in one session (release CI; "
+                           "--windows-sign-script's environment names signtool and the certificate) and write "
+                           "them to --output-dir")
     mode.add_argument("--release", choices=tuple(RELEASES) + ("macos",),
                       help="windows/linux: assemble openbf2-<platform>.zip from the per-role ZIPs below "
                            "--packages-dir; macos: write openbf2-macos.build-info.json for the disk image")
     parser.add_argument("--build-dir", type=Path, help="--platform: the CMake build directory")
     parser.add_argument("--packages-dir", type=Path,
-                        help="--release windows/linux: searched recursively for the per-role ZIPs, "
+                        help="--release windows/linux, --sign-windows: searched recursively for the per-role ZIPs, "
                              "their .sha256 files and the OpenAL Soft source tarball")
     parser.add_argument("--allow-missing", action="store_true",
                         help="--release windows/linux, CI runs only: package the components that were "
@@ -841,6 +945,8 @@ def main():
                         help="macOS: how the binaries were signed (release CI signs them with a "
                              "Developer ID, and notarizes the disk image); changes only the README "
                              "and build-info")
+    parser.add_argument("--windows-sign-script", type=Path, default=None,
+                        help="--sign-windows: the signing script (default <source-dir>/tools/windows/ci/sign.ps1)")
     args = parser.parse_args()
     if args.native_sources is None:
         args.native_sources = args.source_dir / "out/third_party"
@@ -853,7 +959,7 @@ def main():
         needed = ("build_dir",)
     elif args.release == "macos":
         needed = ("client_dir", "dmg", "setup_repository", "setup_revision")
-    else:
+    else:  # --release windows/linux, --sign-windows
         needed = ("packages_dir",)
     for option in needed:
         if getattr(args, option) is None:
@@ -863,6 +969,8 @@ def main():
     try:
         if args.platform:
             package(args)
+        elif args.sign_windows:
+            sign_windows(args)
         elif args.release == "macos":
             macos_build_info(args)
         else:

@@ -95,8 +95,8 @@ from them.
 | Asset | Contents |
 | --- | --- |
 | `openbf2-macos.dmg` | `OpenBF2.app`: the setup assistant and launcher with the universal (arm64 + x86_64) client; the app carries its own instructions |
-| `openbf2-windows-setup.exe` | the Windows installer: the setup assistant and launcher (kr4uzi/openbf2-setup) with both clients, installed for the current user without administrator rights; it installs the game from the user's disc. Not code-signed yet |
-| `openbf2-windows.zip` | `x64\` the x64 client, `x86\` the x86 client, `server\` the x86 dedicated server, `editor\` the x86 editor, `licenses\`, `LICENSE`, `README.txt`, `build-info.json` |
+| `openbf2-windows-setup.exe` | the Windows installer: the setup assistant and launcher (kr4uzi/openbf2-setup) with both clients, installed for the current user without administrator rights; it installs the game from the user's disc. Release runs sign it when signing is configured ([Windows signing](#windows-signing)) |
+| `openbf2-windows.zip` | `x64\` the x64 client, `x86\` the x86 client, `server\` the x86 dedicated server, `editor\` the x86 editor, `licenses\`, `LICENSE`, `README.txt`, `build-info.json`; release runs sign its programs and DLLs when signing is configured ([Windows signing](#windows-signing)) |
 | `openbf2-linux.zip` | the x64 dedicated server: `bf2`, `libdice_py.so`, `licenses/`, `LICENSE`, `README.txt`, `build-info.json` |
 | `openbf2-linux-x86_64-client.tar.gz` | `OpenBF2/`: the Qt installer/launcher, native Vulkan client, bundled runtime, setup manifests, licenses and checked provenance; no game media or user profiles |
 | `openal-soft-1.25.2.tar.bz2` | the LGPL source of both Windows clients' `BF2OpenAL.dll` ([OpenAL Soft](#openal-soft-in-the-windows-clients)) |
@@ -132,17 +132,19 @@ must be identical. The combined `README.txt` merges the per-role READMEs: conten
 runtime included per architecture, the x64 client's 64-bit `d3dx9_25.dll`, PunkBuster only with the x86
 client, CD keys, install commands per folder, the server settings, the editor's dependencies,
 the link contracts and the licence list. `build-info.json` records the revision, the source
-URL, `windows_signing`, each component (folder, per-role package, link contract, Visual C++
+URL, `windows_signing` (`certum` or `not configured`; all components must agree), each component (folder, per-role package, link contract, Visual C++
 runtime folder) and the
 SHA-256 of every runtime file under its folder path. Every input is verified before anything is
 written. The `Windows package` job runs it on Ubuntu after both Windows jobs and uploads the
-`release-windows` artifact.
+`release-windows` artifact; on release runs it also waits for the `Windows installer` job and, when that job signed,
+takes the ZIPs it signed ([Windows signing](#windows-signing)).
 
 The `Windows installer` job builds `openbf2-windows-setup.exe` from both legs' client packages with the setup
 app's own release script (`windows/build-release.ps1` in kr4uzi/openbf2-setup, at the pinned revision) and uploads
 the `release-windows-setup` artifact. Its toolchain comes from the setup's `ci/fetch-dependencies.sh` (pinned
 versions and hashes, including DXSETUP's files from Microsoft's DirectX June 2010 redist and Inno Setup). Release
-runs need both clients; other runs without one skip the installer with a notice.
+runs need both clients; other runs without one skip the installer with a notice. Release runs sign the installer
+and everything in it when signing is configured ([Windows signing](#windows-signing)).
 
 `--release linux` does the same for the server in the downstream `Linux package` job (`release-linux`). The
 Linux application's separate `release-linux-client` artifact comes from the pinned setup
@@ -549,10 +551,56 @@ the environment secrets; nothing in the repository changes. Let an old certifica
 expire rather than revoking it, unless its key was exposed: revoking can make Gatekeeper
 reject software it already signed.
 
-## Windows signing later
+## Windows signing
 
-Windows binaries are currently unsigned by this pipeline. The build workflow marks
-the place for a future signing step: after all Windows outputs and DLLs are staged,
-before ZIP creation and checksums. Signing must cover each packaged EXE/DLL, verify
-the resulting signatures, and update the package metadata/README accordingly. Keep
-signing credentials confined to trusted release jobs when that feature is introduced.
+Release runs sign every Windows program and DLL OpenBF2 ships, in `openbf2-windows.zip` and in the installer, with
+the project's Certum code signing certificate (Certum Open Source Code Signing, key in Certum's SimplySign cloud);
+other runs leave them unsigned and never log in. Like macOS, only release runs give the `windows-app` job the
+protected environment `release`. Signing is on when that environment has the secret below. Without it, a published
+prerelease (and a manual run on a `v*` tag) builds unsigned with a warning, while a regular release fails before
+building; `release.yml` likewise refuses an `openbf2-windows.zip` whose `build-info.json` does not record `certum`
+unless the release is a prerelease. Turning an unsigned prerelease into a regular release afterwards keeps its
+unsigned assets: publish a new release once the secret is set.
+
+All signing happens in one SimplySign session in the `Windows installer` job (`windows-app`): Certum does not
+document whether one account may be logged in on two machines at once, and each one-time code works only once.
+The `windows` legs therefore package unsigned, and on release runs `windows-package` waits for `windows-app` and
+assembles the release from the ZIPs it signed.
+
+Settings of the `release` environment (Settings > Environments > release):
+
+| Name | Kind | Content |
+| --- | --- | --- |
+| `CERTUM_OTPAUTH_URI` | secret | the `otpauth://totp/...` URI of the SimplySign activation QR code |
+| `CERTUM_LOGIN` | variable, optional | the SimplySign login, if the URI's label (`Certum:<login>`) does not carry it |
+| `CERTUM_CERT_SHA1` | variable, optional | the thumbprint the certificate must have; update it after a renewal |
+
+The URI holds the long-lived TOTP secret: with it and the login anyone can sign as the project, so it is stored only
+as an environment secret, and the environment can require the owner's approval for every run. Save it when the
+certificate is activated (the QR code shows it once); the same QR code can also be scanned with the SimplySign mobile
+app, since both generate the same codes. A manual login and the CI's login must not use the same 30-second code; the
+CI simply waits for the next one.
+
+[tools/windows/ci/simplysign.ps1](../tools/windows/ci/simplysign.ps1) `login` installs SimplySign Desktop (pinned
+version and SHA-256, used only with Asseco Data Systems' valid signature), computes the code (RFC 6238) and logs in
+with SimplySign Desktop's `/autologin` switch, at most three times and each time with a new code, since Certum may
+lock the account after repeated wrong codes. It waits until the certificate appears in the user's store and exports
+it with the runner's newest x64 signtool (SimplySign's key provider is 64-bit); `logout` ends the session at the end
+of the job, also after a failure. Everything is signed with SHA-256 and Certum's RFC 3161 timestamp
+(`http://time.certum.pl`); files that already carry a valid signature (Microsoft's Visual C++ runtime and DirectX
+setup, Qt's DLLs) stay as they are.
+
+- **Per-role packages**: `package_release.py --sign-windows certum` verifies both legs' ZIPs, signs every program
+  and DLL in them with one call of [tools/windows/ci/sign.ps1](../tools/windows/ci/sign.ps1), which requires a valid,
+  timestamped signature with the project's certificate on each file it signed, and writes the ZIPs again with the
+  same entries, new `build-info.json` hashes, `windows_signing: certum`, the README note and new checksums
+  (artifact `signed-packages-windows`). `--release windows` carries the signing into `openbf2-windows.zip` and
+  refuses components that disagree. The installer embeds the clients from these signed ZIPs.
+- **Installer**: the setup's `windows/build-release.ps1 -Sign` signs what is still unsigned in the application
+  folder (OpenBF2.exe, SDL), then the installer and the uninstaller Inno Setup writes into it (Inno's `SignTool`
+  hook), and requires a valid signature on every program and DLL of the application folder and on the installer;
+  the `.sha256` is written after signing.
+
+Renewing: Certum code signing certificates are valid for at most 459 days. After a renewal, update
+`CERTUM_CERT_SHA1` if it is set, and `CERTUM_OTPAUTH_URI` if the activation gave a new QR code. SmartScreen builds
+its reputation on the signer, so a new key can start with less of it.
