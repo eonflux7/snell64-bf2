@@ -440,7 +440,8 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   dry: base 125 m × (T − Td) ≈ 3.5 km), cloud type 0.25–0.55, LWC 0.6 g/m³, droplets 12 µm
   (continental); *maritime* 0.5–5.5 km, type 0–0.3 (stratus to stratocumulus), 0.35 g/m³,
   20 µm. `renderer.cloudCoverage` (default 0.4) feeds Dagor's coverage curve; the mid layer
-  takes 0.6 of it. Kashan Desert, desert preset, from above: the share of the sky with column
+  takes 0.6 of it. `renderer.cloudBase` and `renderer.cloudTop` (m above the reference height, 0
+  the preset's) override the slab. Kashan Desert, desert preset, from above: the share of the sky with column
   optical depth over 1 is 0.14, 0.72 and 0.95 at coverage 0.3, 0.7 and 1.0 (seen from the
   ground towers' sides add to it); the clouds sit 3.6–7 km. Open, for the panorama (task 3) to
   show: the field's shapes read as fuzz from above rather than distinct cumulus cells, and at

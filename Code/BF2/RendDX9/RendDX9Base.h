@@ -883,8 +883,9 @@ void rendererAtmosphereConstants(float c[16][4]);
 // [RENDER] Sky clouds' baked volumes (Clouds.cpp, render milestone 12 task 2, contract 13): the
 // weather map, noise volumes, density field, its coarse copy and the light volume, built over
 // frames after the atmosphere's (rendererCloudsFrame) into a double buffer and made live whole.
-// renderer.cloudCoverage (0 clear .. 1 overcast) and renderer.cloudPreset (0 desert, 1 maritime)
-// start a new build. The render targets go at a device reset and are rebuilt. Task 3: the
+// renderer.cloudCoverage (0 clear .. 1 overcast), renderer.cloudPreset (0 desert, 1 maritime) and
+// renderer.cloudBase, cloudTop (the slab above the terrain's mean, m; 0 the preset's) start a new
+// build. The render targets go at a device reset and are rebuilt. Task 3: the
 // panorama (contract 14), a band a frame from the live set; renderer.clouds 0 stops it all.
 // Task 4 (contract 15): the panorama is the far field from the camera, past renderer.cloudNear
 // metres; rendererCloudsNear marches the nearer clouds at half the view's size and composites
@@ -896,6 +897,8 @@ void rendererCloudsBindSky(void* d3dxEffect);
 void rendererCloudsRelease();
 float& rendererCloudCoverage();
 int& rendererCloudPreset();
+float& rendererCloudBase();
+float& rendererCloudTop();
 void rendererCloudSettingsChanged();
 void rendererCloudsNear(bool allowed);
 float& rendererCloudNearDistance();

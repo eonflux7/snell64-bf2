@@ -1417,6 +1417,22 @@ void setCloudPreset(int value)
 }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudPreset, int, true, getCloudPreset(), setCloudPreset, 0, 1,
                                  kRendererConsoleTag)
+float getCloudBase() { return rendererCloudBase(); }
+void setCloudBase(float value)
+{
+    rendererCloudBase() = clampf(value, 0.0f, 12000.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudBase, float, true, getCloudBase(), setCloudBase, 0.0f, 12000.0f,
+                                 kRendererConsoleTag)
+float getCloudTop() { return rendererCloudTop(); }
+void setCloudTop(float value)
+{
+    rendererCloudTop() = clampf(value, 0.0f, 12000.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudTop, float, true, getCloudTop(), setCloudTop, 0.0f, 12000.0f,
+                                 kRendererConsoleTag)
 float getCloudNear() { return rendererCloudNearDistance(); }
 void setCloudNear(float value) { rendererCloudNearDistance() = clampf(value, 0.0f, 40000.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudNear, float, true, getCloudNear(), setCloudNear, 0.0f, 40000.0f,
@@ -1442,6 +1458,8 @@ const char* rendererVariableHelp(const char* name)
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
+        { "cloudBase", "Sky clouds' base above the terrain's mean height, in metres; 0 the preset's (desert 3500, maritime 500)" },
+        { "cloudTop", "Sky clouds' top above the terrain's mean height, in metres (at least base + 500); 0 the preset's (desert 9500, maritime 5500)" },
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },

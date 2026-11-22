@@ -256,6 +256,7 @@ struct WeatherInputs
 {
     int preset;
     double coverage;
+    double baseM, topM; // the slab above the reference height: the preset's or the console's
     double seconds;     // since the level started: the clouds' life phase
 };
 
@@ -318,6 +319,7 @@ struct State
     // Settings (console).
     float coverage;
     int preset;
+    float baseM, topM;                // renderer.cloudBase, cloudTop: 0 the preset's
     bool enabled;
     // CPU-built.
     bool noiseStarted, noiseReady;
@@ -494,7 +496,7 @@ void fillConstants(float c[kRows][4], const WeatherInputs& w, unsigned int first
     std::memset(c, 0, sizeof(float) * 4 * kRows);
     const AtmosphereInfo a = rendererAtmosphereInfo();
     const Preset& p = kPresets[w.preset];
-    const float base = static_cast<float>(a.refHeight + p.baseM), top = static_cast<float>(a.refHeight + p.topM);
+    const float base = static_cast<float>(a.refHeight + w.baseM), top = static_cast<float>(a.refHeight + w.topM);
     c[0][0] = static_cast<float>(-kWorldSize * 0.5);
     c[0][1] = static_cast<float>(-kWorldSize * 0.5);
     c[0][2] = static_cast<float>(1.0 / kWorldSize);
@@ -959,6 +961,8 @@ float& rendererCloudNearDistance() { return st().nearDistance; }
 
 float& rendererCloudCoverage() { return st().coverage; }
 int& rendererCloudPreset() { return st().preset; }
+float& rendererCloudBase() { return st().baseM; }
+float& rendererCloudTop() { return st().topM; }
 void rendererCloudSettingsChanged() { st().settingsChanged = true; }
 
 void rendererCloudsFrame()
@@ -997,6 +1001,9 @@ void rendererCloudsFrame()
             WeatherInputs w;
             w.preset = std::min(std::max(s.preset, 0), 1);
             w.coverage = std::min(std::max(static_cast<double>(s.coverage), 0.0), 1.0);
+            const Preset& p = kPresets[w.preset];
+            w.baseM = s.baseM > 0.0f ? s.baseM : p.baseM;
+            w.topM = std::max(s.topM > 0.0f ? s.topM : p.topM, w.baseM + 500.0);
             w.seconds = secondsSince(s.start);
             s.built = w;
             s.weatherDone = false;
@@ -1102,8 +1109,8 @@ CloudsInfo rendererCloudsInfo()
     i.preset = p.name;
     i.coverage = static_cast<float>(w.coverage);
     i.seconds = static_cast<float>(w.seconds);
-    i.baseM = static_cast<float>(p.baseM);
-    i.topM = static_cast<float>(p.topM);
+    i.baseM = static_cast<float>(w.baseM);
+    i.topM = static_cast<float>(w.topM);
     i.lwc = static_cast<float>(p.lwc);
     i.dropletUm = static_cast<float>(p.dropletUm);
     i.noiseMs = static_cast<float>(s.noiseMs);
