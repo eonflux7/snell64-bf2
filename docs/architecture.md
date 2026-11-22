@@ -136,6 +136,12 @@ The main, pause and between-rounds Flash menus use a centered 4:3 viewport.
 The menu renderer clears unused pixels to black, and the player translates pointer
 coordinates into the same rectangle. The selected display mode still supplies
 the full backbuffer for the game world and its HUD.
+At a font scale other than 1 (any menu width but 800 and 1024, such as 1066 on a
+1280x800 panel), RendDX9 keeps the shipped glyph layout and line measurement but puts
+each glyph quad on a whole pixel. Inside a word, equal font-unit steps get equal pixel
+steps, and the word stays centred on its shipped extent. Retail scales the font-unit
+positions to fractional pixels, so the gaps between letters vary
+(`GeomMisc/FontSystem/GlyphPixelSnap.h`).
 See [issue #45](https://github.com/kr4uzi/OpenBF2/issues/45).
 
 The rebuilt clients automatically draw menu text at the output resolution. When a

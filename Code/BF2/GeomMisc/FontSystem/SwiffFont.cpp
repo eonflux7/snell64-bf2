@@ -24,6 +24,7 @@
 #include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../SwiffPlayerAbi/HiDpiGlyphs.h"   // [CHOSEN, not recovered] HiDPI menu text
 #include "HiDpiFontTexture.h"
+#include "GlyphPixelSnap.h"   // [CHOSEN, not recovered] whole-pixel glyphs (#45)
 #include <algorithm>
 #include <ctype.h>
 
@@ -2324,6 +2325,29 @@ void SwiffFontObject::drawRun(const float* m)
         ++fr->m_runs;
         return;
     }
+    // [CHOSEN, not recovered] Whole-pixel glyph placement at a scale other than 1 (issue #45,
+    // GlyphPixelSnap.h). The layout cells stay retail's; scale 1 keeps the shipped positions.
+    const float snapScaleX = m_font->scaleX();
+    const float snapScaleY = m_font->scaleY();
+    const bool snapX = snapScaleX != 1.0f;
+    const bool snapY = snapScaleY != 1.0f;
+    std::vector<int> snappedLeft;
+    if (snapX)
+    {
+        const unsigned int count = static_cast<unsigned int>(cells.size()) < m_textLen ?
+            static_cast<unsigned int>(cells.size()) : m_textLen;
+        std::vector<float> lefts(count);
+        std::vector<unsigned char> breaks(count);
+        for (unsigned int i = 0; i < count; ++i)
+        {
+            const unsigned short ch = static_cast<unsigned short>(m_textBuf[i]);
+            lefts[i] = cells[i].left;
+            breaks[i] = (ch == 32 || ch == 160 || !m_font->glyph(ch)) ? 1 : 0;
+        }
+        snappedLeft.resize(count);
+        if (count)
+            glyphsnap::snapLefts(lefts.data(), breaks.data(), count, snapScaleX, snappedLeft.data());
+    }
     unsigned int vc = 0;
     for (unsigned int i = first; i < end && i < m_textLen; ++i)
     {
@@ -2344,8 +2368,12 @@ void SwiffFontObject::drawRun(const float* m)
             // comma/period at 8 - so short and tall letters share the baseline and descenders drop
             // below it, exactly as the shipped layout does.
             const float glyphH = static_cast<float>(g->y2 - g->y);
-            const float left   = cells[i].left - 0.5f;
-            const float top    = cells[i].top - 0.5f;
+            const float left   = (snapX && i < snappedLeft.size())
+                ? glyphsnap::quadEdge(snappedLeft[i], snapScaleX) : cells[i].left - 0.5f;
+            const float top    = snapY
+                ? glyphsnap::quadEdge(glyphsnap::roundPixel(static_cast<double>(cells[i].top) * snapScaleY),
+                                      snapScaleY)
+                : cells[i].top - 0.5f;
             const float right  = left + static_cast<float>(g->x2 - g->x);
             const float bottom = top  + glyphH;
 
