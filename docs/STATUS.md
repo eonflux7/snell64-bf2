@@ -29,8 +29,8 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
    ground, 3, 4.5 and 8 km, coverage 0.4 and 1.0; views `m12t4-*`). The GPU budget is set later
    (owner); the cost is measured in task 6.
 5. Far cloud noise and shimmer, tweaked by eye (owner, 2026-11-22, in place of the reference set):
-   the panorama accumulated over panoramas: built (agent: Kashan Desert `m12-up90`, the grain
-   gone and steady between shots).
+   the panorama accumulated over panoramas, then 2048x1024 read with Catmull-Rom: built (agent:
+   Kashan Desert `m12-up90`, the grain gone, sharper, steady between shots; cost not measured).
 6. Prototype judged by eye on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0);
    its GPU time measured.
 7. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
