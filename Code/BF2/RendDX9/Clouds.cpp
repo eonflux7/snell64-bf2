@@ -96,22 +96,26 @@ const float kPanoHistoryWeight = 0.25f;   // a new panorama's weight against the
 struct Preset
 {
     const char* name;
-    double baseM, topM;            // the slab above the reference height
+    double baseM, topM;            // the low layer above the reference height (m)
+    double midBaseM, midTopM;      // the mid layer's (m); the slab spans both (Dagor's CloudsForm layers)
+    double midDensity;             // the mid layer's density against the low one's
+    double midCoverage;            // the mid layer's coverage against renderer.cloudCoverage
     double typeLo, typeHi;         // the weather's cloud type range
     double lwc;                    // g/m^3 at density 1
     double dropletUm;              // droplet diameter
-    double layer2;                 // the mid layer's density against the low one's
     double windX, windZ, windMs;   // the wind at cloud level: direction (world x, z), speed
     double highM, highCoverage, highTau;   // the high cloud: height, coverage, vertical optical depth
 };
 // Desert: a hot dry afternoon (T 35 C, dew point 19 C: base ~125 m x 16 = 2 km; owner, 2026-11-22:
-// 3.5 km sat too high for 4 km maps), deep dry convection 6 km above it; continental air, many small droplets. Maritime: a moist boundary layer
-// (T - Td ~ 4 C: base ~500 m) under an inversion, stratus to stratocumulus; few, large droplets.
-// Both carry thin cirrus above the slab (vertical optical depth 0.3-0.4 where densest, the
+// 3.5 km sat too high for 4 km maps), cumulus from small to towering up to 6 km (a wide type
+// range), under a patchy altocumulus sheet at 6.5-8 km; continental air, many small droplets.
+// Maritime: a moist boundary layer (T - Td ~ 4 C: base ~500 m) under an inversion, stratus to
+// stratocumulus up to 4.5 km, a thin mid layer at 3.8-5.5 km; few, large droplets. Both carry
+// thin cirrus above the slab (vertical optical depth 0.3-0.4 where densest, the
 // common range of 0.03-1), streaked along the wind.
 const Preset kPresets[2] = {
-    { "desert", 2000.0, 8000.0, 0.25, 0.55, 0.6, 12.0, 0.25, 0.94, 0.34, 8.0, 11000.0, 0.35, 0.3 },
-    { "maritime", 500.0, 5500.0, 0.0, 0.3, 0.35, 20.0, 0.35, 0.6, -0.8, 12.0, 8000.0, 0.5, 0.4 },
+    { "desert", 2000.0, 6000.0, 6500.0, 8000.0, 0.6, 0.8, 0.2, 0.6, 0.6, 12.0, 0.94, 0.34, 8.0, 11000.0, 0.35, 0.3 },
+    { "maritime", 500.0, 4500.0, 3800.0, 5500.0, 0.35, 0.6, 0.0, 0.3, 0.35, 20.0, 0.6, -0.8, 12.0, 8000.0, 0.5, 0.4 },
 };
 
 // ---- noise (tileable) ----
@@ -256,7 +260,11 @@ struct WeatherInputs
 {
     int preset;
     double coverage;
-    double baseM, topM; // the slab above the reference height: the preset's or the console's
+    // The layers above the reference height (m), the mid one's density and coverage: the preset's
+    // or the console's. The slab spans both.
+    double baseM, topM, midBaseM, midTopM, midDensity, midCoverage;
+    double slabBase() const { return std::min(baseM, midBaseM); }
+    double slabTop() const { return std::max(topM, midTopM); }
     double seconds;     // since the level started: the clouds' life phase
 };
 
@@ -273,7 +281,7 @@ void buildWeather(const WeatherInputs& in, std::vector<unsigned int>& out)
     out.assign(kWeatherSize * kWeatherSize, 0);
     double h1, g1, h2, g2;
     coverageCurve(in.coverage, 2.5, h1, g1);
-    coverageCurve(in.coverage * 0.6, 2.0, h2, g2);   // the mid layer: thinner than the low one
+    coverageCurve(in.midCoverage, 2.0, h2, g2);
     for (unsigned int y = 0; y < kWeatherSize; ++y)
         for (unsigned int x = 0; x < kWeatherSize; ++x)
         {
@@ -320,6 +328,8 @@ struct State
     float coverage;
     int preset;
     float baseM, topM;                // renderer.cloudBase, cloudTop: 0 the preset's
+    float midBaseM, midTopM;          // renderer.cloudMidBase, cloudMidTop: 0 the preset's
+    float midDensity, midCoverage;    // renderer.cloudMidDensity, cloudMidCoverage: < 0 the preset's
     bool enabled;
     // CPU-built.
     bool noiseStarted, noiseReady;
@@ -376,6 +386,7 @@ State& st()
         g_state = new State();
         g_state->coverage = 0.4f;
         g_state->preset = 0;
+        g_state->midDensity = g_state->midCoverage = -1.0f;
         g_state->enabled = true;
         g_state->live = -1;
         g_state->stage = kIdle;
@@ -496,7 +507,7 @@ void fillConstants(float c[kRows][4], const WeatherInputs& w, unsigned int first
     std::memset(c, 0, sizeof(float) * 4 * kRows);
     const AtmosphereInfo a = rendererAtmosphereInfo();
     const Preset& p = kPresets[w.preset];
-    const float base = static_cast<float>(a.refHeight + w.baseM), top = static_cast<float>(a.refHeight + w.topM);
+    const float base = static_cast<float>(a.refHeight + w.slabBase()), top = static_cast<float>(a.refHeight + w.slabTop());
     c[0][0] = static_cast<float>(-kWorldSize * 0.5);
     c[0][1] = static_cast<float>(-kWorldSize * 0.5);
     c[0][2] = static_cast<float>(1.0 / kWorldSize);
@@ -509,10 +520,16 @@ void fillConstants(float c[kRows][4], const WeatherInputs& w, unsigned int first
         c[2][k] = a.toSun[k];
     c[2][3] = static_cast<float>(p.lwc);
     c[3][0] = static_cast<float>(p.dropletUm);
-    c[3][1] = static_cast<float>(p.layer2);
+    c[3][1] = static_cast<float>(w.midDensity);
     c[3][2] = 8.0f;    // shape tiles across the world (8 km each, Dagor's clouds_shape_scale)
     c[3][3] = 16.0f;   // the cumulonimbus shape's (4 km)
     c[4][0] = static_cast<float>(first);
+    // Each layer's height fraction from the slab's: hf * x + y (Dagor's clouds_height_fractions).
+    const double slab = w.slabTop() - w.slabBase();
+    c[19][0] = static_cast<float>(slab / (w.topM - w.baseM));
+    c[19][1] = static_cast<float>((w.slabBase() - w.baseM) / (w.topM - w.baseM));
+    c[19][2] = static_cast<float>(slab / (w.midTopM - w.midBaseM));
+    c[19][3] = static_cast<float>((w.slabBase() - w.midBaseM) / (w.midTopM - w.midBaseM));
 }
 
 bool drawTiles(void* effect, const char* technique, IDirect3DTexture9* target, unsigned int tileSize,
@@ -963,6 +980,10 @@ float& rendererCloudCoverage() { return st().coverage; }
 int& rendererCloudPreset() { return st().preset; }
 float& rendererCloudBase() { return st().baseM; }
 float& rendererCloudTop() { return st().topM; }
+float& rendererCloudMidBase() { return st().midBaseM; }
+float& rendererCloudMidTop() { return st().midTopM; }
+float& rendererCloudMidDensity() { return st().midDensity; }
+float& rendererCloudMidCoverage() { return st().midCoverage; }
 void rendererCloudSettingsChanged() { st().settingsChanged = true; }
 
 void rendererCloudsFrame()
@@ -1004,6 +1025,10 @@ void rendererCloudsFrame()
             const Preset& p = kPresets[w.preset];
             w.baseM = s.baseM > 0.0f ? s.baseM : p.baseM;
             w.topM = std::max(s.topM > 0.0f ? s.topM : p.topM, w.baseM + 500.0);
+            w.midBaseM = s.midBaseM > 0.0f ? s.midBaseM : p.midBaseM;
+            w.midTopM = std::max(s.midTopM > 0.0f ? s.midTopM : p.midTopM, w.midBaseM + 500.0);
+            w.midDensity = s.midDensity >= 0.0f ? s.midDensity : p.midDensity;
+            w.midCoverage = std::min(s.midCoverage >= 0.0f ? s.midCoverage : w.coverage * p.midCoverage, 1.0);
             w.seconds = secondsSince(s.start);
             s.built = w;
             s.weatherDone = false;
@@ -1109,8 +1134,14 @@ CloudsInfo rendererCloudsInfo()
     i.preset = p.name;
     i.coverage = static_cast<float>(w.coverage);
     i.seconds = static_cast<float>(w.seconds);
-    i.baseM = static_cast<float>(w.baseM);
-    i.topM = static_cast<float>(w.topM);
+    i.baseM = static_cast<float>(w.slabBase());
+    i.topM = static_cast<float>(w.slabTop());
+    i.lowM[0] = static_cast<float>(w.baseM);
+    i.lowM[1] = static_cast<float>(w.topM);
+    i.midM[0] = static_cast<float>(w.midBaseM);
+    i.midM[1] = static_cast<float>(w.midTopM);
+    i.midDensity = static_cast<float>(w.midDensity);
+    i.midCoverage = static_cast<float>(w.midCoverage);
     i.lwc = static_cast<float>(p.lwc);
     i.dropletUm = static_cast<float>(p.dropletUm);
     i.noiseMs = static_cast<float>(s.noiseMs);

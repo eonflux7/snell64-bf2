@@ -884,8 +884,9 @@ void rendererAtmosphereConstants(float c[16][4]);
 // weather map, noise volumes, density field, its coarse copy and the light volume, built over
 // frames after the atmosphere's (rendererCloudsFrame) into a double buffer and made live whole.
 // renderer.cloudCoverage (0 clear .. 1 overcast), renderer.cloudPreset (0 desert, 1 maritime) and
-// renderer.cloudBase, cloudTop (the slab above the terrain's mean, m; 0 the preset's) start a new
-// build. The render targets go at a device reset and are rebuilt. Task 3: the
+// renderer.cloudBase, cloudTop (the low layer above the terrain's mean, m; 0 the preset's),
+// cloudMidBase, cloudMidTop (the mid layer's), cloudMidDensity, cloudMidCoverage (< 0 the
+// preset's) start a new build. The render targets go at a device reset and are rebuilt. Task 3: the
 // panorama (contract 14), a band a frame from the live set; renderer.clouds 0 stops it all.
 // Task 4 (contract 15): the panorama is the far field from the camera, past renderer.cloudNear
 // metres; rendererCloudsNear marches the nearer clouds at half the view's size and composites
@@ -899,6 +900,10 @@ float& rendererCloudCoverage();
 int& rendererCloudPreset();
 float& rendererCloudBase();
 float& rendererCloudTop();
+float& rendererCloudMidBase();
+float& rendererCloudMidTop();
+float& rendererCloudMidDensity();
+float& rendererCloudMidCoverage();
 void rendererCloudSettingsChanged();
 void rendererCloudsNear(bool allowed);
 float& rendererCloudNearDistance();
@@ -912,7 +917,8 @@ struct CloudsInfo
     IDirect3DTexture9* coarse;          // 128 x 64 A8R8G8B8: 2 tiles, 4 slice groups each
     IDirect3DTexture9* light;           // 2048^2 A16B16G16R16F: 8 x 8 tiles, one slice each
     const char* preset;
-    float coverage, seconds, baseM, topM, lwc, dropletUm;
+    float coverage, seconds, baseM, topM, lwc, dropletUm;   // baseM, topM: the slab
+    float lowM[2], midM[2], midDensity, midCoverage;         // the layers (m above the reference)
     float noiseMs, weatherMs;
     unsigned int buildFrames, builds;
     IDirect3DTexture9* panorama;        // the newest complete, 2048 x 1024 A16B16G16R16F; 0 none

@@ -606,6 +606,8 @@ bool toolsWriteClouds(const char* base, const char*& message)
     std::fprintf(f, "[clouds] preset %s, coverage %.2f, life time %.0f s; slab %.0f-%.0f m above the "
                     "reference height; LWC %.2f g/m^3 at density 1, droplets %.0f um\n",
                  c.preset, c.coverage, c.seconds, c.baseM, c.topM, c.lwc, c.dropletUm);
+    std::fprintf(f, "[clouds] low layer %.0f-%.0f m; mid layer %.0f-%.0f m, density %.2f, coverage %.2f\n",
+                 c.lowM[0], c.lowM[1], c.midM[0], c.midM[1], c.midDensity, c.midCoverage);
     std::fprintf(f, "[clouds] noise %.0f ms (CPU, once), weather %.1f ms; a build takes %u frames; %u builds\n",
                  c.noiseMs, c.weatherMs, c.buildFrames, c.builds);
 

@@ -1433,6 +1433,38 @@ void setCloudTop(float value)
 }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudTop, float, true, getCloudTop(), setCloudTop, 0.0f, 12000.0f,
                                  kRendererConsoleTag)
+float getCloudMidBase() { return rendererCloudMidBase(); }
+void setCloudMidBase(float value)
+{
+    rendererCloudMidBase() = clampf(value, 0.0f, 12000.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudMidBase, float, true, getCloudMidBase(), setCloudMidBase, 0.0f, 12000.0f,
+                                 kRendererConsoleTag)
+float getCloudMidTop() { return rendererCloudMidTop(); }
+void setCloudMidTop(float value)
+{
+    rendererCloudMidTop() = clampf(value, 0.0f, 12000.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudMidTop, float, true, getCloudMidTop(), setCloudMidTop, 0.0f, 12000.0f,
+                                 kRendererConsoleTag)
+float getCloudMidDensity() { return rendererCloudMidDensity(); }
+void setCloudMidDensity(float value)
+{
+    rendererCloudMidDensity() = clampf(value, -1.0f, 2.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudMidDensity, float, true, getCloudMidDensity(), setCloudMidDensity, -1.0f, 2.0f,
+                                 kRendererConsoleTag)
+float getCloudMidCoverage() { return rendererCloudMidCoverage(); }
+void setCloudMidCoverage(float value)
+{
+    rendererCloudMidCoverage() = clampf(value, -1.0f, 1.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudMidCoverage, float, true, getCloudMidCoverage(), setCloudMidCoverage, -1.0f, 1.0f,
+                                 kRendererConsoleTag)
 float getCloudNear() { return rendererCloudNearDistance(); }
 void setCloudNear(float value) { rendererCloudNearDistance() = clampf(value, 0.0f, 40000.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudNear, float, true, getCloudNear(), setCloudNear, 0.0f, 40000.0f,
@@ -1458,8 +1490,12 @@ const char* rendererVariableHelp(const char* name)
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
-        { "cloudBase", "Sky clouds' base above the terrain's mean height, in metres; 0 the preset's (desert 2000, maritime 500)" },
-        { "cloudTop", "Sky clouds' top above the terrain's mean height, in metres (at least base + 500); 0 the preset's (desert 8000, maritime 5500)" },
+        { "cloudBase", "Sky clouds' low layer: base above the terrain's mean height, in metres; 0 the preset's (desert 2000, maritime 500)" },
+        { "cloudTop", "Sky clouds' low layer: top above the terrain's mean height, in metres (at least base + 500); 0 the preset's (desert 6000, maritime 4500)" },
+        { "cloudMidBase", "Sky clouds' mid layer: base above the terrain's mean height, in metres; 0 the preset's (desert 6500, maritime 3800)" },
+        { "cloudMidTop", "Sky clouds' mid layer: top, in metres (at least base + 500); 0 the preset's (desert 8000, maritime 5500)" },
+        { "cloudMidDensity", "Sky clouds' mid layer: density against the low layer's; -1 the preset's (desert 0.6, maritime 0.35)" },
+        { "cloudMidCoverage", "Sky clouds' mid layer: coverage, 0 clear to 1 overcast; -1 the preset's (cloudCoverage times 0.8 desert, 0.6 maritime)" },
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },

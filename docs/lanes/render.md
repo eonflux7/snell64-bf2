@@ -436,12 +436,18 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
     octave's extinction (32 steps, quadratic, to the slab's top or 30 km), and the octave-weighted
     visibility straight up and straight down (8 steps each), which weigh the sky's and the
     ground's light in `Ra_CloudAmbient`.
-  Presets (`renderer.cloudPreset`): *desert* slab 2–8 km above the reference height (hot,
-  dry: base 125 m × (T − Td) ≈ 2 km; 3.5 km until 2026-11-22, too high for 4 km maps by eye), cloud type 0.25–0.55, LWC 0.6 g/m³, droplets 12 µm
-  (continental); *maritime* 0.5–5.5 km, type 0–0.3 (stratus to stratocumulus), 0.35 g/m³,
-  20 µm. `renderer.cloudCoverage` (default 0.4) feeds Dagor's coverage curve; the mid layer
-  takes 0.6 of it. `renderer.cloudBase` and `renderer.cloudTop` (m above the reference height, 0
-  the preset's) override the slab. Kashan Desert, desert preset, from above: the share of the sky with column
+  Two layers, each with its own heights (Dagor's `CloudsForm` layers; the slab spans both, and
+  each layer's height fraction is mapped from the slab's): a low one (cumulus, its type from the
+  weather map) and a mid one (stratus-type sheet), the mid one with its own coverage map and
+  density. Presets (`renderer.cloudPreset`): *desert* low 2–6 km above the reference height (hot,
+  dry: base 125 m × (T − Td) ≈ 2 km; 3.5 km until 2026-11-22, too high for 4 km maps by eye),
+  type 0.2–0.6 (small cumulus to towers), mid 6.5–8 km at density 0.6 and 0.8 of the coverage,
+  LWC 0.6 g/m³, droplets 12 µm (continental); *maritime* low 0.5–4.5 km, type 0–0.3 (stratus to
+  stratocumulus), mid 3.8–5.5 km at 0.35 and 0.6 of the coverage, 0.35 g/m³, 20 µm.
+  `renderer.cloudCoverage` (default 0.4) feeds Dagor's coverage curve. `renderer.cloudBase`,
+  `cloudTop`, `cloudMidBase`, `cloudMidTop` (m above the reference height, 0 the preset's),
+  `cloudMidDensity` and `cloudMidCoverage` (−1 the preset's) override them. Measured on the
+  3.5–9.5 km single slab before then: Kashan Desert, desert preset, from above: the share of the sky with column
   optical depth over 1 is 0.14, 0.72 and 0.95 at coverage 0.3, 0.7 and 1.0 (seen from the
   ground towers' sides add to it); the clouds sit 3.6–7 km. Open, for the panorama (task 3) to
   show: the field's shapes read as fuzz from above rather than distinct cumulus cells, and at
