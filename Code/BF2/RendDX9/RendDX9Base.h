@@ -742,14 +742,13 @@ IDirect3DTexture9* rendererLinearDepthTexture();
 // scene, the rebuild overwrites the scene depth in place.
 void rendererLinearDepthWater();
 // [RENDER] Milestone 11 task 12, water's screen-space reflections (contract 12). Before the water
-// queue draws: while renderer.waterSsr is on, the camera is above water, this frame has the
+// queue draws: while the camera is above water, this frame has the
 // prepass's linear depth and the queue has entries, the scene colour is copied into a
 // single-sample texture of its size and format, bound to the reserved sampler kWaterSceneSampler
 // (bilinear, clamp), and RaWaterSsr (kWaterSsrRegister) is set to (1, 1 / width, 1 / height, 0);
 // otherwise, and after the water (rendererWaterSceneEnd), RaWaterSsr is zero. The copy is
 // released with the depth prepass's targets.
 const unsigned int kWaterSceneSampler = 12;
-bool& rendererWaterSsr();
 void rendererWaterSceneBegin();
 void rendererWaterSceneEnd();
 void rendererFirstPersonPrepass();
@@ -832,16 +831,12 @@ void rendererSunShadowsRelease();
 // sun cascades: fits the sky and haze to the level's authored light when it changes (at load),
 // draws the transmittance, multiple-scattering and sky-view tables after a fit or a device reset
 // and the aerial-perspective atlas every frame, through Shaders/RaAtmosphere (contract 6).
-// renderer.atmosphere (A/B while milestone 11 is in development).
-bool& rendererAtmosphereEnabled();
 // The haze's shape (renderer.hazeDepth, renderer.hazeFalloff): its horizontal optical depth at fog
 // end and the height (m) over which its density falls by e.
 float& rendererHazeDepth();
 float& rendererHazeFalloff();
-// The radial view-distance cut (renderer.viewDistance, render milestone 11 task 5): RaAerial.w 2.
-bool& rendererViewDistanceCut();
 // How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
-// against the world view's frustum taken out to here. 0 while the cut is off (the frustum's own far).
+// against the world view's frustum taken out to here.
 float rendererSceneryDistance();
 // This frame's view-distance cut (m): fog end while the shaders cut there (RaAerial.w 2), else 0.
 // Bundled and skinned meshes wholly past it are not drawn; static meshes go on past it, culled by
@@ -851,15 +846,14 @@ void rendererAtmosphereFrame();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
 // register kAerialRegister, contract 8) for the world pass: 1 / the viewport's width and height,
-// 1 / fog end, 1 (2 with the view-distance cut, contract 9); then RaAerialHaze (kAerialHazeRegister):
+// 1 / fog end, 2 (the view-distance cut, contract 9; 1 before it); then RaAerialHaze (kAerialHazeRegister):
 // the haze's density at the camera's height, 1 / its height falloff, 0, 0. All zero (the shaders'
 // retail fog) while no atlas was drawn this frame, under water, or with a viewport off the target's
 // origin.
 const unsigned int kAerialSampler = 9;
 void rendererAtmosphereAerialConstants(float c[8]);
-// Whether the model draws the sky (renderer.atmosphere on and the sky-view table built). While it
-// does, the sky is one full-screen pass (rendererAtmosphereDrawSky) and the painted dome, its cloud
-// layers and the retail flare sprite are not drawn (the flare's occlusion test is kept).
+// Whether the model draws the sky (the fit done and the sky-view table built). The sky is one
+// full-screen pass (rendererAtmosphereDrawSky); before the first fit nothing draws there.
 bool rendererAtmosphereDrawsSky();
 // Draws the model's sky with the sky dome's effect (contract 7, technique RaSky) into the bound
 // target, at the far plane; under water, the water's fog colour. False, drawing nothing, while the

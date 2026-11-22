@@ -28,7 +28,7 @@ namespace geom {
 class IGeometryTemplate;
 class StaticMeshMaterial;
 
-// Owns sky/cloud geometry and textures; draws the dome through the listener at +0x04.
+// Owns sky/cloud geometry and textures; draws the sky through the listener at +0x04 (render milestone 11: the atmosphere model's sky, not the dome).
 // Keep IBase first and RenderPathListener second. The constructor deliberately leaves
 // m_flareMaterial and m_dword180 untouched; m_hasFlare gates their use.
 class SkyDome : public IBase, public dx9rend::RenderPathListener

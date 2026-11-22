@@ -70,28 +70,22 @@ namespace {
 // no external reader, so they are file-scope here with the same guards and the same zero fill.
 
 
-// dword_1025D3D0 - the dome draw's guard word. Bit 1 guards the profiler registration, which is a
-// function-local static in onRenderPathNotification here, so nothing below claims it.
-unsigned int g_domeOnceFlags = 0;
-
-// [UNRESOLVED] Zeroed once by dome drawing; no consumer is known.
-Vec4 g_domeScratchUnused = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-// dword_1025D144 / 134 / 124 / 114, guard bits 4 / 8 / 0x10 / 0x20. Each is filled in x and y from
-// a member and handed to a shader parameter with count 0; z and w stay at the zero the guard wrote.
-Vec4 g_texOffsetConstant       = { 0.0f, 0.0f, 0.0f, 0.0f };
-Vec4 g_texOffset2Constant      = { 0.0f, 0.0f, 0.0f, 0.0f };
-Vec4 g_cloudLerpConstant       = { 0.0f, 0.0f, 0.0f, 0.0f };
-Vec4 g_cloudsFadeOutConstant   = { 0.0f, 0.0f, 0.0f, 0.0f };
-
 // dword_1025D644 - the flare draw's guard word, a different word from the dome's. Bit 2 guards its
 // own copy of the profiler registration (a function-local static in drawFlare here), bit 1
 // guards the constant below.
 unsigned int g_flareOnceFlags = 0;
 
 // dword_1025D640, guard bit 1 = 0x3FC90FDB = pi/2. [UNRESOLVED]: written once at 0x10139917 and
-// never read anywhere in the image. Same treatment as g_domeScratchUnused.
+// never read anywhere in the image; kept with its guard.
 float g_flareUnusedConstant = 0.0f;
+
+// sub_10037EB0 on dword_1023DDBC: `return this + 268`. The RaShaderConstants record is 0xAFC bytes
+// and private to RenderQueues.cpp; +0x10C is the three-float world fog colour the sky uploads as
+// the xyz of its `fogColor` parameter.
+const Vec3* raShaderConstantsFogColor()
+{
+    return reinterpret_cast<const Vec3*>(dx9rend::raShaderConstantsAt(268));
+}
 
 // Optional flare basis switch, false by default with no runtime writer.
 // [UNRESOLVED] Its original name and purpose.
@@ -155,14 +149,6 @@ float clampFloat(float value, float low, float high)
     return static_cast<float>(v);
 }
 
-
-// sub_10037EB0 on dword_1023DDBC: `return this + 268`. The RaShaderConstants record is 0xAFC bytes
-// and private to RenderQueues.cpp; +0x10C is the three-float world fog colour the sky uploads as
-// the xyz of its `fogColor` parameter.
-const Vec3* raShaderConstantsFogColor()
-{
-    return reinterpret_cast<const Vec3*>(dx9rend::raShaderConstantsAt(268));
-}
 
 // dx9rend::Query is private to QueryManager.cpp; these three bodies have no declaration there.
 // Fields by retail offset (QueryManager.cpp's own layout): +0x04 refcount, +0x08 IDirect3DQuery9*,
@@ -405,7 +391,7 @@ SkyDome::SkyDome()
         static_cast<dx9rend::RenderPathListener*>(this));
 
     // a direct call (MSVC devirtualises inside a constructor). Two cloud layers is the
-    // constructed default, which with both cloud flags still false selects SkyDomeNV3xNoClouds.
+    // constructed default (retail: it selected SkyDomeNV3xNoClouds).
     setCloudLayerCount(2);
 
     // the two vertex declarations. The D3DDECL_END element is built once
@@ -931,23 +917,12 @@ bool SkyDome::getHasCloudLayer2() const
     return m_hasCloudLayer2 != 0;
 }
 
-// setCloudLayerCount - PE 0x101382F0, primary +0x94. Stores the count and picks the technique. Note
-// there is NO getter slot for this field; the count is only observable through the technique.
-// The repeated getHasCloudLayer() dispatch in the second test is the shipped shape.
+// setCloudLayerCount - PE 0x101382F0, primary +0x94. Stores the count; retail also picked the
+// dome's technique here. There is NO getter slot for this field.
+// [RENDER] Render milestone 11: the dome is not drawn, so no technique is picked.
 void SkyDome::setCloudLayerCount(int count)
 {
     m_cloudLayerCount = count;
-    if (getHasCloudLayer() && getHasCloudLayer2() && m_cloudLayerCount > 1)
-    {
-        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xDualClouds"));
-        return;
-    }
-    if (!getHasCloudLayer() || !m_cloudLayerCount)
-    {
-        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoClouds"));
-        return;
-    }
-    dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3x"));
 }
 
 
@@ -980,13 +955,11 @@ std::string SkyDome::getRenderPathListenerName() const
 }
 
 
-#pragma warning(push)
-// C4700/C4701 are correct here and are silenced only because the defect they report is the shipped
-// behaviour this body exists to reproduce. See the waterLevel note inside.
-#pragma warning(disable : 4700 4701)
-
-// PE 0x101392A0: draws the dome and clouds using the camera rotation and a temporary far plane of
-// 2500. Dome scaling also scales its translation before projection.
+// PE 0x101392A0 drew the painted dome and its cloud layers here (under water, a fill technique).
+// [RENDER] Render milestone 11 replaced them with the model's sky: one full-screen pass on this
+// effect (RendDX9 Atmosphere.cpp, technique RaSky), under water the water's fog colour. Nothing
+// is drawn until the atmosphere's first fit. The dome's template, textures and parameters are
+// still read from the level, which sets them.
 void SkyDome::onRenderPathNotification(int unused)
 {
     (void)unused;
@@ -994,187 +967,22 @@ void SkyDome::onRenderPathNotification(int unused)
     if (!m_skyTemplatePtr)
         return;
 
-    // The "SkyDome" profiler (object at PE 0x1025D168, guard bit 0 of PE 0x1025D3D0) registers on
-    // first use after the null test above and is closed on the single exit below.
     static dx9rend::QueueProfiler profiler(std::string("SkyDome"));
     profiler.begin();
 
-    m_paramLightingBlend->setFloat(m_lightingBlend);
-    m_paramLightingColor->setValue(&m_lightingColor, 0);
-
-    // the fog colour, xyz from the RaShaderConstants block, w forced to 1.
-    // (The shipped body also spills the blue channel into an adjacent stack slot that is later
-    // reused for the scale vector; a dead store, not reproduced.)
-    Vec4 fogColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // The fog colour, w 1, as retail uploaded it: the sky's under-water colour, and its red channel
+    // at zero is how SkyDome.fx tells thermals.
     const Vec3* const fog = raShaderConstantsFogColor();
-    fogColor.x = fog->x;
-    fogColor.y = fog->y;
-    fogColor.z = fog->z;
-    fogColor.w = 1.0f;
+    const Vec4 fogColor = { fog->x, fog->y, fog->z, 1.0f };
     m_paramFogColor->setValue(&fogColor, 0);
 
-    // waterLevel remains uninitialized when no heightmap cluster exists.
-    float waterLevel;
     world::IHeightmapCluster* const cluster = heightmapCluster();
-    if (cluster)
-        waterLevel = cluster->getSeaWaterLevel();
-
-    dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();
-    const Mat4* const viewMatrix = view->getViewMatrixPtr();
-    const Vec3* const cameraPosition = reinterpret_cast<const Vec3*>(&viewMatrix->m[12]);
-
-    // [RENDER] The model's sky (render milestone 11): one full-screen pass in place of the dome
-    // mesh, its cloud layers and the under-water fill. The dome below draws only while the model
-    // does not (renderer.atmosphere 0); it goes when the milestone is accepted.
-    if (dx9rend::rendererAtmosphereDrawSky(m_effect, cameraPosition->y < waterLevel))
-    {
-        dx9rend::QueueProfiler::end();
-        return;
-    }
-
-    if (cameraPosition->y < waterLevel)
-    {
-        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeUnderWater"));
-    }
-    else if (getHasCloudLayer() && getHasCloudLayer2() && m_cloudLayerCount > 1)
-    {
-        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xDualClouds"));
-    }
-    else if (getHasCloudLayer() && m_cloudLayerCount)
-    {
-        if (m_lightingBlend > 0.0f)
-            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xLit"));
-        else
-            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3x"));
-    }
-    else
-    {
-        if (m_lightingBlend > 0.0f)
-            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoCloudsLit"));
-        else
-            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoClouds"));
-    }
-
-    // guard bit 2 zeroes the scratch block that is never read. See the declaration.
-    if ((g_domeOnceFlags & 2) == 0)
-    {
-        g_domeOnceFlags |= 2u;
-        g_domeScratchUnused.x = 0.0f;
-        g_domeScratchUnused.y = 0.0f;
-        g_domeScratchUnused.z = 0.0f;
-        g_domeScratchUnused.w = 0.0f;
-    }
-
-    // a second render-view fetch; the shipped body does not reuse the one above.
-    dx9rend::IRenderView* const drawView = dx9rend::rendererGetRenderView();
-
-    Mat4 world = Mat4::getIdentity();
-    setRotateYDeg(world, m_domeRotation);
-    world.m[12] += m_position.x;
-    world.m[13] += m_position.y;
-    world.m[14] += m_position.z;
-
-    Vec3 scale;
-    scale.x = m_domeScale;
-    scale.y = m_domeScale;
-    scale.z = m_domeScale;
-    rendmath::scaleColumns(world, scale);
-
-    const Mat4 inverseView = *drawView->getInverseViewMatrixPtr();
-    const Mat4 worldBeforeRotate = world;
-    rendmath::rotMult(world, worldBeforeRotate, inverseView);   // PE 0x10078180
-
-    const float savedFarPlane = drawView->getFarPlane();
-    drawView->setFarPlane(kSkyFarPlane);
-    const Mat4* const linearProjection = drawView->getLinearProjectionMatrixPtr();
-    const Mat4 worldBeforeProject = world;
-
-    // Full multiplication preserves the projection's perspective column.
-    world.fullMult(worldBeforeProject, *linearProjection);
-    drawView->setFarPlane(savedFarPlane);
-
-    world.m[15] = 1.0f;
-    m_paramWorldViewProjection->setValue(&world, 0);
-
-    dx9rend::stateManagerPush();
-    dx9rend::effectBegin(m_effect);
-
-    m_paramTexLayer0->setValue(m_skyTextureTex, 0);
-    dx9rend::vertexDeclarationBind(m_vertexDeclClouds);
-
-    StaticMeshTemplate* const skyTemplate = asStaticMesh(m_skyTemplatePtr);
-    dx9rend::vertexBufferBindStream(skyTemplate->m_vertexStream, 0);
-    dx9rend::vertexBufferBindStream(skyTemplate->m_uvStreams[0], 1);
-
-    if (m_hasCloudLayer && m_cloudLayerCount)
-    {
-        m_paramTexLayer1->setValue(m_cloudTextureTex, 0);
-
-        if ((g_domeOnceFlags & 4) == 0)
-        {
-            g_domeOnceFlags |= 4u;
-            g_texOffsetConstant.x = 0.0f;
-            g_texOffsetConstant.y = 0.0f;
-            g_texOffsetConstant.z = 0.0f;
-            g_texOffsetConstant.w = 0.0f;
-        }
-        g_texOffsetConstant.x = m_texOffset.x;
-        g_texOffsetConstant.y = m_texOffset.y;
-        m_paramTexOffset->setValue(&g_texOffsetConstant, 0);
-
-        if (m_hasCloudLayer2 && m_cloudLayerCount > 1)
-        {
-            m_paramTexLayer2->setValue(m_cloudTexture2Tex, 0);
-
-            if ((g_domeOnceFlags & 8) == 0)
-            {
-                g_domeOnceFlags |= 8u;
-                g_texOffset2Constant.x = 0.0f;
-                g_texOffset2Constant.y = 0.0f;
-                g_texOffset2Constant.z = 0.0f;
-                g_texOffset2Constant.w = 0.0f;
-            }
-            g_texOffset2Constant.x = m_texOffset2.x;
-            g_texOffset2Constant.y = m_texOffset2.y;
-            m_paramTexOffset2->setValue(&g_texOffset2Constant, 0);
-
-            if ((g_domeOnceFlags & 0x10) == 0)
-            {
-                g_domeOnceFlags |= 0x10u;
-                g_cloudLerpConstant.x = 0.0f;
-                g_cloudLerpConstant.y = 0.0f;
-                g_cloudLerpConstant.z = 0.0f;
-                g_cloudLerpConstant.w = 0.0f;
-            }
-            g_cloudLerpConstant.x = m_cloudLerpFactors.x;
-            g_cloudLerpConstant.y = m_cloudLerpFactors.y;
-            m_paramCloudLerpFactors->setValue(&g_cloudLerpConstant, 0);
-        }
-
-        if ((g_domeOnceFlags & 0x20) == 0)
-        {
-            g_domeOnceFlags |= 0x20u;
-            g_cloudsFadeOutConstant.x = 0.0f;
-            g_cloudsFadeOutConstant.y = 0.0f;
-            g_cloudsFadeOutConstant.z = 0.0f;
-            g_cloudsFadeOutConstant.w = 0.0f;
-        }
-        // x = the near fade distance, y = the span, not the far distance.
-        g_cloudsFadeOutConstant.x = m_fadeCloudsDistances.x;
-        g_cloudsFadeOutConstant.y = m_fadeCloudsDistances.y - m_fadeCloudsDistances.x;
-        m_paramCloudsFadeOutDist->setValue(&g_cloudsFadeOutConstant, 0);
-    }
-
-    dx9rend::indexBufferBind(skyTemplate->m_indexBuffer);
-    dx9rend::effectBeginPass(m_effect, 0);
-    submitIndexedGeometry(skyTemplate, m_skyMaterial);
-    dx9rend::effectEnd(m_effect);
-    dx9rend::stateManagerPop();
+    const float waterLevel = cluster ? cluster->getSeaWaterLevel() : -1.0e30f;
+    const Mat4* const viewMatrix = dx9rend::rendererGetRenderView()->getViewMatrixPtr();
+    dx9rend::rendererAtmosphereDrawSky(m_effect, viewMatrix->m[13] < waterLevel);
 
     dx9rend::QueueProfiler::end();
 }
-
-#pragma warning(pop)
 
 
 // submitFlarePass - the bind-and-submit sequence retail inlines at both flare draw sites.
@@ -1330,8 +1138,6 @@ void SkyDome::drawFlare(int mode)
 
     if (mode == 2)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeSunFlare"));
-
         Vec4 flareParams = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         Vec3 toFlare;
@@ -1384,10 +1190,8 @@ void SkyDome::drawFlare(int mode)
         }
 
         m_paramFlareParams->setValue(&flareParams, 0);
-        // [RENDER] The sky dome draws the model's sun disc (render milestone 11); the sprite stays
-        // only while the model is off. The occlusion test above is kept.
-        if (!dx9rend::rendererAtmosphereDrawsSky())
-            submitFlarePass();
+        // [RENDER] The model's sky draws the sun disc (render milestone 11): no flare sprite. The
+        // occlusion test above is kept.
         view->setFarPlane(savedFarPlane);
         return;
     }

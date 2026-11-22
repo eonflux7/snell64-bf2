@@ -389,8 +389,6 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     const AtmosphereInfo a = rendererAtmosphereInfo();
     if (!base || !device())
         g_message = "no renderer";
-    else if (!rendererAtmosphereEnabled())
-        g_message = "renderer.atmosphere is 0";
     else if (!a.fitted)
         g_message = "no fit yet (a level with a sky dome and fog has not drawn)";
     else

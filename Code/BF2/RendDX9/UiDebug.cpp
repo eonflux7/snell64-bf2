@@ -664,7 +664,7 @@ void drawShadowsTab()
     ImGui::EndChild();
 }
 
-// [UI] Render milestone 11's atmosphere: renderer.atmosphere, the fit and its tables as drawn.
+// [UI] Render milestone 11's atmosphere: the haze's variables, the fit and its tables as drawn.
 // Linear values shown as they are (no exposure), opaque: the multiple-scattering table is dark.
 void atmosphereRgb(const char* label, const float* v)
 {
@@ -702,8 +702,7 @@ void drawAtmosphereTab()
         ImGui::EndChild();
         return;
     }
-    drawVariableTable("##atmosvars", "", "atmosphere", false);   // full names: no prefix
-    drawVariableTable("##haze", "", "haze", false);
+    drawVariableTable("##haze", "", "haze", false);   // full names: no prefix
     const AtmosphereInfo a = rendererAtmosphereInfo();
     if (!a.fitted)
         ImGui::TextDisabled("No fit yet: it runs once a level with a sky dome and fog has drawn.");

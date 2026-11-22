@@ -79,7 +79,7 @@ const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
 
 // The haze layer: one shape for every level, set by renderer.hazeDepth and renderer.hazeFalloff
 // (tuned at the aerial-perspective A/B, task 4); the density follows fog end. It stays exponential
-// past fog end: the view distance is cut by the radial dither (renderer.viewDistance, task 5).
+// past fog end: the view distance is cut by the radial dither (task 5).
 
 // Sizes, as RaAtmosphere.fx defines them.
 const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
@@ -443,10 +443,8 @@ struct State
 };
 
 State g = {};
-bool g_enabled = true;   // renderer.atmosphere
 float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end
 float g_hazeFalloff = 400.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
-bool g_viewDistanceCut = true; // renderer.viewDistance: the radial cut at fog end (task 5 A/B)
 
 // 1/m at the reference height.
 float hazeDensity()
@@ -911,11 +909,6 @@ void bindAtlas(IDirect3DTexture9* atlas)
 
 } // anonymous namespace
 
-bool& rendererAtmosphereEnabled()
-{
-    return g_enabled;
-}
-
 float& rendererHazeDepth()
 {
     return g_hazeDepth;
@@ -926,11 +919,6 @@ float& rendererHazeFalloff()
     return g_hazeFalloff;
 }
 
-bool& rendererViewDistanceCut()
-{
-    return g_viewDistanceCut;
-}
-
 float rendererViewDistanceCutRange()
 {
     return g.cutRange;
@@ -938,7 +926,7 @@ float rendererViewDistanceCutRange()
 
 float rendererSceneryDistance()
 {
-    return g_viewDistanceCut ? 40000.0f : 0.0f;
+    return 40000.0f;
 }
 
 void rendererAtmosphereFrame()
@@ -950,8 +938,6 @@ void rendererAtmosphereFrame()
     {
         ~BindSkyCube() { rendererSkyCubeFrame(rendererAtmosphereDrawsSky()); }
     } bindSkyCube;
-    if (!g_enabled)
-        return;
     Inputs in;
     if (!gatherInputs(in))
         return;
@@ -1009,8 +995,8 @@ void rendererAtmosphereAerialConstants(float c[8])
     c[0] = 1.0f / vp[2];
     c[1] = 1.0f / vp[3];
     c[2] = 1.0f / g.inputs.fogEnd;
-    c[3] = g_viewDistanceCut ? 2.0f : 1.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
-    g.cutRange = g_viewDistanceCut ? g.inputs.fogEnd : 0.0f;
+    c[3] = 2.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
+    g.cutRange = g.inputs.fogEnd;
     // RaAerialHaze: the atlas march's density (RaAtmosphere.fx, its exponent capped at 30) at the
     // camera's height, for the closed-form haze past fog end.
     const double cameraY = rendererGetRenderView()->getViewMatrixPtr()->m[13];
@@ -1057,13 +1043,13 @@ AtmosphereInfo rendererAtmosphereInfo()
 
 bool rendererAtmosphereDrawsSky()
 {
-    return g_enabled && g.fitted && g.skyView && !g.skyViewDirty;
+    return g.fitted && g.skyView && !g.skyViewDirty;
 }
 
 // The model's sky (contract 7, SkyDome.fx technique RaSky): one full-screen pass at the far plane
 // on the sky dome's effect, in the bound target and viewport, testing the scene depth without
 // writing it. Returns false, drawing nothing, while the model does not draw the sky
-// (renderer.atmosphere off, no fit yet): the dome then draws as authored.
+// (no fit yet).
 bool rendererAtmosphereDrawSky(void* effect, bool underWater)
 {
     if (!rendererAtmosphereDrawsSky())

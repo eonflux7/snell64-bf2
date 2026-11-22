@@ -489,7 +489,6 @@ void rendererLinearDepthWater()
 // [RENDER] Milestone 11 task 12: the scene copy water reflects (see RendDX9Base.h).
 namespace {
 IDirect3DTexture9* g_waterSceneTexture = 0;
-bool g_waterSsr = true;   // renderer.waterSsr (task 12 A/B; deleted at acceptance)
 const float kNoWaterSsr[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 void releaseWaterScene()
@@ -524,17 +523,12 @@ bool ensureWaterScene(const D3DSURFACE_DESC& scene)
 }
 }
 
-bool& rendererWaterSsr()
-{
-    return g_waterSsr;
-}
-
 void rendererWaterSceneBegin()
 {
     if (!g_rendererBase)
         return;
     float constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (g_waterSsr && g_linearDepthFrame && !cameraIsUnderWater() && renderQueueHasEntries(0x28))
+    if (g_linearDepthFrame && !cameraIsUnderWater() && renderQueueHasEntries(0x28))
     {
         IDirect3DSurface9* const scene = rendererSceneColorSurface();
         D3DSURFACE_DESC desc;

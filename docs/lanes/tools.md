@@ -395,7 +395,7 @@ and other formats are reported unread.
 `tools.atmosphere [NAME]` (render milestone 11, task 2; `tools(atmosphere)`) writes
 `<outputDir>/<map>/atmosphere/<NAME>.txt` at the console call, NAME as for `tools.survey`, from
 `RendDX9/ToolsAtmosphere.cpp`: the atmosphere's fit and its tables as drawn, for reading without
-the debug menu. Fails while `renderer.atmosphere` is 0 or before the first fit.
+the debug menu. Fails before the first fit.
 
 - `[fit]`: fit time, reference height, fog end; the authored horizon over the model's (not
   applied); sunlight above the atmosphere; the zenith model and the horizon target against the
