@@ -766,6 +766,9 @@ public:
     // edge (world y, m); +FLT_MAX for a slot the level does not have.
     float m_surroundLowest[8];
     float m_surroundOuterEdge[8];
+    // The shared side (0) and corner (1) grids' vertex positions, x and z in secondary cells, as
+    // buildSurroundingGeometry uploads them: a slot's own streams hold only its heights and normals.
+    std::vector<short> m_surroundGrid[2];
     void drawWaterBeyond(float seaLevel, const Frustum* frustum);
 };
 

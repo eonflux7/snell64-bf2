@@ -1726,6 +1726,20 @@ void Terrain::generateSurroundingGrid(int x0, int z0, int x1, int z1, int stepX,
 // blocks growing from the corner, "TerrainEditable"), each a vertex/index buffer pair, plus a
 // third vertex buffer that is created and never filled.
 
+namespace {
+// [RENDER] A CPU copy of a shared ring grid's positions (render milestone 11 task 5,
+// SurroundingPatch::measureHeights), the SHORT2 values uploadSurroundingVertices writes.
+void keepSurroundingGrid(std::vector<short>& out, const std::vector<TerrainSurroundingVertex>& vertices)
+{
+    out.resize(2 * vertices.size());
+    for (std::size_t i = 0; i != vertices.size(); ++i)
+    {
+        out[2 * i] = static_cast<short>(vertices[i].x);
+        out[2 * i + 1] = static_cast<short>(vertices[i].z);
+    }
+}
+} // namespace
+
 void Terrain::buildSurroundingGeometry()
 {
     if (m_sideVertexBuffer)   { dx9rend::vertexBufferRelease(m_sideVertexBuffer);   m_sideVertexBuffer = 0; }
@@ -1754,6 +1768,7 @@ void Terrain::buildSurroundingGeometry()
         vertexCount, m_halfFloatSurrounding ? 8u : 12u, 8u, "Terrain_Surrounding");
     uploadSurroundingVertices(m_sideVertexBuffer, vertices);
     m_sideVertexCount = static_cast<unsigned int>(vertices.size());
+    keepSurroundingGrid(m_surroundGrid[0], vertices);                         // [RENDER] measureHeights
 
     unsigned int indexCount = static_cast<unsigned int>(indices.size());
     m_sideIndexBuffer = dx9rend::bufferManagerCreateIndexBuffer(indexCount, 8u, 101u);
@@ -1779,6 +1794,7 @@ void Terrain::buildSurroundingGeometry()
         vertexCount, m_halfFloatSurrounding ? 8u : 12u, 8u, "TerrainEditable");
     uploadSurroundingVertices(m_cornerVertexBuffer, vertices);
     m_cornerVertexCount = static_cast<unsigned int>(vertices.size());
+    keepSurroundingGrid(m_surroundGrid[1], vertices);                         // [RENDER] measureHeights
 
     indexCount = static_cast<unsigned int>(indices.size());
     m_cornerIndexBuffer = dx9rend::bufferManagerCreateIndexBuffer(indexCount, 8u, 101u);

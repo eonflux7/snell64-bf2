@@ -163,7 +163,7 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
             out[2] = src[2];
         }
     }
-    measureHeights(heights, vertexCount);
+    measureHeights(vertexCount);
     ::renddx9abi::engineFree(heights);
     dx9rend::vertexBufferUnlock(heightVertexBuffer);
 
@@ -183,15 +183,18 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
 
 // [RENDER] The sea past the view distance (render milestone 11 task 5): this slot's lowest height
 // and the median height along its outer edge, into the terrain's m_surroundLowest and
-// m_surroundOuterEdge. A vertex is the SHORT2 grid position in xzBytes, placed by `placement` as the
-// shader does (sttransxz), its height the first float of its record times the secondary y scale
+// m_surroundOuterEdge. A vertex's position is the shared side or corner grid's (SHORT2, the
+// terrain's m_surroundGrid copy), placed by `placement` as the shader does (sttransxz); its height
+// is this slot's float in xzBytes (stream 1, POSITION1.x) times the secondary y scale
 // (stscaletransy). The outer edge is where the ring's square ends, 1.5 spans from the centre.
-void SurroundingPatch::measureHeights(const float* heights, unsigned int vertexCount)
+void SurroundingPatch::measureHeights(unsigned int vertexCount)
 {
     Terrain* const t = terrain;
-    if (!heights || !xzBytes || slot < 0 || slot >= 8)
+    const std::vector<short>& gridXZ = t->m_surroundGrid[isCorner ? 1 : 0];
+    if (!xzBytes || slot < 0 || slot >= 8 || gridXZ.size() < 2u * vertexCount)
         return;
-    const short* const grid = static_cast<const short*>(xzBytes);
+    const short* const grid = gridXZ.data();
+    const float* const raw = static_cast<const float*>(xzBytes);
     const float* const m = placement;
     const float outer = 1.5f * static_cast<float>(span) - 0.5f * static_cast<float>(secondaryScaleX);
     float lowest = FLT_MAX;
@@ -202,7 +205,7 @@ void SurroundingPatch::measureHeights(const float* heights, unsigned int vertexC
         const float gx = grid[2 * i], gz = grid[2 * i + 1];
         const float x = gx * m[0] + gz * m[4] + m[12];
         const float z = gx * m[1] + gz * m[5] + m[13];
-        const float y = heights[3 * i] * t->m_secondaryWorldScale.y;
+        const float y = raw[i] * t->m_secondaryWorldScale.y;
         xs[i] = x; zs[i] = z; ys[i] = y;
         lowest = (std::min)(lowest, y);
         if ((std::max)(std::fabs(x), std::fabs(z)) >= outer)
