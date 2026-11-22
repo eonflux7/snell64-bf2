@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built) | Milestone 11 task 10, static meshes | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
+| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built); 15 (shader pipeline) in progress, task 1 built | Milestone 15 task 2, then 11 task 10 | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |

@@ -23,6 +23,7 @@ BF2/RendDX9/ResourceManager.cpp
 BF2/RendDX9/ResourceTracer.cpp
 BF2/RendDX9/VideoOptions.cpp
 BF2/RendDX9/Effect.cpp
+BF2/RendDX9/FxCompiler.cpp
 BF2/RendDX9/DiceEffect.cpp
 BF2/RendDX9/FXParameter.cpp
 BF2/RendDX9/ShaderManager.cpp

@@ -21,6 +21,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 9. Draw submission | Accepted | `2eb902ce`, `0a623df8`, `e87543df`, `f3515fb4`, `7bdd3a77`, `4bc56ff8`, `e9b6a8a4`, `965bb8bf`, `c2f7ef33`, `3c745649`, `2002788d` |
 | 10. Terrain in one pass | Accepted | `2eb4d02d`, `c21a012e`, `0d9e15a6`, `57fa2899`, `3b9da48c`, `6fd523bb`, and the deletion ("milestone 10 accepted") |
 | 11. Atmosphere, sky IBL, water reflections | In progress | — |
+| 15. Shader pipeline (ahead of 12) | In progress | — |
 | 12. Clouds | Not started | — |
 | 13. HDR bloom + auto-exposure | Not started | — |
 | 14. GTAO + lightmap channel ownership | Not started | — |

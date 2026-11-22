@@ -357,6 +357,34 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets
   and anti-air; device resets with the cut on; the cost of statics, roads and terrain to 40 km.
 
+### 15. Shader pipeline
+
+Taken ahead of milestone 12 (owner, 2026-11-22): every later milestone edits shaders, and a load
+after a shader edit took about 10 minutes on test_bootcamp. Goal: as little shader compiling as
+possible, at load and after an edit.
+
+Measured before the milestone (test_bootcamp `gpm_cq 16`, every effect stale): 426 s of the load was
+the main thread waiting for 611 Ra effects compiling on 8 workers (6.3 s each on average, 20 s at
+most, 3,872 s in all), and about 100 s more was `compileEffectFile` compiling `particles`,
+`roadcompiled`, `trail`, undergrowth and the rest on the main thread. The time is D3DX's April 2005
+effect compiler (`d3dx9_24`, `d3dx9_25`): the same bundled-mesh permutation takes 17.4 s there and
+0.56 s with `d3dcompiler_47` (fx_2_0). All 586 Ra permutations (bm 448, sm 24, stm 114) compile with
+`d3dcompiler_47` in 21 s on 12 threads in one module, and `d3dx9_25`'s `D3DXCreateEffect` loads
+every result with the same parameters, and all 1,489 techniques validate. `d3dx9_43` (PR's own
+RendDX9 links it) brings only the 2010 `d3dcompiler_43`, so it is not used.
+
+Tasks:
+1. `d3dcompiler_47` compiles every effect (`FxCompiler.cpp`): Ra effects on the main thread and on
+   the prefetch workers (a worker per core but one, no module copies), and `compileEffectFile`.
+   The compiler is part of both cache keys. `BF2_FX_COMPILER=d3dx` keeps D3DX's compiler until
+   acceptance. D3DX stays the effect runtime; its compiler reads the `.mfx` metadata only.
+2. Measure a cold load and an edit cycle; decide from them whether an offline shader pack (all
+   permutations built before launch, only changed ones rebuilt) is still worth building.
+3. Fewer permutations: flags that only add a texture fetch become runtime branches or default
+   textures, keyed by the renderer's material classes.
+4. Decided last: whether D3DX effects give way to plain vertex and pixel shaders with the
+   renderer's own parameter and state binding.
+
 ### 12. Clouds
 
 Decided by the owner, 2026-11-20: the levels' painted cloud layers are replaced by modern clouds,

@@ -14,6 +14,7 @@
 #include <dxerr9.h>
 #endif
 #include "../RendDX9Base.h"
+#include "../FxCompiler.h"   // [RENDER] d3dcompiler_47
 #include "../ShaderLoading.h"
 #include "../../RendMisc/IRenderer.h"   // Renderer +0xBC, typed (see below)
 #include "../../Game/Main/IVideoOptions.h"
@@ -1578,6 +1579,40 @@ long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
 #endif
 
 
+// [RENDER] One effect compile: d3dcompiler_47 (FxCompiler.h) unless BF2_FX_COMPILER=d3dx, then
+// D3DX's CreateEffectCompiler + CompileEffect as retail. 0 and *blobOut on success; errors (may be
+// null) receives the compiler's messages either way. Any thread when d3dcompiler_47 is used.
+long raCompileEffect(const char* source, unsigned int sourceLen, const D3DXMACRO* defines,
+                     LPD3DXINCLUDE include, unsigned long flags, ID3DXBuffer** blobOut,
+                     ID3DXBuffer** errors)
+{
+    *blobOut = 0;
+    if (::dice::hfe::dx9rend::fxCompilerModern())
+    {
+        const long hr = ::dice::hfe::dx9rend::fxCompileEffect(source, sourceLen, 0, defines, include,
+                                                            flags, blobOut, errors);
+        return hr >= 0 && *blobOut ? 0 : (hr < 0 ? hr : static_cast<long>(0x80004005));
+    }
+    ID3DXEffectCompiler* compiler = 0;
+    const long created = raCreateEffectCompiler(source, sourceLen, defines, include, flags,
+                                                &compiler, errors);
+    if (created != 0)
+    {
+        raRelease(compiler);
+        return created;
+    }
+    raRelease(*errors);
+    const long hr = compiler->CompileEffect(flags, blobOut, errors);
+    raRelease(compiler);
+    if (hr != 0 && *blobOut)
+    {
+        (*blobOut)->Release();
+        *blobOut = 0;
+    }
+    return hr != 0 ? hr : (*blobOut ? 0 : static_cast<long>(0x80004005));
+}
+
+
 // [FIX] The content-keyed effect cache (see compileEffect).
 // raEffectContentKey: FNV-1a over the effect expanded by D3DXPreprocessShader (the same include
 // handler and defines the compile uses, so every included file's text is in the hash), then the
@@ -1689,6 +1724,8 @@ std::string raEffectContentKey(const char* source, unsigned int sourceLen, const
     }
     const unsigned int flagWord = static_cast<unsigned int>(flags);
     hash = raFnv1a(hash, &flagWord, sizeof(flagWord));
+    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;   // [RENDER]
+    hash = raFnv1a(hash, &compilerByte, 1);
 
     char hex[17];
     ::sprintf_s(hex, "%016llx", hash);
@@ -1875,6 +1912,9 @@ std::string raEffectSourceKey(const char* source, unsigned int sourceLen, const 
     hash = raFnv1a(hash, &flagWord, sizeof(flagWord));
     const unsigned char obfuscatedByte = obfuscated ? 1 : 0;
     hash = raFnv1a(hash, &obfuscatedByte, 1);
+    // [RENDER] The compiler: blobs from D3DX's and from d3dcompiler_47 never stand in for each other.
+    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;
+    hash = raFnv1a(hash, &compilerByte, 1);
 
     char hex[18];
     ::sprintf_s(hex, "s%016llx", hash);   // "s": never equal to a raEffectContentKey key
@@ -2010,6 +2050,16 @@ void raPrefetchCompile(RaPrefetchJob& job, RaD3dxCreateEffectCompilerFn create)
     RaMemoryInclude include(job);
     ID3DXEffectCompiler* compiler = 0;
     ID3DXBuffer* errors = 0;
+    if (::dice::hfe::dx9rend::fxCompilerModern())   // [RENDER] d3dcompiler_47
+    {
+        ID3DXBuffer* blob = 0;
+        if (raCompileEffect(job.source.c_str(), static_cast<unsigned int>(job.source.size()),
+                            job.defines, &include, job.flags, &blob, &errors) == 0)
+            job.blob = blob;
+        if (errors)
+            errors->Release();
+        return;
+    }
     const long created = create
         ? create(job.source.c_str(), static_cast<UINT>(job.source.size()), job.defines, &include,
                  job.flags, &compiler, &errors)
@@ -2061,17 +2111,22 @@ void raPrefetchQueue(RaPrefetchJob* job)
         g_raPrefetchPool = new RaPrefetchPool;
         unsigned int threads = std::thread::hardware_concurrency();
         threads = threads > 1 ? threads - 1 : 1;
-        if (threads > 8)
+        // [RENDER] d3dcompiler_47 runs compiles side by side in one module: a worker per core
+        // but the main thread's. D3DX's compiler needs a renamed copy of its module per worker.
+        const bool modern = ::dice::hfe::dx9rend::fxCompilerModern();
+        if (!modern && threads > 8)
             threads = 8;
         unsigned int privateCompilers = 0;
         for (unsigned int i = 0; i < threads; ++i)
         {
-            const RaD3dxCreateEffectCompilerFn create = raLoadPrivateCompiler(i);
+            const RaD3dxCreateEffectCompilerFn create = modern ? 0 : raLoadPrivateCompiler(i);
             privateCompilers += create ? 1 : 0;
             std::thread(raPrefetchWorker, g_raPrefetchPool, create).detach();
         }
-        ::fprintf(stderr, "[EFFECTPREFETCH] %u worker threads, %u with their own compiler module\n",
-                  threads, privateCompilers);
+        ::fprintf(stderr, "[EFFECTPREFETCH] %u worker threads, %s\n", threads,
+                  modern ? "d3dcompiler_47"
+                         : (privateCompilers == threads ? "each with its own D3DX compiler module"
+                                                         : "some sharing D3DX's compiler module"));
         ::fflush(stderr);
     }
     g_raPrefetchJobs[job->name] = job;
@@ -2319,31 +2374,13 @@ ID3DXBuffer* EffectManager::compileEffectSource(const char* source, unsigned int
 
     for (int pass = 1; ; ++pass)
     {
-        ID3DXEffectCompiler* compiler = 0;
-
         // sub_1003C610 - the lazily-bound D3DXCreateEffectCompiler in d3dx9_24.dll, with `pInclude`
         // set to this object's +0x44 sub-object, whose +0x00 is the off_101E139C include table.
-        const long created = raCreateEffectCompiler(
-            source, sourceLen, defines, reinterpret_cast<LPD3DXINCLUDE>(m_sub), *flags, &compiler,
-            errors);
-        if (created != 0)
-        {
-            raRelease(compiler);
-            return 0;
-        }
-
-        raRelease(*errors);
-
+        // [RENDER] d3dcompiler_47 instead (raCompileEffect).
         blob = 0;
-        const long hr = compiler->CompileEffect(*flags, &blob, errors);
-        raRelease(compiler);
-
-        if (hr != 0)
-        {
-            if (blob)
-                blob->Release();
+        if (raCompileEffect(source, sourceLen, defines, reinterpret_cast<LPD3DXINCLUDE>(m_sub),
+                            *flags, &blob, errors) != 0)
             return 0;
-        }
 
         if (pass > 1)
             break;

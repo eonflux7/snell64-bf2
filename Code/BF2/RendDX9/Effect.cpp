@@ -16,6 +16,7 @@
 #include "RendDX9Base.h"
 #include "ShaderParameter.h"
 #include "Submit.h"              // [RENDER] effect programs (milestone 9)
+#include "FxCompiler.h"          // [RENDER] d3dcompiler_47 (milestone 15)
 #include "../RendMisc/IRenderer.h"
 #include "../GeomMisc/Debug.h"
 
@@ -1559,6 +1560,8 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
     for (std::size_t i = 0; i + 1 < macros.size(); ++i)
         definesHash = fxsFnv(definesHash, macros[i], ::strlen(macros[i]) + 1);
     definesHash = fxsFnv(definesHash, &flags, sizeof flags);
+    const unsigned char compilerByte = ::dice::hfe::dx9rend::fxCompilerModern() ? 47 : 24;   // [RENDER]
+    definesHash = fxsFnv(definesHash, &compilerByte, 1);
     const unsigned long long sourceHash = fxsFnv(definesHash, source, sourceSize);
     const std::string cachePath = fxsCachePath(path, definesHash);
 
@@ -1573,14 +1576,31 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
         FxsRecordingInclude recording(include);
         ID3DXEffectCompiler* compiler = 0;
         ID3DXBuffer* messages = 0;
-        HRESULT hr = D3DXCreateEffectCompiler(static_cast<const char*>(source), sourceSize,
-                                              reinterpret_cast<const D3DXMACRO*>(macros.data()),
-                                              &recording, flags, &compiler, &messages);
-        if (hr >= 0 && compiler && !messages)
-            hr = compiler->CompileEffect(flags, &blob, &messages);
-        if (compiler)
-            compiler->Release();
-        const bool clean = hr >= 0 && blob && (!messages || messages->GetBufferSize() <= 1);
+        HRESULT hr;
+        bool clean;
+        if (::dice::hfe::dx9rend::fxCompilerModern())
+        {
+            // [RENDER] d3dcompiler_47 (FxCompiler.h). Its warnings differ from D3DX's (the X3206
+            // truncations D3DX did not report), so a successful compile counts as clean.
+            hr = ::dice::hfe::dx9rend::fxCompileEffect(
+                static_cast<const char*>(source), sourceSize, path,
+                reinterpret_cast<const D3DXMACRO*>(macros.data()), &recording, flags, &blob, &messages);
+            clean = hr >= 0 && blob;
+            if (!clean)
+                ::fprintf(stderr, "[FXCOMPILER] %s: hr=0x%08lx %.600s\n", path, static_cast<unsigned long>(hr),
+                          messages ? static_cast<const char*>(messages->GetBufferPointer()) : "");
+        }
+        else
+        {
+            hr = D3DXCreateEffectCompiler(static_cast<const char*>(source), sourceSize,
+                                          reinterpret_cast<const D3DXMACRO*>(macros.data()),
+                                          &recording, flags, &compiler, &messages);
+            if (hr >= 0 && compiler && !messages)
+                hr = compiler->CompileEffect(flags, &blob, &messages);
+            if (compiler)
+                compiler->Release();
+            clean = hr >= 0 && blob && (!messages || messages->GetBufferSize() <= 1);
+        }
         if (messages)
             messages->Release();
         if (!clean)
