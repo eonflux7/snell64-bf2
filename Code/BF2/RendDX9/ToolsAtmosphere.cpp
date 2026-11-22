@@ -782,14 +782,15 @@ bool toolsWriteClouds(const char* base, const char*& message)
             for (int k = 0; k < 3; ++k)
                 p[k] /= std::max(1.0f - l, 1e-4f);
         }
-        const float edges[] = { 0.0f, 2.0f, 5.0f, 10.0f, 20.0f, 40.0f, 90.0f };
-        for (int b = 0; b + 1 < 7; ++b)
+        const float edges[] = { -90.0f, -10.0f, 0.0f, 2.0f, 5.0f, 10.0f, 20.0f, 40.0f, 90.0f };
+        for (int b = 0; b + 1 < 9; ++b)
         {
             double t = 0.0, lum = 0.0;
             unsigned int n = 0, covered = 0;
             for (unsigned int y = 0; y < pano.h; ++y)
             {
-                const float v = (y + 0.5f) / pano.h, e = v * v * 90.0f;
+                // Row 0 the nadir, the horizon halfway, the zenith last (RaCloudPanorama.fxh).
+                const float v = 2.0f * (y + 0.5f) / pano.h - 1.0f, e = (v < 0.0f ? -v : v) * v * 90.0f;
                 if (e < edges[b] || e >= edges[b + 1])
                     continue;
                 for (unsigned int x = 0; x < pano.w; ++x)
@@ -802,18 +803,45 @@ bool toolsWriteClouds(const char* base, const char*& message)
                 }
             }
             if (n)
-                std::fprintf(f, "[panorama]  %2.0f-%2.0f: %.3f | %.3f | %.4f\n", edges[b], edges[b + 1], t / n,
+                std::fprintf(f, "[panorama]  %3.0f..%3.0f: %.3f | %.3f | %.4f\n", edges[b], edges[b + 1], t / n,
                              static_cast<double>(covered) / n, lum / n);
         }
         float scale;
         if (writePng(pano, root + "-panorama.png", false, scale))
-            std::fprintf(f, "[panorama] png %s-panorama.png (row 0 the horizon, the zenith at the bottom; "
+            std::fprintf(f, "[panorama] png %s-panorama.png (row 0 the nadir, the horizon halfway, the zenith at the bottom; "
                             "x %.4g)\n", root.c_str(), scale);
         if (writePng(alpha, root + "-panorama-t.png", true, scale))
             std::fprintf(f, "[panorama] png %s-panorama-t.png (transmittance)\n", root.c_str());
     }
     else
         failed += "panorama ";
+
+    // The near clouds (task 4): the last resolve, half the view's size, as the camera saw it.
+    Table nearT;
+    if (c.nearResolved && readTable(c.nearResolved, nearT, why))
+    {
+        double t = 0.0, lum = 0.0;
+        unsigned int covered = 0;
+        const size_t n = nearT.rgba.size() / 4;
+        Table alpha = nearT;
+        for (size_t i = 0; i < nearT.rgba.size(); i += 4)
+        {
+            const float* const q = &nearT.rgba[i];
+            t += q[3];
+            covered += q[3] < 0.5f;
+            lum += 0.2126f * q[0] + 0.7152f * q[1] + 0.0722f * q[2];
+        }
+        std::fprintf(f, "[near] %ux%u out to %.0f m: mean transmittance %.3f, share < 0.5 %.3f, mean added "
+                        "luminance %.4f\n", nearT.w, nearT.h, c.nearDistance, n ? t / n : 1.0,
+                     n ? static_cast<double>(covered) / n : 0.0, n ? lum / n : 0.0);
+        float scale;
+        if (writePng(nearT, root + "-near.png", false, scale))
+            std::fprintf(f, "[near] png %s-near.png (the light added; x %.4g)\n", root.c_str(), scale);
+        if (writePng(alpha, root + "-near-t.png", true, scale))
+            std::fprintf(f, "[near] png %s-near-t.png (transmittance)\n", root.c_str());
+    }
+    else
+        std::fprintf(f, "[near] none (renderer.cloudNear %.0f, or not drawn last frame)\n", c.nearDistance);
 
     std::fclose(f);
     g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";

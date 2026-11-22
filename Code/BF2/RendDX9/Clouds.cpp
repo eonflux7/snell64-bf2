@@ -28,6 +28,13 @@
 // the time latched at its first band; the wind drifts the field under it. renderer.clouds 0 stops
 // the builds and the panorama and draws the clear sky.
 //
+// Task 4 (contract 15): reachable clouds. The panorama becomes the far field: the whole sphere from
+// the camera's position latched at its first band, marched from the handoff distance
+// (renderer.cloudNear). Nearer, rendererCloudsNear marches the clouds per texel of a target half
+// the view's size, from the camera to the handoff or the scene's depth, resolves it against the
+// reprojected history (the camera's motion and the wind's drift) and composites it over the
+// scene after the sky, before the world's transparents.
+//
 // The weather evolves (each region's clouds grow and decay over 10-30 minutes); every
 // kRebuildSeconds a new set is built into the other half of a double buffer, two field tiles and
 // eight light tiles a frame, then made live. Presets (desert, maritime) set the slab, the cloud
@@ -40,6 +47,8 @@
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "RendDX9Base.h"
+#include "../RendMisc/IRenderView.h"
+#include "../Math/Mat4.h"
 #include "../GeomMisc/FSQuadDrawer.h"
 
 #include <algorithm>
@@ -78,6 +87,8 @@ const double kPlanetRadius = 6360000.0;   // m, the atmosphere's ground radius (
 const double kPanoReach = 150000.0;       // m: the march stops here (full haze near the horizon)
 const double kDetailTileM = 1500.0;       // m: the detail noise's tile
 const double kHighStreak = 10.0;          // the high cloud's streaks: length over width
+const unsigned int kRows = 20;            // RaClouds' float4s (RaCloudField.fxh, RaClouds.fx)
+const float kNearHistoryWeight = 0.1f;    // the current frame's weight in the near clouds' history
 
 struct Preset
 {
@@ -340,6 +351,16 @@ struct State
     int panoSet;                      // the volume set the one being drawn reads
     WeatherInputs panoInputs;
     double panoSeconds;
+    float panoObserver[3];            // world: the camera when the one being drawn started
+    // The near clouds (task 4).
+    float nearDistance;               // m, renderer.cloudNear; 0: none, the panorama from the camera
+    IDirect3DTexture9* nearCurrent;   // this frame's march: light, transmittance
+    IDirect3DTexture9* nearDepth;     // r the reprojection distance, g the scene depth used
+    IDirect3DTexture9* nearHistory[2];
+    unsigned int nearW, nearH, nearFrames;
+    int nearLast;                     // the history resolved last frame; -1 none (invalid)
+    float nearPrevRows[3][4];         // the previous frame's view (RaClouds[15..17])
+    float nearPrevDrift[2];
 };
 
 State* g_state = 0;
@@ -354,6 +375,8 @@ State& st()
         g_state->live = -1;
         g_state->stage = kIdle;
         g_state->panoNew = g_state->panoOld = g_state->panoDraw = g_state->panoSet = -1;
+        g_state->nearDistance = 16000.0f;
+        g_state->nearLast = -1;
     }
     return *g_state;
 }
@@ -394,6 +417,12 @@ void releaseSets()
         release(s.pano[i]);
     s.panoNew = s.panoOld = s.panoDraw = s.panoSet = -1;
     s.panoBand = 0;
+    release(s.nearCurrent);
+    release(s.nearDepth);
+    release(s.nearHistory[0]);
+    release(s.nearHistory[1]);
+    s.nearW = s.nearH = 0;
+    s.nearLast = -1;
 }
 
 bool createTarget(unsigned int w, unsigned int h, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -457,9 +486,9 @@ bool uploadWeather(const std::vector<unsigned int>& data)
 }
 
 // RaClouds' constants (layout in RaClouds.fx).
-void fillConstants(float c[8][4], const WeatherInputs& w, unsigned int first)
+void fillConstants(float c[kRows][4], const WeatherInputs& w, unsigned int first)
 {
-    std::memset(c, 0, sizeof(float) * 32);
+    std::memset(c, 0, sizeof(float) * 4 * kRows);
     const AtmosphereInfo a = rendererAtmosphereInfo();
     const Preset& p = kPresets[w.preset];
     const float base = static_cast<float>(a.refHeight + p.baseM), top = static_cast<float>(a.refHeight + p.topM);
@@ -482,7 +511,7 @@ void fillConstants(float c[8][4], const WeatherInputs& w, unsigned int first)
 }
 
 bool drawTiles(void* effect, const char* technique, IDirect3DTexture9* target, unsigned int tileSize,
-               unsigned int tilesAcross, unsigned int first, unsigned int count, float c[8][4],
+               unsigned int tilesAcross, unsigned int first, unsigned int count, float c[kRows][4],
                IDirect3DTexture9* field, IDirect3DTexture9* coarse)
 {
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
@@ -490,7 +519,7 @@ bool drawTiles(void* effect, const char* technique, IDirect3DTexture9* target, u
         return false;
     State& s = st();
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
-        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 8);
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudWeather"))
         d3dx->SetTexture(h, s.weather);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShape"))
@@ -542,7 +571,7 @@ void buildStep(void* effect)
     if (s.panoBand != 0 && s.panoSet == target)
         return;   // the panorama being drawn still reads it
     VolumeSet& v = s.sets[target];
-    float c[8][4];
+    float c[kRows][4];
     fillConstants(c, s.built, s.next);
     ++s.buildFrames;
     if (s.stage == kField)
@@ -582,8 +611,10 @@ void buildStep(void* effect)
     }
 }
 
-// RaClouds [5..7] for the panorama (layout in RaClouds.fx).
-void fillPanoramaConstants(float c[8][4], const WeatherInputs& w, double seconds)
+// RaClouds [5..8] for the panorama and the near clouds (layout in RaClouds.fx), observed from
+// `observer` (world) with the near clouds out to `handoff` metres.
+void fillPanoramaConstants(float c[kRows][4], const WeatherInputs& w, double seconds, const float observer[3],
+                           float handoff)
 {
     const AtmosphereInfo a = rendererAtmosphereInfo();
     const Preset& p = kPresets[w.preset];
@@ -591,7 +622,7 @@ void fillPanoramaConstants(float c[8][4], const WeatherInputs& w, double seconds
     const double dx = p.windX / len, dz = p.windZ / len;
     c[5][0] = static_cast<float>(std::fmod(dx * p.windMs * seconds, kWorldSize));
     c[5][1] = static_cast<float>(std::fmod(dz * p.windMs * seconds, kWorldSize));
-    c[5][2] = a.refHeight;
+    c[5][2] = observer[1];
     c[5][3] = static_cast<float>(kPlanetRadius);
     c[6][0] = static_cast<float>(a.refHeight + p.highM);
     c[6][1] = static_cast<float>(p.highCoverage);
@@ -601,6 +632,26 @@ void fillPanoramaConstants(float c[8][4], const WeatherInputs& w, double seconds
     c[7][1] = static_cast<float>(dz);
     c[7][2] = static_cast<float>(kDetailTileM);
     c[7][3] = static_cast<float>(kPanoReach);
+    c[8][0] = observer[0];
+    c[8][1] = observer[2];
+    c[8][2] = a.refHeight;
+    c[8][3] = handoff;
+}
+
+// The handoff distance this frame: the near clouds' reach, 0 while they are off.
+float nearHandoff()
+{
+    const State& s = st();
+    return s.nearDistance > 0.0f ? s.nearDistance : 0.0f;
+}
+
+// The main view's camera position (world).
+void cameraPosition(float p[3])
+{
+    const float* const m = rendererGetRenderView()->getViewMatrixPtr()->m;
+    p[0] = m[12];
+    p[1] = m[13];
+    p[2] = m[14];
 }
 
 // One band of the panorama being drawn; a finished one joins the ring as the newest.
@@ -615,6 +666,7 @@ void panoramaStep(void* effect)
         s.panoSet = s.live;
         s.panoInputs = s.liveInputs;
         s.panoSeconds = secondsSince(s.start);
+        cameraPosition(s.panoObserver);
         for (int i = 0; i < 3; ++i)
             if (i != s.panoNew && i != s.panoOld)
             {
@@ -627,14 +679,14 @@ void panoramaStep(void* effect)
     if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudPanorama"))
         return;
     const AtmosphereInfo a = rendererAtmosphereInfo();
-    float c[8][4];
+    float c[kRows][4];
     fillConstants(c, s.panoInputs, 0);
-    fillPanoramaConstants(c, s.panoInputs, s.panoSeconds);
+    fillPanoramaConstants(c, s.panoInputs, s.panoSeconds, s.panoObserver, nearHandoff());
     c[4][1] = static_cast<float>(s.panoramas % 64);   // the march's jitter changes per panorama
     float atmosphere[16][4];
     rendererAtmosphereConstants(atmosphere);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
-        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 8);
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
     struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
@@ -694,6 +746,210 @@ void rendererCloudsBindSky(void* d3dxEffect)
     }
     d3dx->SetVector(h, &v);
 }
+
+// The near clouds (task 4): march, resolve against the history, composite over the bound scene.
+void rendererCloudsNear(bool allowed)
+{
+    State& s = st();
+    IDirect3DTexture9* const sceneDepth = rendererLinearDepthTexture();
+    float fog[3] = { 1.0f, 1.0f, 1.0f };
+    postProductionGetFogColor255(fog);
+    D3DSURFACE_DESC depthDesc;
+    // Thermal views mark themselves by a fog colour with no red (RaCommon.fxh, Ra_IsTisActive).
+    if (!allowed || !device() || !s.enabled || s.live < 0 || s.nearDistance <= 0.0f || !sceneDepth
+        || fog[0] == 0.0f || sceneDepth->GetLevelDesc(0, &depthDesc) < 0)
+    {
+        s.nearLast = -1;
+        return;
+    }
+    const unsigned int w = (depthDesc.Width + 1) / 2, h = (depthDesc.Height + 1) / 2;
+    if (w != s.nearW || h != s.nearH)
+    {
+        release(s.nearCurrent);
+        release(s.nearDepth);
+        release(s.nearHistory[0]);
+        release(s.nearHistory[1]);
+        s.nearW = w;
+        s.nearH = h;
+        s.nearLast = -1;
+    }
+    if (!createTarget(w, h, D3DFMT_A16B16G16R16F, s.nearCurrent) || !createTarget(w, h, D3DFMT_A16B16G16R16F, s.nearDepth)
+        || !createTarget(w, h, D3DFMT_A16B16G16R16F, s.nearHistory[0])
+        || !createTarget(w, h, D3DFMT_A16B16G16R16F, s.nearHistory[1]))
+    {
+        s.nearLast = -1;
+        return;
+    }
+    void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaClouds");
+    ID3DXEffect* const d3dx = effect ? static_cast<ID3DXEffect*>(effectD3dxHandle(effect)) : 0;
+    if (!d3dx)
+    {
+        if (effect)
+            effectRelease(static_cast<Effect*>(effect));
+        s.nearLast = -1;
+        return;
+    }
+
+    // Constants: the volumes', the observer (the camera now), the view and the previous view.
+    const VolumeSet& v = s.sets[s.live];
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    IRenderView* const view = rendererGetRenderView();
+    const float* const m = view->getViewMatrixPtr()->m;
+    const float* const p = view->getProjectionMatrixPtr()->m;
+    const float sx = 1.0f / p[0], sy = 1.0f / p[5];
+    float c[kRows][4];
+    fillConstants(c, s.liveInputs, 0);
+    const float camera[3] = { m[12], m[13], m[14] };
+    fillPanoramaConstants(c, s.liveInputs, secondsSince(s.start), camera, s.nearDistance);
+    const int next = s.nearLast == 0 ? 1 : 0;
+    float driftDelta[2] = { 0.0f, 0.0f };
+    for (int k = 0; k < 2; ++k)
+    {
+        // The drift wraps with the world: the step since last frame is the short way round.
+        double d = c[5][k] - s.nearPrevDrift[k];
+        d -= kWorldSize * std::floor(d / kWorldSize + 0.5);
+        driftDelta[k] = static_cast<float>(d);
+        s.nearPrevDrift[k] = c[5][k];
+    }
+    c[9][0] = static_cast<float>(w);
+    c[9][1] = static_cast<float>(h);
+    c[9][2] = 1.0f / w;
+    c[9][3] = 1.0f / h;
+    c[10][0] = static_cast<float>(s.nearFrames % 64);
+    c[10][1] = kNearHistoryWeight;
+    c[10][2] = s.nearLast >= 0 ? 1.0f : 0.0f;
+    c[11][0] = static_cast<float>(depthDesc.Width);
+    c[11][1] = static_cast<float>(depthDesc.Height);
+    c[11][2] = 1.0f / depthDesc.Width;
+    c[11][3] = 1.0f / depthDesc.Height;
+    for (int k = 0; k < 3; ++k)
+    {
+        c[12][k] = m[8 + k] - m[0 + k] * sx + m[4 + k] * sy;
+        c[13][k] = 2.0f * m[0 + k] * sx;
+        c[14][k] = -2.0f * m[4 + k] * sy;
+    }
+    std::memcpy(c[15], s.nearPrevRows, sizeof(s.nearPrevRows));
+    c[18][0] = driftDelta[0];
+    c[18][1] = driftDelta[1];
+    // This view for the next frame: x' = right . (P - camera) P11, y' = up . (P - camera) P22,
+    // w = forward . (P - camera).
+    const float scale[3] = { p[0], p[5], 1.0f };
+    for (int r = 0; r < 3; ++r)
+    {
+        const float* const axis = m + 4 * r;
+        s.nearPrevRows[r][3] = 0.0f;
+        for (int k = 0; k < 3; ++k)
+        {
+            s.nearPrevRows[r][k] = axis[k] * scale[r];
+            s.nearPrevRows[r][3] -= axis[k] * camera[k] * scale[r];
+        }
+    }
+    ++s.nearFrames;
+
+    float atmosphere[16][4];
+    rendererAtmosphereConstants(atmosphere);
+    if (const D3DXHANDLE hc = d3dx->GetParameterBySemantic(0, "RaClouds"))
+        d3dx->SetVectorArray(hc, reinterpret_cast<const D3DXVECTOR4*>(c), kRows);
+    if (const D3DXHANDLE hc = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
+        d3dx->SetVectorArray(hc, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
+    struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
+        { "RaCloudShape", s.shape }, { "RaCloudDetail", s.detail }, { "RaCloudField", v.field },
+        { "RaCloudCoarse", v.coarse }, { "RaCloudLight", v.light }, { "RaCloudLightTable", a.cloudLight },
+        { "RaSkyViewTable", a.skyView },
+    };
+    for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
+        if (const D3DXHANDLE hc = d3dx->GetParameterBySemantic(0, textures[i].semantic))
+            d3dx->SetTexture(hc, textures[i].texture);
+    const D3DXHANDLE current = d3dx->GetParameterBySemantic(0, "RaCloudNearCurrent");
+    const D3DXHANDLE depth = d3dx->GetParameterBySemantic(0, "RaCloudNearDepth");
+    const D3DXHANDLE history = d3dx->GetParameterBySemantic(0, "RaCloudNearHistory");
+
+    IDirect3DSurface9* savedTarget = stateManagerGetRenderTarget(0);
+    IDirect3DSurface9* savedDepth = stateManagerGetDepthStencilSurface();
+    if (!savedTarget)
+        savedTarget = rendererSceneColorSurface();
+    if (savedTarget)
+        savedTarget->AddRef();
+    if (savedDepth)
+        savedDepth->AddRef();
+    D3DVIEWPORT9 savedViewport;
+    device()->GetViewport(&savedViewport);
+    stateManagerPush();
+    stateManagerSetDepthStencilSurface(0);
+
+    const D3DVIEWPORT9 nearViewport = { 0, 0, w, h, 0.0f, 1.0f };
+    auto pass = [&](const char* technique) {
+        if (!effectSetTechniqueByName(effect, technique))
+            return false;
+        effectBegin(effect);
+        effectBeginPass(effect, 0);
+        geom::fsQuadDrawerDrawCurrentEffect();
+        effectEnd(effect);
+        return true;
+    };
+    auto surfaceOf = [](IDirect3DTexture9* t) {
+        IDirect3DSurface9* surface = 0;
+        t->GetSurfaceLevel(0, &surface);
+        return surface;
+    };
+
+    // The march: light and transmittance, and the distances.
+    IDirect3DSurface9* const currentSurface = surfaceOf(s.nearCurrent);
+    IDirect3DSurface9* const depthSurface = surfaceOf(s.nearDepth);
+    stateManagerSetRenderTarget(0, currentSurface);
+    stateManagerSetRenderTarget(1, depthSurface);
+    flushRenderTargetsSeam();
+    device()->SetViewport(&nearViewport);
+    bool ok = pass("RaCloudNear");
+    stateManagerSetRenderTarget(1, 0);
+
+    // The resolve into the other history.
+    IDirect3DSurface9* const historySurface = surfaceOf(s.nearHistory[next]);
+    if (ok)
+    {
+        if (current)
+            d3dx->SetTexture(current, s.nearCurrent);
+        if (depth)
+            d3dx->SetTexture(depth, s.nearDepth);
+        if (history)
+            d3dx->SetTexture(history, s.nearLast >= 0 ? s.nearHistory[s.nearLast] : s.nearCurrent);
+        stateManagerSetRenderTarget(0, historySurface);
+        flushRenderTargetsSeam();
+        device()->SetViewport(&nearViewport);
+        ok = pass("RaCloudNearResolve");
+    }
+
+    // The composite over the scene, in its own target and viewport.
+    stateManagerSetRenderTarget(0, savedTarget);
+    stateManagerSetDepthStencilSurface(savedDepth);
+    flushRenderTargetsSeam();
+    device()->SetViewport(&savedViewport);
+    if (ok)
+    {
+        if (current)
+            d3dx->SetTexture(current, s.nearHistory[next]);
+        ok = pass("RaCloudNearComposite");
+    }
+    if (current)
+        d3dx->SetTexture(current, 0);
+    if (depth)
+        d3dx->SetTexture(depth, 0);
+    if (history)
+        d3dx->SetTexture(history, 0);
+    s.nearLast = ok ? next : -1;
+
+    stateManagerPop();
+    stateManagerSetRenderTarget(0, savedTarget);
+    stateManagerSetDepthStencilSurface(savedDepth);
+    flushRenderTargetsSeam();
+    device()->SetViewport(&savedViewport);
+    for (IDirect3DSurface9* surface : { currentSurface, depthSurface, historySurface, savedTarget, savedDepth })
+        if (surface)
+            surface->Release();
+    effectRelease(static_cast<Effect*>(effect));
+}
+
+float& rendererCloudNearDistance() { return st().nearDistance; }
 
 float& rendererCloudCoverage() { return st().coverage; }
 int& rendererCloudPreset() { return st().preset; }
@@ -850,6 +1106,8 @@ CloudsInfo rendererCloudsInfo()
     i.builds = s.builds;
     i.panorama = s.panoNew >= 0 ? s.pano[s.panoNew] : 0;
     i.panoramas = s.panoramas;
+    i.nearResolved = s.nearLast >= 0 ? s.nearHistory[s.nearLast] : 0;
+    i.nearDistance = s.nearDistance;
     return i;
 }
 

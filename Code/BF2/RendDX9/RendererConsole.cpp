@@ -1417,6 +1417,10 @@ void setCloudPreset(int value)
 }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudPreset, int, true, getCloudPreset(), setCloudPreset, 0, 1,
                                  kRendererConsoleTag)
+float getCloudNear() { return rendererCloudNearDistance(); }
+void setCloudNear(float value) { rendererCloudNearDistance() = clampf(value, 0.0f, 40000.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudNear, float, true, getCloudNear(), setCloudNear, 0.0f, 40000.0f,
+                                 kRendererConsoleTag)
 
 } // anonymous namespace
 
@@ -1438,6 +1442,7 @@ const char* rendererVariableHelp(const char* name)
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
+        { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

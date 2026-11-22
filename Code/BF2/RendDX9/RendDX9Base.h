@@ -817,7 +817,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 14
+#define RA_CONTRACT_VERSION 15
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -886,6 +886,9 @@ void rendererAtmosphereConstants(float c[16][4]);
 // renderer.cloudCoverage (0 clear .. 1 overcast) and renderer.cloudPreset (0 desert, 1 maritime)
 // start a new build. The render targets go at a device reset and are rebuilt. Task 3: the
 // panorama (contract 14), a band a frame from the live set; renderer.clouds 0 stops it all.
+// Task 4 (contract 15): the panorama is the far field from the camera, past renderer.cloudNear
+// metres; rendererCloudsNear marches the nearer clouds at half the view's size and composites
+// them over the bound scene (after the sky). `allowed` false (under water) skips them.
 void rendererCloudsFrame();
 bool& rendererCloudsEnabled();
 // Sets the sky effect's RaSkyClouds and panoramas (RaCloudPanorama.fxh); y 0 without them.
@@ -894,6 +897,8 @@ void rendererCloudsRelease();
 float& rendererCloudCoverage();
 int& rendererCloudPreset();
 void rendererCloudSettingsChanged();
+void rendererCloudsNear(bool allowed);
+float& rendererCloudNearDistance();
 struct CloudsInfo
 {
     bool live;
@@ -909,6 +914,8 @@ struct CloudsInfo
     unsigned int buildFrames, builds;
     IDirect3DTexture9* panorama;        // the newest complete, 1024 x 512 A16B16G16R16F; 0 none
     unsigned int panoramas;             // drawn so far
+    IDirect3DTexture9* nearResolved;    // the near clouds' last resolve, A16B16G16R16F; 0 none
+    float nearDistance;                 // m, renderer.cloudNear
 };
 CloudsInfo rendererCloudsInfo();
 // [RENDER] Milestone 11 task 7 (SkyCube.cpp, contract 10): the sky cube (prefiltered GGX, mip m

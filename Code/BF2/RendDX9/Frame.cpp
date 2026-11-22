@@ -952,6 +952,12 @@ bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
             rendererNoteOnce(128u, "SkyDome (draw pass)");
     }
 
+    // [RENDER] Milestone 12 task 4: the near clouds over the opaque scene and the sky, before the
+    // world's transparents (which still draw over them).
+    gpuTimerMark("clouds");                                             // [DEV] BF2_GPU_TIMERS
+    if (in.sky && in.skyPass)
+        rendererCloudsNear(!cameraIsUnderWater());
+
     gpuTimerMark("world transparent");               // [DEV] BF2_GPU_TIMERS
 
     if (in.world && cameraIsUnderWater())
