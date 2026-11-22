@@ -18,9 +18,16 @@
 //   RaWaterFft       8 horizontal then 8 vertical radix-2 Stockham passes, ping-ponging two
 //                    768 x 256 A32B32G32R32F targets
 //   RaWaterSlopes    per cascade into its own 256 x 256 A16B16G16R16F target with a full mip chain:
-//                    (slope x, slope z, slope x^2, slope z^2); the mips are box-filtered by
-//                    StretchRect, so a mip's (b, a) minus its (r, g) squared is the slope variance
-//                    the texel averaged away (LEAN mapping, task 3)
+//                    the slopes along and across the wind and their squares (su, sc, su^2, sc^2);
+//                    the mips are box-filtered by StretchRect, so a mip's (b, a) minus its (r, g)
+//                    squared is the slope variance the texel averaged away (LEAN mapping, task 3).
+//                    In the wind's frame the spectrum is symmetric, the slopes' covariance zero, so
+//                    four channels hold the whole second moment. The finest cascade also carries
+//                    the slope variance of the waves shorter than its grid (below 13.5 cm), as
+//                    much as tops the resolved variance up to Cox and Munk's measured sun glitter
+//                    statistics for the wind ("Measurement of the roughness of the sea surface from
+//                    photographs of the sun's glitter", 1954): sigma_u^2 = 0.00316 U, sigma_c^2 =
+//                    0.003 + 0.00192 U, at least kTailFloor of them
 //
 // The three slope maps are bound to the reserved samplers s6-s8 (16x anisotropic, wrap) while the
 // water queue draws, and RaWaterSsr.w is set to 1 (rendererWaterBindWaves). The wind's direction is
@@ -65,6 +72,7 @@ const double kGravity = 9.81;
 const double kLoopSeconds = 1000.0; // every frequency a whole number of cycles in this
 const double kPi = 3.14159265358979323846;
 const unsigned int kRows = 4;       // RaWater's float4s
+const double kTailFloor = 0.25;     // the unresolved slope variance: at least this much of Cox-Munk's
 
 struct Wind
 {
@@ -88,6 +96,8 @@ struct State
     Wind built, live;
     bool haveLive;
     double hs, mss;              // the built spectrum's significant height and mean square slope
+    double mssU, mssC;           // its slope variance along and across the wind
+    float tail[2], liveTail[2];  // the unresolved slope variance along and across the wind (built, live)
     double buildMs;
     // GPU.
     IDirect3DTexture9* h0;
@@ -161,15 +171,15 @@ double spreading(double theta, double omega, double omegaPeak, const Wind& w)
 }
 
 // h0 for every cascade: rgba = h0(k), conj(h0(-k)). Also the significant wave height and the
-// mean square slope it adds up to, for the log.
-void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& mss)
+// mean square slope it adds up to (along and across the wind).
+void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& mss, double& mssU, double& mssC)
 {
     out.assign(kN * kCascades * kN * 4, 0.0f);
     std::vector<double> re(kN * kN), im(kN * kN);
     std::mt19937 rng(1234567u);
     std::normal_distribution<double> gauss(0.0, 1.0);
     const double windAngle = std::atan2(w.dirZ, w.dirX);
-    double variance = 0.0, slope = 0.0;
+    double variance = 0.0, slope = 0.0, slopeU = 0.0;
     for (unsigned int c = 0; c < kCascades; ++c)
     {
         const double dk = 2.0 * kPi / kPatch[c];
@@ -193,6 +203,8 @@ void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& m
                     const double energy = sk * dk * dk;
                     variance += energy;
                     slope += energy * k * k;
+                    const double ku = kx * w.dirX + kz * w.dirZ;
+                    slopeU += energy * ku * ku;
                     amp = std::sqrt(energy * 0.5);
                 }
                 re[n * kN + m] = xr * amp / std::sqrt(2.0);
@@ -211,6 +223,17 @@ void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& m
     }
     hs = 4.0 * std::sqrt(variance);
     mss = slope;
+    mssU = slopeU;
+    mssC = slope - slopeU;
+}
+
+// The slope variance the grids do not resolve, along and across the wind (see the header).
+void tailVariance(const Wind& w, double mssU, double mssC, float tail[2])
+{
+    const double coxMunkU = 0.00316 * w.speed;
+    const double coxMunkC = 0.003 + 0.00192 * w.speed;
+    tail[0] = static_cast<float>(std::max(coxMunkU - mssU, kTailFloor * coxMunkU));
+    tail[1] = static_cast<float>(std::max(coxMunkC - mssC, kTailFloor * coxMunkC));
 }
 
 bool createTarget(unsigned int w, unsigned int h, unsigned int levels, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -338,6 +361,10 @@ bool drawWaves(void* effect, double seconds)
     for (unsigned int i = 0; i < kCascades; ++i)
     {
         c[0][2] = static_cast<float>(i);
+        c[3][0] = static_cast<float>(s.live.dirX);
+        c[3][1] = static_cast<float>(s.live.dirZ);
+        c[3][2] = i + 1 == kCascades ? s.liveTail[0] : 0.0f;
+        c[3][3] = i + 1 == kCascades ? s.liveTail[1] : 0.0f;
         setConstants(d3dx, c);
         drawInto(effect, s.slopes[i], kN, kN);
     }
@@ -389,10 +416,14 @@ void rendererWaterFrame()
         if (uploadSpectrum())
         {
             s.live = s.built;
+            s.liveTail[0] = s.tail[0];
+            s.liveTail[1] = s.tail[1];
             s.haveLive = true;
             std::fprintf(stderr, "[WATER] spectrum: wind %.1f m/s toward (%.2f, %.2f), fetch %.0f km: "
-                         "significant height %.2f m, mean square slope %.4f; built in %.0f ms\n",
-                         s.live.speed, s.live.dirX, s.live.dirZ, s.live.fetch / 1000.0, s.hs, s.mss, s.buildMs);
+                         "significant height %.2f m, mean square slope %.4f (along the wind %.4f, "
+                         "across %.4f), unresolved %.4f, %.4f; built in %.0f ms\n",
+                         s.live.speed, s.live.dirX, s.live.dirZ, s.live.fetch / 1000.0, s.hs, s.mss,
+                         s.mssU, s.mssC, s.liveTail[0], s.liveTail[1], s.buildMs);
         }
         std::vector<float>().swap(s.h0Data);
     }
@@ -405,7 +436,8 @@ void rendererWaterFrame()
             State& t = st();
             LARGE_INTEGER t0;
             QueryPerformanceCounter(&t0);
-            buildSpectrum(wind, t.h0Data, t.hs, t.mss);
+            buildSpectrum(wind, t.h0Data, t.hs, t.mss, t.mssU, t.mssC);
+            tailVariance(wind, t.mssU, t.mssC, t.tail);
             t.buildMs = secondsSince(t0) * 1000.0;
             t.done = true;
         });

@@ -614,6 +614,18 @@ As built:
   volume), `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
   the level's `WaterScroll`, +x when it has none. The Falklands at the defaults: significant height
   1.17 m, mean square slope 0.026. Geometry stays flat (owner, 2026-11-22: normals only for now).
+- *Filtered normals and the sun path* (task 3). The slope maps hold the slopes along and across the
+  wind (the level's `WaterScroll`, which the water shader reads too) and their squares: in that
+  frame the spectrum is symmetric and the slopes' covariance zero, so four channels hold the
+  whole second moment. LEAN mapping: the filtered means summed are the mean slope (the normal),
+  each cascade's squares minus its mean squared the variance its footprint averaged away. The
+  finest cascade also carries the variance of the waves below its grid (13.5 cm), what tops the
+  resolved variance up to Cox and Munk's glitter statistics (σu² = 0.00316 U, σc² = 0.003 +
+  0.00192 U; at least a quarter of them): 0.0078 and 0.0044 at 7 m/s on top of 0.0143 and 0.0121.
+  The sun's highlight is anisotropic GGX over the slopes about the flat surface, centred on the
+  mean slope, α² = 2σ², height-correlated Smith masking, Schlick's Fresnel at F0 0.02, times the
+  sun's irradiance (`Ra_SunIrradiance`, as every surface) and visibility; the retail Blinn
+  highlight with the level's `SpecularColor` stays only under water and with `renderer.waterWaves 0`.
 - Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up.
 
 ### 13. HDR bloom + auto-exposure
@@ -849,7 +861,7 @@ and add its row here.
 | 14 | Sky clouds' panorama (render milestone 12, task 3): technique `RaCloudPanorama` in `Shaders/RaClouds`, drawn by the engine a band of rows at a time into its own targets, with `RaClouds` [4].y a jitter seed and [5]–[7] the panorama's (observer, drift, high cloud, wind; layout in the effect), `RaAtmosphere` rows 0–10 (camera rows zero), `RaSkyViewTable`, `RaCloudLightTable`. `RaSky` gets `RaSkyClouds` (`float4`: x the newest panorama's weight, y 1 while live) and `RaCloudPanoramaOld`, `RaCloudPanoramaNew` (2048x1024 `A16B16G16R16F`, linear, u wrapping); layout and decoding in the shaders' `RaCloudPanorama.fxh` |
 | 15 | Reachable clouds (render milestone 12, task 4): `RaClouds` grows to 20 float4s ([8] the observer's x, z, the reference height and the handoff distance; [9]–[18] the near passes'; layout in `RaClouds.fx`), and [5].z is the observer's (camera's) y. The panorama covers the whole sphere from the camera (`RaCloudPanorama.fxh`). Techniques `RaCloudNear` (two targets), `RaCloudNearResolve`, `RaCloudNearComposite` with `RaCloudNearCurrent`, `RaCloudNearDepth`, `RaCloudNearHistory`, and the scene's linear depth on s15 |
 | 16 | Cloud shadows and the light under the clouds (render milestone 12, tasks 7–8): pixel registers c189–c190 `RaCloudShadow` (engine-owned, published with `RASM`, zero outside the main world pass) and the cloud shadow map on the reserved sampler s14 (1024² `A16B16G16R16F`, bilinear, clamp; r optical depth toward the sun, g, b the world heights the sun ray enters and leaves cloud); particles get `RaCloudShadow` and `RaCloudShadowMap` (point) as parameters. Layout in the shaders' `RaSunShadow.fxh`. `RaAtmosphere[8]`: w the clouds' mean sun transmittance S, rgb the clouds' light on the air under them ((0, 0, 0, 1) clear). Technique `RaCloudShadow` in `Shaders/RaClouds` (`RaClouds[8]` the map's corner, the reference height, its size); `RaClouds[4].w` the panorama target's height. `RaSkyClouds.z` how far the camera is under the slab |
-| 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along x and z, b, a their squares) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them |
+| 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along and across the wind, the normalised `WaterScroll.xy` ((1, 0) when zero), b, a their squares, the last cascade's plus the slope variance below its grid) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them. `RaWater[3]`: xy the wind's direction, zw the variance added to b, a |
 
 Samplers 9–15 are reserved for renderer frame resources (and 6–8 in water effects, contract 17), and pixel registers
 c189–c223 for `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
