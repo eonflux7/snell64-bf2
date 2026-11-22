@@ -79,6 +79,7 @@ void stateManagerSetRenderStatePersistent(unsigned int state, unsigned int value
 void stateManagerSetTransparencyAA(bool enabled);
 // RenderQueues.cpp
 void renderQueueFlush(unsigned int slotByteOffset, int flushArg);
+bool renderQueueHasEntries(unsigned int slotByteOffset);
 void renderQueuesDepthPrepass(unsigned int key);
 unsigned int raHashString(const std::string& s);
 // PostProductionFrameWork.cpp
@@ -485,6 +486,85 @@ void rendererLinearDepthWater()
     endLinearDepthTarget(saved, resolved);
 }
 
+// [RENDER] Milestone 11 task 12: the scene copy water reflects (see RendDX9Base.h).
+namespace {
+IDirect3DTexture9* g_waterSceneTexture = 0;
+bool g_waterSsr = true;   // renderer.waterSsr (task 12 A/B; deleted at acceptance)
+const float kNoWaterSsr[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+void releaseWaterScene()
+{
+    if (g_waterSceneTexture && g_rendererBase)
+        static_cast<RendDX9Base*>(g_rendererBase)->device->SetTexture(kWaterSceneSampler, 0);
+    if (g_waterSceneTexture)
+        g_waterSceneTexture->Release();
+    g_waterSceneTexture = 0;
+}
+
+// The copy's texture at the scene colour's size and format (single sample).
+bool ensureWaterScene(const D3DSURFACE_DESC& scene)
+{
+    if (g_waterSceneTexture)
+    {
+        D3DSURFACE_DESC have;
+        if (g_waterSceneTexture->GetLevelDesc(0, &have) >= 0 && have.Width == scene.Width
+            && have.Height == scene.Height && have.Format == scene.Format)
+            return true;
+        releaseWaterScene();
+    }
+    const HRESULT hr = static_cast<RendDX9Base*>(g_rendererBase)->device->CreateTexture(
+        scene.Width, scene.Height, 1, D3DUSAGE_RENDERTARGET, scene.Format, D3DPOOL_DEFAULT,
+        &g_waterSceneTexture, 0);
+    std::fprintf(stderr, "[WATERSSR] scene copy %ux%u fmt %u: hr=0x%08lX\n", scene.Width,
+                 scene.Height, static_cast<unsigned int>(scene.Format),
+                 static_cast<unsigned long>(hr));
+    if (hr < 0)
+        g_waterSceneTexture = 0;
+    return hr >= 0;
+}
+}
+
+bool& rendererWaterSsr()
+{
+    return g_waterSsr;
+}
+
+void rendererWaterSceneBegin()
+{
+    if (!g_rendererBase)
+        return;
+    float constants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (g_waterSsr && g_linearDepthFrame && !cameraIsUnderWater() && renderQueueHasEntries(0x28))
+    {
+        IDirect3DSurface9* const scene = rendererSceneColorSurface();
+        D3DSURFACE_DESC desc;
+        if (scene && scene->GetDesc(&desc) >= 0 && ensureWaterScene(desc))
+        {
+            flushRenderTargetsSeam();
+            IDirect3DSurface9* copy = 0;
+            g_waterSceneTexture->GetSurfaceLevel(0, &copy);
+            if (copy && static_cast<RendDX9Base*>(g_rendererBase)->device->StretchRect(
+                    scene, 0, copy, 0, D3DTEXF_NONE) >= 0)
+            {
+                constants[0] = 1.0f;
+                constants[1] = 1.0f / static_cast<float>(desc.Width);
+                constants[2] = 1.0f / static_cast<float>(desc.Height);
+            }
+            if (copy)
+                copy->Release();
+        }
+    }
+    if (constants[0] > 0.0f)
+        bindSampler(kWaterSceneSampler, g_waterSceneTexture, D3DTEXF_LINEAR);
+    stateManagerSetWaterSsr(constants);
+}
+
+void rendererWaterSceneEnd()
+{
+    if (g_rendererBase)
+        stateManagerSetWaterSsr(kNoWaterSsr);
+}
+
 void rendererFirstPersonPrepass()
 {
     if (!g_linearDepthFrame)
@@ -573,6 +653,7 @@ void rendererDepthPrepassRelease()
     if (g_rebuiltDepth)
         g_rebuiltDepth->Release();
     g_rebuiltDepth = 0;
+    releaseWaterScene();                             // [RENDER] milestone 11 task 12
     g_transparentDepth = false;
     g_linearDepthFrame = false;
 }
@@ -905,7 +986,9 @@ bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
     rendererLinearDepthWater();
     if (g_toolsSurveyOn)
         toolsSurveyWaterBegin();                     // [TOOLS] tools.survey: water's area
+    rendererWaterSceneBegin();                       // [RENDER] milestone 11 task 12: water SSR
     renderQueueFlush(0x28, -1);                      // RSMTWater
+    rendererWaterSceneEnd();
     if (g_toolsSurveyOn)
         toolsSurveyWaterEnd();
 

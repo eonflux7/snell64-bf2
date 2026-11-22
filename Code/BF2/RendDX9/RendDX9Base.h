@@ -741,6 +741,17 @@ IDirect3DTexture9* rendererLinearDepthTexture();
 // (rendererSceneTransparentsEnd ends that phase). Without multisampling, or without the float
 // scene, the rebuild overwrites the scene depth in place.
 void rendererLinearDepthWater();
+// [RENDER] Milestone 11 task 12, water's screen-space reflections (contract 12). Before the water
+// queue draws: while renderer.waterSsr is on, the camera is above water, this frame has the
+// prepass's linear depth and the queue has entries, the scene colour is copied into a
+// single-sample texture of its size and format, bound to the reserved sampler kWaterSceneSampler
+// (bilinear, clamp), and RaWaterSsr (kWaterSsrRegister) is set to (1, 1 / width, 1 / height, 0);
+// otherwise, and after the water (rendererWaterSceneEnd), RaWaterSsr is zero. The copy is
+// released with the depth prepass's targets.
+const unsigned int kWaterSceneSampler = 12;
+bool& rendererWaterSsr();
+void rendererWaterSceneBegin();
+void rendererWaterSceneEnd();
 void rendererFirstPersonPrepass();
 void rendererSceneResolveForTransparents();
 void rendererSceneTransparentsEnd();
@@ -807,7 +818,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 11
+#define RA_CONTRACT_VERSION 12
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -930,11 +941,14 @@ const unsigned int kAerialHazeRegister = 199;
 // c192..c198 (SkyCube.cpp), written each frame by rendererSkyCubeFrame.
 const unsigned int kSkyShRegister = 192;
 const unsigned int kSkyShVec4s = 7;
-const unsigned int kEngineRegisterBegin = 192;
-const unsigned int kEngineRegisterEnd = 224;   // c192..c223 dropped from effect writes
+// [RENDER] Milestone 11 water reflections (contract 12): RaWaterSsr in c191 (rendererWaterSceneBegin).
+const unsigned int kWaterSsrRegister = 191;
+const unsigned int kEngineRegisterBegin = 191;
+const unsigned int kEngineRegisterEnd = 224;   // c191..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);
 void stateManagerSetSkySh(const float* value /* RaSkySH, kSkyShVec4s float4s */);
+void stateManagerSetWaterSsr(const float* value /* RaWaterSsr, one float4 */);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

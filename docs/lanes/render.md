@@ -351,6 +351,21 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   shaders read the SH as `RaSkyShVertex` (contract 10): mesh particles at their normal,
   billboards and trails averaged over every normal. The hemi map's ground tint on particles
   applies only to the old flat sky.
+- **Soldiers** (task 11, shader side only): the shared material model; the sky occluded by the
+  hemi map's alpha, faded with the height over the terrain, as vehicles. Gear with an environment
+  map is paint, the rest fabric. First-person arms take the open sky (no hemi map).
+- **Terrain** (task 11, shader side only): its sky light is the SH at the patch's normal times the
+  lightmap's sky visibility, as statics (it was the SH facing up). Undergrowth and roads, which
+  have no normal of their own, keep the sky facing up.
+- **Decals** (task 11): their sky is the SH at their normal since task 8; not occluded. The hemi
+  map holds the sky visibility at the ground only, so a decal on a roof could not be told from one
+  under it; no other source exists yet.
+- **Water** (task 12, contract 12): screen-space reflections from a copy of the scene taken just
+  before water draws (`renderer.waterSsr`), the sky cube where the ray finds nothing; Fresnel at
+  water's F0 weighs the reflection against the water body, which takes the sun and the sky with
+  the authored water colour as albedo. Retail's water cube and its blend into the water colour go
+  while the SH is live. The scene copy is one full-screen resolve, only with water queued;
+  survives device resets (Saaremaa, four `renderer.vsync` toggles).
 - **Static meshes** (task 10, shader side only): the shared material model with sky reflections,
   specular occluded by the lightmap's sky visibility. One technique serves every material, so
   the class is the detail map's gloss, read as the old specular mask it is: Muttrah City's
@@ -683,12 +698,13 @@ and add its row here.
 | 9 | View distance (render milestone 11, task 5): `RaAerial.w` is 2 while the radial cut applies (`renderer.viewDistance`, the world view with the atlas). `Ra_ViewDistanceFade` (1 inside, 0 at fog end and beyond, over the last 15 % by distance from the camera) and `Ra_ViewDistanceClip` (that fade against a 4x4 Bayer threshold, `Ra_Bayer4`) are called by every opaque world effect's main pixel shader, which its depth prepass calls too; blended effects (particles, trails, decals) take the fade on alpha. The atlas is no longer steepened: the haze stays exponential up to fog end. `RaAerialHaze` (c199, engine-owned, published with `RaAerial`): the haze's density at the camera's height and 1 / its height falloff; past fog end `Ra_GetAerial` integrates the haze in closed form along the pixel's ray (world-space positions). Static meshes (`RaShaderSTM`, and trees through the leaf and trunk effects), overgrowth and roads are not cut: the engine culls static meshes by size on screen, overgrowth at its own range |
 | 10 | Sky cube (render milestone 11, task 7): the sky cube on the reserved sampler s10 (`A16B16G16R16F` cube, 128 per face, 6 mips, trilinear, clamp): mip m is GGX-prefiltered for perceptual roughness m / 5 (alpha its square), so `texCUBElod(dir, roughness * 5)`; the model's clear sky above the horizon (no sun disc), the lit ground hazed toward the horizon below it; in scene units, the drawn sky's scale. The split-sum BRDF table on s11 (64x64 `A16B16G16R16F`, bilinear, clamp): u n.v, v perceptual roughness, r scale and g bias on F0 (Smith GGX, k = alpha / 2). `RaSkySH` in pixel registers c192–c198 (engine-owned): the sky's irradiance / pi (the authored sky colour's unit) at normal n per channel ch = dot([ch], (n, 1)) + dot([3 + ch], n.xyzz * n.yzzx) + [6][ch] * (n.x² − n.y²); [6].w 1 while live, all zero (and s10, s11 unbound) with `renderer.atmosphere 0` or before the first fit. Particle effects get the same 7 float4s as the parameter `RaSkyShVertex` (`rendererBindParticleLighting`), for their vertex shaders. Its sky part is scaled so its upward value keeps the authored sky colour's luminance; the ground's bounce is not scaled |
 | 11 | One light (render milestone 11, task 8): the atmosphere's sun at the ground (`RaAtmosphere[9]`, the sky, disc and haze) is the surfaces' sun, the authored colour^2.2 x 2^2.2; the sky is physical under it, unscaled (the sky gain is gone, `RaAtmosphere[4].w` is 1); `RaSkySH` and the sky cube are in those units, unscaled, so a shader uses them as they are next to `Ra_SunIrradiance` |
+| 12 | Water reflections (render milestone 11, task 12): just before the water queue draws, above water, with this frame's prepass and `renderer.waterSsr` on, the scene colour is copied into a single-sample texture of its size and format on the reserved sampler s12 (bilinear, clamp), and pixel register c191 is `RaWaterSsr` (1, 1 / width, 1 / height, 0); zero otherwise and after the water. While water draws, s15 holds the opaque linear depth only (water's own goes to the multisampled target, resolved later) |
 
-Samplers 9, 10, 11, 13 and 15 are reserved for renderer frame resources, and pixel registers
-c192–c223 for `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
+Samplers 9–13 and 15 are reserved for renderer frame resources, and pixel registers
+c191–c223 for `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
-over between effects, so neither value is left to default. The engine binds s9–s11, s13 and s15 with it FALSE.
+over between effects, so neither value is left to default. The engine binds s9–s13 and s15 with it FALSE.
 
 Every `sampler_state` also states its filter. A material sampler (a colour, normal or detail texture
 mapped onto world geometry) is 16x anisotropic: min `ANISOTROPIC`, mag and mip `LINEAR`. A data
@@ -700,6 +716,7 @@ directory no longer carries it (`_3153_0`).
 | Slot | Resource | Format | Bound |
 |---|---|---|---|
 | s9 | Aerial-perspective atlas (1024x32: 32 distance slices of 32x32 screen tiles) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
+| s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`) | During the water queue only, while `RaWaterSsr.x` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
 | s15 | Linear view depth | `R32F` | After the prepass, rest of the frame; particles read it only while `RaSoftParticles.x` > 0 |
 

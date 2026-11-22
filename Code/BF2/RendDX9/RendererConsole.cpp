@@ -1405,6 +1405,10 @@ BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeFalloff, float, true, getHazeFalloff(), set
 bool getViewDistanceCut() { return rendererViewDistanceCut(); }
 void setViewDistanceCut(bool value) { rendererViewDistanceCut() = value; }
 BF2_CONSOLE_PROPERTY_FN(viewDistance, bool, true, getViewDistanceCut(), setViewDistanceCut, kRendererConsoleTag)
+// Water's screen-space reflections (render milestone 11 task 12 A/B; deleted at acceptance).
+bool getWaterSsr() { return rendererWaterSsr(); }
+void setWaterSsr(bool value) { rendererWaterSsr() = value; }
+BF2_CONSOLE_PROPERTY_FN(waterSsr, bool, true, getWaterSsr(), setWaterSsr, kRendererConsoleTag)
 
 } // anonymous namespace
 
@@ -1425,6 +1429,7 @@ const char* rendererVariableHelp(const char* name)
         { "hazeDepth", "Haze: optical depth at fog end on a level ray (higher: hazier near)" },
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
         { "viewDistance", "View distance (render milestone 11 A/B): geometry dithered out over the last 15 % before fog end, by distance from the camera" },
+        { "waterSsr", "Water reflections (render milestone 11 A/B): the scene by a screen-space march; off, the sky cube alone" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

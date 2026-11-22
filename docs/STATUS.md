@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–9 built); 15 (shader pipeline) built, awaiting the owner | Milestone 11 task 10, static meshes | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
+| `render` | Milestones 1–10 accepted; 11 in progress (tasks 1–5, 7–12 built); 15 (shader pipeline) built, awaiting the owner | Milestone 11 tasks 11 and 12, awaiting the owner's look | [render.md](lanes/render.md#11-atmosphere-sky-ibl-water-reflections) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -45,11 +45,13 @@ Tasks:
    light built (agent), judged with task 10. Left: point lights against the new sun.
 9. Bundled meshes (judged on test_bootcamp). Done (owner: looks good). Left: render.md's
    "Built so far".
-10. Static meshes. Built (agent, Muttrah City `street`, `sun`, `antisun`, shots `t10-*-old`/`-new`);
-    awaiting the owner's look. Walls had the sky's direction since task 8; the reflections show
-    only where the gloss is near 1 (windows read 0 in PR's data).
-11. Soldiers (hemi map), decals and terrain.
-12. Water SSR (`renderer.waterSsr`). Look for: buildings and shore reflected.
+10. Static meshes. Done (owner: looks ok).
+11. Soldiers (hemi map), decals and terrain. Built: soldiers and terrain (agent, Saaremaa `valley`,
+    shots `t11-valley-old`/`-new`: subtle on its gentle slopes); soldiers not seen in third person
+    by the agent. Decals left unoccluded (render.md's "Built so far"). Awaiting the owner's look.
+12. Water SSR (`renderer.waterSsr`). Built (agent, Saaremaa `water`, shots `t12-water-nossr`/`-ssr`:
+    the shore and treeline reflected, the sky cube nearer the camera). Awaiting the owner's look.
+    Look for: buildings and shore reflected.
 13. Acceptance: the owner's look at the reference views on the three maps against milestone 10;
     the night layer loads and looks no worse; benches against milestone 10
     ([perf-frame.md](lanes/perf-frame.md#current)) within the 1 ms budget, or the regression
