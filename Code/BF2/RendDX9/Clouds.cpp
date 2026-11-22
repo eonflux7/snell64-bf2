@@ -125,18 +125,18 @@ double perlin3(double x, double y, double z, int period, unsigned int seed)
     return (y0 + (y1 - y0) * w);
 }
 
-// Octaves of perlin3 over the unit cube, `cells` cells across at the first.
+// Octaves of perlin3 over the unit cube, `cells` cells across at the first. Not normalized, as
+// Dagor's get_perlin_N_octaves: the amplitudes sum to nearly 2, and its thresholds expect that.
 double perlinFbm(double x, double y, double z, int cells, int octaves, unsigned int seed)
 {
-    double sum = 0.0, amp = 1.0, norm = 0.0;
+    double sum = 0.0, amp = 1.0;
     for (int o = 0; o < octaves; ++o)
     {
         const int c = cells << o;
         sum += amp * perlin3(x * c, y * c, z * c, c, seed + o);
-        norm += amp;
         amp *= 0.5;
     }
-    return sum / norm;
+    return sum;
 }
 
 // Worley F1, squared, `cells` cells across the unit cube (Dagor's voronoi().r).
@@ -272,7 +272,7 @@ void buildWeather(const WeatherInputs& in, std::vector<unsigned int>& out)
 
 // ---- state ----
 
-enum Stage { kIdle, kField, kCoarse, kLight };
+enum Stage { kIdle, kWeather, kField, kCoarse, kLight };
 
 struct VolumeSet
 {
@@ -297,6 +297,9 @@ struct State
     IDirect3DVolumeTexture9* detail;
     IDirect3DTexture9* weather;
     double weatherMs;
+    std::thread weatherThread;   // builds weatherData off the frame
+    std::atomic<bool> weatherDone;
+    std::vector<unsigned int> weatherData;
     WeatherInputs built;      // the weather of the set being built
     WeatherInputs liveInputs; // of the live set
     // GPU.
@@ -358,7 +361,8 @@ void releaseSets()
         release(s.sets[i].light);
     }
     s.live = -1;
-    s.stage = kIdle;
+    if (s.stage != kWeather)   // a weather thread finishes into a new set
+        s.stage = kIdle;
 }
 
 bool createTarget(unsigned int w, unsigned int h, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -589,19 +593,35 @@ void rendererCloudsFrame()
         w.preset = std::min(std::max(s.preset, 0), 1);
         w.coverage = std::min(std::max(static_cast<double>(s.coverage), 0.0), 1.0);
         w.seconds = secondsSince(s.start);
-        LARGE_INTEGER t0;
-        QueryPerformanceCounter(&t0);
-        std::vector<unsigned int> weather;
-        buildWeather(w, weather);
-        s.weatherMs = secondsSince(t0) * 1000.0;
-        // The live set's field was drawn from the old weather and is no longer read from it.
-        if (!uploadWeather(weather))
-            return;
         s.built = w;
-        s.stage = kField;
-        s.next = 0;
+        s.weatherDone = false;
+        s.weatherThread = std::thread([w]() {
+            State& t = st();
+            LARGE_INTEGER t0;
+            QueryPerformanceCounter(&t0);
+            buildWeather(w, t.weatherData);
+            t.weatherMs = secondsSince(t0) * 1000.0;
+            t.weatherDone = true;
+        });
+        s.stage = kWeather;
         s.buildFrames = 0;
         QueryPerformanceCounter(&s.lastBuild);
+        return;
+    }
+    if (s.stage == kWeather)
+    {
+        ++s.buildFrames;
+        if (!s.weatherDone)
+            return;
+        s.weatherThread.join();
+        // The live set's field was drawn from the old weather and no longer reads it.
+        if (!ensureSet(s.sets[0]) || !ensureSet(s.sets[1]) || !uploadWeather(s.weatherData))
+        {
+            s.stage = kIdle;
+            return;
+        }
+        s.stage = kField;
+        s.next = 0;
     }
 
     void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaClouds");
