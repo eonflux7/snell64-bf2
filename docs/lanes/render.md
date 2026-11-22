@@ -243,7 +243,7 @@ Left, outside the milestone:
 
 ### 15. Shader pipeline
 
-Taken ahead of milestone 12 (owner, 2026-11-22): every later milestone edits shaders, and a load
+Accepted by the owner, 2026-11-22. Taken ahead of milestone 12 (owner, 2026-11-22): every later milestone edits shaders, and a load
 after a shader edit took about 10 minutes on test_bootcamp. Goal: as little shader compiling as
 possible, at load and after an edit.
 
