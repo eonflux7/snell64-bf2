@@ -24,8 +24,9 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#16-water)); as built the
 2. Wave spectrum: three FFT cascades on the GPU (`Water.cpp`, contract 17; `renderer.waterWaves`,
    `waterWind`, `waterFetch`): built (agent: The Falklands `wy316`, `wlow`; animates).
 3. Filtered normals (LEAN) and a GGX sun lobe from the slope variance: built (agent: The Falklands
-   `wy316`, `wlow`; a smooth glitter path, no sparkle up close). The path clips to white until
-   milestone 13's tonemapping; the sky's reflection still mirror-sharp (could take the variance too).
+   `wy316`, `wlow`; a smooth glitter path, no sparkle up close), and rough reflections from the
+   same variance (agent: `wy136`, `wy316`, `wlow` A/B, clouds off). The far sea reads green until
+   task 4's body; the path clips to white until milestone 13's tonemapping.
 4. The water body: refraction, depth from the scene, absorption and in-scatter, crest light.
 5. Foam at shores and on crests.
 6. Geometry: normals only for now (owner, 2026-11-22).
@@ -66,8 +67,10 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   ground), `kas_here` and `m12-up` at `renderer.cloudCoverage` 0.3, 0.7 and 1.0 (1.0 a grey storm
   deck); `renderer.clouds 0` for the clear sky's light. `tools.clouds` writes `-shadow.png`.
 
-- Water's sun path (render milestone 16, task 3): The Falklands `wlow` (close, toward the sun),
-  `wy316` (the path to the horizon); `renderer.waterWind` 3–15 widens and narrows it.
+- Water's sun path and rough reflections (render milestone 16, task 3): The Falklands `wlow`
+  (close, toward the sun), `wy316` (the path to the horizon), `wy136` (the islands' reflections,
+  blurred with distance); `renderer.waterWind` 3–15 widens and narrows both. The far sea's green
+  is the retail body, task 4's.
 - Water's waves (render milestone 16, task 2): The Falklands `wy316`, `wlow` (close, open sea);
   `renderer.waterWaves 0` for retail's normals, `renderer.waterWind` 3–15 for calmer or rougher sea.
 - Water's ring and reflection streaks (render milestone 16, task 1): The Falklands, views `wy316`
