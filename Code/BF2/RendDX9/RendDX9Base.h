@@ -749,6 +749,21 @@ void rendererLinearDepthWater();
 // otherwise, and after the water (rendererWaterSceneEnd), RaWaterSsr is zero. The copy is
 // released with the depth prepass's targets.
 const unsigned int kWaterSceneSampler = 12;
+// [RENDER] Render milestone 16 task 2, water's waves (Water.cpp, contract 17): an FFT ocean of three
+// cascades, drawn each frame before the depth prepass (rendererWaterFrame) into three 256 x 256
+// A16B16G16R16F slope maps with mips (slope x, slope z and their squares). rendererWaterBindWaves
+// binds them to kWaterWaveSampler .. + 2 (16x anisotropic, wrap) for the water queue and returns
+// true, then RaWaterSsr.w is 1. renderer.waterWaves 0 leaves retail's normal volume;
+// renderer.waterWind (m/s) and renderer.waterFetch (km) set the sea, the level's WaterScroll its
+// direction. The targets go at a device reset.
+const unsigned int kWaterWaveSampler = 6;
+void rendererWaterFrame();
+bool rendererWaterBindWaves();
+void rendererWaterUnbindWaves();
+void rendererWaterRelease();
+bool& rendererWaterWavesEnabled();
+float& rendererWaterWind();
+float& rendererWaterFetch();
 void rendererWaterSceneBegin();
 void rendererWaterSceneEnd();
 void rendererFirstPersonPrepass();
@@ -817,7 +832,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 16
+#define RA_CONTRACT_VERSION 17
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

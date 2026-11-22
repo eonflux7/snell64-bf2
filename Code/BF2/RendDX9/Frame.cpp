@@ -346,6 +346,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     rendererSunShadowsRender(time, g_sunCascadeConstants);
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
     rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
+    rendererWaterFrame();        // [RENDER] milestone 16: the waves
     rendererCloudShadowConstants(reinterpret_cast<float(*)[4]>(g_cloudShadowConstants));
     rendererAtmosphereAerialConstants(g_aerialConstants);
     {
@@ -560,13 +561,18 @@ void rendererWaterSceneBegin()
     }
     if (constants[0] > 0.0f)
         bindSampler(kWaterSceneSampler, g_waterSceneTexture, D3DTEXF_LINEAR);
+    if (rendererWaterBindWaves())   // milestone 16: the waves (contract 17)
+        constants[3] = 1.0f;
     stateManagerSetWaterSsr(constants);
 }
 
 void rendererWaterSceneEnd()
 {
     if (g_rendererBase)
+    {
         stateManagerSetWaterSsr(kNoWaterSsr);
+        rendererWaterUnbindWaves();
+    }
 }
 
 void rendererFirstPersonPrepass()

@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted; 12 (clouds) paused | Milestone 16 (water): task 1 built | [render.md](lanes/render.md#16-water) |
+| `render` | Milestones 1–11 and 15 accepted; 12 (clouds) paused | Milestone 16 (water): tasks 1–2 built | [render.md](lanes/render.md#16-water) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -21,12 +21,13 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#16-water)); as built the
 1. The ring around the camera (the lightmap's sun term read as visibility past the cascades) and
    the reflections' streaks (false hits behind thin objects): built (agent: The Falklands,
    views `wy316` toward the sun, `wy136` the islands, clouds off).
-2. Wave spectrum: three FFT cascades on the GPU (engine `Water.cpp`, a new contract), the shader
-   reading them in place of the 3D normal volume.
+2. Wave spectrum: three FFT cascades on the GPU (`Water.cpp`, contract 17; `renderer.waterWaves`,
+   `waterWind`, `waterFetch`): built (agent: The Falklands `wy316`, `wlow`; animates). The near
+   field's highlight is noisy until task 3.
 3. Filtered normals (LEAN) and a GGX sun lobe from the slope variance.
 4. The water body: refraction, depth from the scene, absorption and in-scatter, crest light.
 5. Foam at shores and on crests.
-6. Geometry: displacement near the camera or normals only (owner's choice).
+6. Geometry: normals only for now (owner, 2026-11-22).
 7. Judged by eye on The Falklands and Saaremaa; GPU cost measured.
 
 ## Paused: `render` milestone 12, clouds
@@ -64,6 +65,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   ground), `kas_here` and `m12-up` at `renderer.cloudCoverage` 0.3, 0.7 and 1.0 (1.0 a grey storm
   deck); `renderer.clouds 0` for the clear sky's light. `tools.clouds` writes `-shadow.png`.
 
+- Water's waves (render milestone 16, task 2): The Falklands `wy316`, `wlow` (close, open sea);
+  `renderer.waterWaves 0` for retail's normals, `renderer.waterWind` 3–15 for calmer or rougher sea.
 - Water's ring and reflection streaks (render milestone 16, task 1): The Falklands, views `wy316`
   (toward the sun, the glint now reaches the horizon) and `wy136` (the islands' reflections).
 

@@ -1470,6 +1470,19 @@ void setCloudNear(float value) { rendererCloudNearDistance() = clampf(value, 0.0
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudNear, float, true, getCloudNear(), setCloudNear, 0.0f, 40000.0f,
                                  kRendererConsoleTag)
 
+// [RENDER] Water's waves (render milestone 16): the FFT ocean on or retail's normal volume, and its sea.
+bool getWaterWaves() { return rendererWaterWavesEnabled(); }
+void setWaterWaves(bool value) { rendererWaterWavesEnabled() = value; }
+BF2_CONSOLE_PROPERTY_FN(waterWaves, bool, true, getWaterWaves(), setWaterWaves, kRendererConsoleTag)
+float getWaterWind() { return rendererWaterWind(); }
+void setWaterWind(float value) { rendererWaterWind() = clampf(value, 1.0f, 30.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterWind, float, true, getWaterWind(), setWaterWind, 1.0f, 30.0f,
+                                 kRendererConsoleTag)
+float getWaterFetch() { return rendererWaterFetch(); }
+void setWaterFetch(float value) { rendererWaterFetch() = clampf(value, 1.0f, 1000.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFetch, float, true, getWaterFetch(), setWaterFetch, 1.0f, 1000.0f,
+                                 kRendererConsoleTag)
+
 } // anonymous namespace
 
 // The help lines of the fork's renderer variables, for the debug menu (docs/lanes/ui.md).
@@ -1489,6 +1502,9 @@ const char* rendererVariableHelp(const char* name)
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
+        { "waterWaves", "Water's waves from an FFT ocean spectrum; 0 retail's tiled normal volume" },
+        { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
+        { "waterFetch", "Water's waves: the fetch, how far the wind has blown over water, km (1-1000)" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
         { "cloudBase", "Sky clouds' low layer: base above the terrain's mean height, in metres; 0 the preset's (desert 2000, maritime 500)" },
         { "cloudTop", "Sky clouds' low layer: top above the terrain's mean height, in metres (at least base + 500); 0 the preset's (desert 6000, maritime 4500)" },

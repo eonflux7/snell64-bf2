@@ -589,9 +589,8 @@ become inputs: the colour an absorption hint, the scroll the wind's direction an
   the sun.
 - **Foam.** At shores from the water's depth, on crests from the Jacobian; noise-broken, never a
   tiled texture.
-- **Geometry (owner to decide).** Displacing a camera-centred grid by the spectrum near the camera
-  gives real wave shapes, but boats and the shore are on a flat plane; the default is normals only,
-  displacement kept small or left out.
+- **Geometry: normals only** (owner, 2026-11-22). Displacing a camera-centred grid by the spectrum
+  would give real wave shapes, but boats, physics and the shore are on a flat plane; left for later.
 
 Tasks (in [STATUS.md](../STATUS.md)) close with the owner's look at The Falklands and Saaremaa and
 the GPU cost measured.
@@ -605,6 +604,16 @@ As built:
   `2 × step + 2 %` of its depth, tens of metres far out, so rays passing behind masts and poles
   hit them and smeared them down the water. A hit now needs the step to have crossed the scene's
   depth (thickness the step's own depth span, at least 5 cm + 0.2 % of the depth).
+- *Waves* (task 2; `Water.cpp`, `RaWater.fx`; contract 17). JONSWAP with Mitsuyasu's spreading,
+  built on a worker whenever the wind changes (32 ms) into h0 for three cascades of 256² over 503,
+  87 and 17.3 m, each holding wavenumbers from 6 of its fundamentals up to 6 of the next one's.
+  Each frame: the spectrum at t (frequencies rounded to whole cycles of 1000 s, so t wraps without a
+  jump), 16 Stockham passes over a 768 x 256 `A32B32G32R32F` pair, then each cascade's slopes and
+  their squares into its mipmapped map (mips by `StretchRect`); 20 draws and 24 blits. The water
+  shader sums the three slopes into its normal. `renderer.waterWaves` (1; 0 retail's normal
+  volume), `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
+  the level's `WaterScroll`, +x when it has none. The Falklands at the defaults: significant height
+  1.17 m, mean square slope 0.026. Geometry stays flat (owner, 2026-11-22: normals only for now).
 - Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up.
 
 ### 13. HDR bloom + auto-exposure
@@ -840,12 +849,13 @@ and add its row here.
 | 14 | Sky clouds' panorama (render milestone 12, task 3): technique `RaCloudPanorama` in `Shaders/RaClouds`, drawn by the engine a band of rows at a time into its own targets, with `RaClouds` [4].y a jitter seed and [5]–[7] the panorama's (observer, drift, high cloud, wind; layout in the effect), `RaAtmosphere` rows 0–10 (camera rows zero), `RaSkyViewTable`, `RaCloudLightTable`. `RaSky` gets `RaSkyClouds` (`float4`: x the newest panorama's weight, y 1 while live) and `RaCloudPanoramaOld`, `RaCloudPanoramaNew` (2048x1024 `A16B16G16R16F`, linear, u wrapping); layout and decoding in the shaders' `RaCloudPanorama.fxh` |
 | 15 | Reachable clouds (render milestone 12, task 4): `RaClouds` grows to 20 float4s ([8] the observer's x, z, the reference height and the handoff distance; [9]–[18] the near passes'; layout in `RaClouds.fx`), and [5].z is the observer's (camera's) y. The panorama covers the whole sphere from the camera (`RaCloudPanorama.fxh`). Techniques `RaCloudNear` (two targets), `RaCloudNearResolve`, `RaCloudNearComposite` with `RaCloudNearCurrent`, `RaCloudNearDepth`, `RaCloudNearHistory`, and the scene's linear depth on s15 |
 | 16 | Cloud shadows and the light under the clouds (render milestone 12, tasks 7–8): pixel registers c189–c190 `RaCloudShadow` (engine-owned, published with `RASM`, zero outside the main world pass) and the cloud shadow map on the reserved sampler s14 (1024² `A16B16G16R16F`, bilinear, clamp; r optical depth toward the sun, g, b the world heights the sun ray enters and leaves cloud); particles get `RaCloudShadow` and `RaCloudShadowMap` (point) as parameters. Layout in the shaders' `RaSunShadow.fxh`. `RaAtmosphere[8]`: w the clouds' mean sun transmittance S, rgb the clouds' light on the air under them ((0, 0, 0, 1) clear). Technique `RaCloudShadow` in `Shaders/RaClouds` (`RaClouds[8]` the map's corner, the reference height, its size); `RaClouds[4].w` the panorama target's height. `RaSkyClouds.z` how far the camera is under the slab |
+| 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along x and z, b, a their squares) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them |
 
-Samplers 9–15 are reserved for renderer frame resources, and pixel registers
+Samplers 9–15 are reserved for renderer frame resources (and 6–8 in water effects, contract 17), and pixel registers
 c189–c223 for `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
-over between effects, so neither value is left to default. The engine binds s9–s15 with it FALSE.
+over between effects, so neither value is left to default. The engine binds s9–s15 (and s6–s8 for water) with it FALSE.
 
 Every `sampler_state` also states its filter. A material sampler (a colour, normal or detail texture
 mapped onto world geometry) is 16x anisotropic: min `ANISOTROPIC`, mag and mip `LINEAR`. A data
@@ -856,6 +866,7 @@ directory no longer carries it (`_3153_0`).
 
 | Slot | Resource | Format | Bound |
 |---|---|---|---|
+| s6–s8 | Water's slope maps, one per wave cascade (contract 17) | `A16B16G16R16F`, mipmapped | During the water queue only, while `RaWaterSsr.w` > 0 |
 | s9 | Aerial-perspective atlas (1024x32: 32 distance slices of 32x32 screen tiles) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`) | During the water queue only, while `RaWaterSsr.x` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
