@@ -23,11 +23,14 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started
    analysis gives luminance ratios and cloud statistics per reference. The chosen list goes in
    render.md.
 2. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
-   octave multiple scattering.
-3. Weather map and noise: presets (desert, maritime) to slabs, genera and heights; per-cell life
-   phase; Perlin-Worley volumes built at load.
-4. Cloud panorama (about 1024x512, updated over frames) marched through the slabs, ambient from the
-   sky-view table, aerial perspective; drawn behind the sky. Coverage console variable.
+   octave multiple scattering (ported from Dagor's, with attribution).
+3. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
+   slabs, genera and heights; per-cell life phase; the density field and the sun-transmittance and
+   ambient volume as 2D slice atlases, rendered by pixel shaders over frames; an ⅛ field for empty
+   space.
+4. Cloud panorama (about 1024x512, updated over frames) marching the baked atlases with detail
+   noise at sample time, ambient from the sky-view table, aerial perspective; drawn behind the sky.
+   Coverage console variable.
 5. Prototype judged on Kashan Desert (ground and air, coverage 0.3/0.7/1.0) against the references.
 6. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
    overcast reference's SH.

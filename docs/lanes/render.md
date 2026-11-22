@@ -304,13 +304,11 @@ placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in fu
 
 - **Sky clouds (first).** Overcast decks, high cloud and distant banks drawn into the sky at
   infinity, so they are never reached, flown above or into, and hide nothing. Raymarched per
-  direction through a cloud slab (Schneider, Horizon Zero Dawn / Nubis; Hillaire): Perlin-Worley
-  shape and erosion noise built on the CPU at load (D3D9 samples volume textures but cannot render
-  into them), a short march toward the sun, a dual-lobe phase, the powder term, a
-  multiple-scattering approximation, the sky-view table as ambient, aerial perspective toward the
-  horizon. Rendered into a cloud panorama of its own (about 1024x512; the 192x108 sky-view table is
-  too coarse for cloud edges), updated over several frames, drifting with the wind. No parallax, so
-  it carries no near cumulus. Loops unrolled (the compiler's loops go wrong under DXVK).
+  direction through baked volumes (structure after Gaijin's Dagor daSkies2, below): Perlin-Worley
+  shape and erosion noise, the sky-view table as ambient, aerial perspective toward the horizon.
+  Rendered into a cloud panorama of its own (about 1024x512; the 192x108 sky-view table is too
+  coarse for cloud edges), updated over several frames, drifting with the wind. No parallax, so it
+  carries no near cumulus. Loops unrolled (the compiler's loops go wrong under DXVK).
 - **Coverage drives the lighting.** One coverage value per level (0 clear, 1 storm; picked per
   level outside this tree, a default otherwise) sets the clouds and the light together: the sun
   dimmed and its shadows softened, sky light greyer, more even and relatively brighter, the haze and
@@ -347,6 +345,21 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
   dual-lobe phase; multiple scattering by octaves (Wrenninge; Hillaire) replaces the powder term,
   since clouds are optically thick and most of their light is multiply scattered. One shader include
   holds this cloud material, shared later by the 3D particle clouds.
+- **Baked volumes, marched cheaply (from Dagor).** Gaijin's open-source Dagor engine (BSD-3-Clause,
+  `prog/gameLibs/daSkies2`; War Thunder) marches a baked density field instead of evaluating noise
+  per step: a 512x512x64 one-byte field over a 65 km tiled weather world (about 128 m per texel),
+  regenerated over frames, an ⅛ copy to skip empty space, and a 256x256x64 two-channel volume of sun
+  transmittance (along the whole path to the sun) and ambient occlusion, updated in chunks. A step
+  costs one density, one light and (near) one detail-noise fetch, against about 15–25 in a
+  noise-per-step march with a short sun march; the light volume also darkens cloud bases under
+  the cloud above, which a short sun march misses. Dagor needs D3D10+ (it renders into volume
+  slices; no D3D9 driver). Here, in D3D9 form: both volumes as 2D atlases of their slices
+  (4096x4096 one-byte density, 16 MB; the light volume in G16R16), rendered by pixel shaders over
+  several frames and sampled with two fetches and a manual blend between slices; the panorama in
+  A16B16G16R16F. Detail erosion noise is added at sample time (128 m texels are coarse for a deck
+  1–2 km overhead). The 65 km tiling may show toward the horizon (a ray through a deck at 2 km
+  runs over 100 km): checked in the prototype, a coarser far field if it does. Dagor's droplet phase
+  (`clouds_droplet_phase.hlsli`) and octave setup can be ported with attribution.
 - **Not done:** a coarse atmospheric simulation at load (Goswami and Neyret 2017; Vimont et al.
   2020) writing the weather map. Its gain is clouds tied to terrain (sea breezes, ridge caps), which
   a sky at infinity does not show; reconsidered only if a mountain level looks wrong. Full cloud
