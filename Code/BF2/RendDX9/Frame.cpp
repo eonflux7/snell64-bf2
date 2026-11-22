@@ -337,6 +337,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     // + clip.w * forward + clip.x * right' + clip.y * up' is the world point of a clip position.
     rendererSunShadowsRender(time, g_sunCascadeConstants);
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
+    rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
     rendererAtmosphereAerialConstants(g_aerialConstants);
     {
         IRenderView* const view = rendererGetRenderView();

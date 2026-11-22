@@ -49,6 +49,7 @@ BF2/RendDX9/MovieRenderer.cpp
 BF2/RendDX9/RenderQueues.cpp
 BF2/RendDX9/SunShadows.cpp
 BF2/RendDX9/Atmosphere.cpp
+BF2/RendDX9/Clouds.cpp
 BF2/RendDX9/SkyCube.cpp
 BF2/RendDX9/Frame.cpp
 BF2/RendDX9/Submit.cpp

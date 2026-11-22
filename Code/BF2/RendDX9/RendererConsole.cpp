@@ -1397,6 +1397,24 @@ void setHazeFalloff(float value) { rendererHazeFalloff() = clampf(value, 25.0f, 
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeFalloff, float, true, getHazeFalloff(), setHazeFalloff, 25.0f, 5000.0f,
                                  kRendererConsoleTag)
 
+// [RENDER] The sky clouds (render milestone 12): how many, and which climate's.
+float getCloudCoverage() { return rendererCloudCoverage(); }
+void setCloudCoverage(float value)
+{
+    rendererCloudCoverage() = clampf(value, 0.0f, 1.0f);
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudCoverage, float, true, getCloudCoverage(), setCloudCoverage, 0.0f, 1.0f,
+                                 kRendererConsoleTag)
+int getCloudPreset() { return rendererCloudPreset(); }
+void setCloudPreset(int value)
+{
+    rendererCloudPreset() = value < 0 ? 0 : value > 1 ? 1 : value;
+    rendererCloudSettingsChanged();
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(cloudPreset, int, true, getCloudPreset(), setCloudPreset, 0, 1,
+                                 kRendererConsoleTag)
+
 } // anonymous namespace
 
 // The help lines of the fork's renderer variables, for the debug menu (docs/lanes/ui.md).
@@ -1414,6 +1432,8 @@ const char* rendererVariableHelp(const char* name)
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
         { "hazeDepth", "Haze: optical depth at fog end on a level ray (higher: hazier near)" },
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
+        { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
+        { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

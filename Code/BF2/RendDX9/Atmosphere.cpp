@@ -1114,6 +1114,7 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.hazeDensity = hazeDensity();
     for (int k = 0; k < 3; ++k)
     {
+        i.toSun[k] = g.inputs.toSun[k];
         i.sunTop[k] = static_cast<float>(at(g.sunTop, k));
         i.zenithModel[k] = static_cast<float>(at(g.zenithModel, k));
         i.horizonTarget[k] = static_cast<float>(at(g.horizonTarget, k));

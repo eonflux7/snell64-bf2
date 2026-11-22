@@ -817,7 +817,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 12
+#define RA_CONTRACT_VERSION 13
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -870,12 +870,38 @@ struct AtmosphereInfo
     IDirect3DTexture9* cloudLight;      // 64 x 24: 8 altitudes x (sun, sky, ground) tiles of 8 x 8
     IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
     float fitMs, refHeight, fogEnd, hazeDensity;
+    float toSun[3];                     // world, unit
     float skyGain;                      // the authored horizon over the model's (not applied)
     float sunTop[3];
     float zenithModel[3], horizonTarget[3], horizonModel[3];
     float groundAlbedo[3];
 };
 AtmosphereInfo rendererAtmosphereInfo();
+// [RENDER] Sky clouds' baked volumes (Clouds.cpp, render milestone 12 task 2, contract 13): the
+// weather map, noise volumes, density field, its coarse copy and the light volume, built over
+// frames after the atmosphere's (rendererCloudsFrame) into a double buffer and made live whole.
+// renderer.cloudCoverage (0 clear .. 1 overcast) and renderer.cloudPreset (0 desert, 1 maritime)
+// start a new build. The render targets go at a device reset and are rebuilt.
+void rendererCloudsFrame();
+void rendererCloudsRelease();
+float& rendererCloudCoverage();
+int& rendererCloudPreset();
+void rendererCloudSettingsChanged();
+struct CloudsInfo
+{
+    bool live;
+    IDirect3DTexture9* weather;         // 128 x 128 A8R8G8B8: low, mid coverage; cloud type
+    IDirect3DVolumeTexture9* shape;     // 128 x 128 x 32 L8
+    IDirect3DVolumeTexture9* detail;    // 32^3 L8
+    IDirect3DTexture9* field;           // 2048^2 A8R8G8B8: 4 x 4 tiles, 4 slices each in rgba
+    IDirect3DTexture9* coarse;          // 128 x 64 A8R8G8B8: 2 tiles, 4 slice groups each
+    IDirect3DTexture9* light;           // 2048^2 A16B16G16R16F: 8 x 8 tiles, one slice each
+    const char* preset;
+    float coverage, seconds, baseM, topM, lwc, dropletUm;
+    float noiseMs, weatherMs;
+    unsigned int buildFrames, builds;
+};
+CloudsInfo rendererCloudsInfo();
 // [RENDER] Milestone 11 task 7 (SkyCube.cpp, contract 10): the sky cube (prefiltered GGX, mip m
 // roughness m / 5), the sky's irradiance as SH9 and the split-sum BRDF table, built on the CPU
 // with the sky view into managed textures. Each frame the cube is bound to the reserved sampler

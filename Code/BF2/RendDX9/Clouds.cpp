@@ -1,0 +1,687 @@
+// [RENDER] Sky clouds' baked volumes (render milestone 12, task 2,
+// docs/lanes/render.md#12-clouds). Not part of retail BF2.
+//
+// The structure is Gaijin's Dagor daSkies2 (BSD-3-Clause, Copyright (c) 2023 Gaijin
+// Entertainment): a weather map over a tiled 65 km world, a baked density field marched instead
+// of noise per step, a coarse copy to skip empty space, and a volume of the light reaching each
+// point. Dagor renders into volume slices (D3D10+); here every volume is a 2D atlas of its slices
+// drawn by pixel passes of Shaders/RaClouds (shader contract 13), over several frames:
+//
+//   weather   128 x 128 A8R8G8B8, managed, built here on the CPU: r the low layer's coverage,
+//             g the mid layer's, b the cloud type (0 stratus, 0.5 cumulus, 1 cumulonimbus)
+//   shape     128 x 128 x 32 L8 volume, managed, built here once: Perlin-Worley (Schneider 2015)
+//   detail    32 x 32 x 32 L8 volume, managed, built here once: Worley octaves, for the erosion at
+//             sample time (task 3)
+//   field     512 x 512 x 64 density, 2048 x 2048 A8R8G8B8: 4 x 4 tiles of 512 x 512, tile k holds
+//             slices 4k .. 4k + 3 in r g b a. 128 m across, the slab's thickness / 64 up
+//   coarse    64 x 64 x 8, each the field's maximum over 8 x 8 x 8, 128 x 64 A8R8G8B8 (2 tiles
+//             of 4 slice groups)
+//   light     256 x 256 x 64, 2048 x 2048 A16B16G16R16F: 8 x 8 tiles, one slice each: r the
+//             transmittance toward the sun at the last scattering octave's extinction, g the
+//             ambient's visibility from above (sky), b from below (ground)
+//
+// The weather evolves (each region's clouds grow and decay over 10-30 minutes); every
+// kRebuildSeconds a new set is built into the other half of a double buffer, two field tiles and
+// eight light tiles a frame, then made live. Presets (desert, maritime) set the slab, the cloud
+// types, the water content and the droplets; renderer.cloudCoverage sets how many.
+#ifdef BF2_IMAGE_RENDDX9
+
+#define NOMINMAX
+#include "../../RendDX9Abi/ThunkAbi.h"
+#include "../../RendDX9Abi/HfeAbi.h"
+#include "../../RendDX9Abi/ModuleCommon.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
+#include "RendDX9Base.h"
+#include "../GeomMisc/FSQuadDrawer.h"
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace dice {
+namespace hfe {
+namespace dx9rend {
+
+extern void* g_rendererBase;
+extern void* g_shaderManager;
+void* effectD3dxHandle(void* effect);   // Effect.cpp
+
+namespace {
+
+const double kPi = 3.14159265358979;
+
+const unsigned int kWeatherSize = 128;
+const unsigned int kShapeXz = 128, kShapeY = 32, kDetailSize = 32;
+const unsigned int kFieldXz = 512, kFieldSlices = 64, kFieldTiles = 4;       // 4 x 4 tiles
+const unsigned int kFieldAtlas = kFieldXz * kFieldTiles;                    // 2048
+const unsigned int kCoarseXz = 64;                                           // 128 x 64: 2 tiles
+const unsigned int kLightXz = 256, kLightTiles = 8;                          // 8 x 8 tiles
+const unsigned int kLightAtlas = kLightXz * kLightTiles;                    // 2048
+const double kWorldSize = 65536.0;   // m, the tiled weather world
+const double kRebuildSeconds = 10.0;
+const unsigned int kFieldTilesPerFrame = 2, kLightTilesPerFrame = 8;
+
+struct Preset
+{
+    const char* name;
+    double baseM, topM;            // the slab above the reference height
+    double typeLo, typeHi;         // the weather's cloud type range
+    double lwc;                    // g/m^3 at density 1
+    double dropletUm;              // droplet diameter
+    double layer2;                 // the mid layer's density against the low one's
+};
+// Desert: a hot dry afternoon (T 35 C, dew point 7 C: base ~125 m x 28 = 3.5 km), deep dry
+// convection to ~8 km; continental air, many small droplets. Maritime: a moist boundary layer
+// (T - Td ~ 4 C: base ~500 m) under an inversion, stratus to stratocumulus; few, large droplets.
+const Preset kPresets[2] = {
+    { "desert", 3500.0, 9500.0, 0.25, 0.55, 0.6, 12.0, 0.25 },
+    { "maritime", 500.0, 5500.0, 0.0, 0.3, 0.35, 20.0, 0.35 },
+};
+
+// ---- noise (tileable) ----
+
+inline unsigned int hash3(int x, int y, int z, unsigned int seed)
+{
+    unsigned int h = static_cast<unsigned int>(x) * 0x8da6b343u ^ static_cast<unsigned int>(y) * 0xd8163841u
+                   ^ static_cast<unsigned int>(z) * 0xcb1ab31fu ^ seed * 0x9e3779b9u;
+    h ^= h >> 16;
+    h *= 0x7feb352du;
+    h ^= h >> 15;
+    h *= 0x846ca68bu;
+    h ^= h >> 16;
+    return h;
+}
+inline double unitHash(unsigned int h) { return (h & 0xffffff) * (1.0 / 16777216.0); }
+inline int wrap(int v, int period) { const int m = v % period; return m < 0 ? m + period : m; }
+inline double fade(double t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+// Gradient noise in about [-1, 1], period `period` lattice cells along each axis.
+double perlin3(double x, double y, double z, int period, unsigned int seed)
+{
+    const int xi = static_cast<int>(std::floor(x)), yi = static_cast<int>(std::floor(y)),
+              zi = static_cast<int>(std::floor(z));
+    const double fx = x - xi, fy = y - yi, fz = z - zi;
+    double n[8];
+    for (int c = 0; c < 8; ++c)
+    {
+        const int dx = c & 1, dy = (c >> 1) & 1, dz = (c >> 2) & 1;
+        const unsigned int h = hash3(wrap(xi + dx, period), wrap(yi + dy, period), wrap(zi + dz, period), seed);
+        // 12 edge gradients.
+        static const double g[12][3] = { { 1, 1, 0 }, { -1, 1, 0 }, { 1, -1, 0 }, { -1, -1, 0 },
+                                         { 1, 0, 1 }, { -1, 0, 1 }, { 1, 0, -1 }, { -1, 0, -1 },
+                                         { 0, 1, 1 }, { 0, -1, 1 }, { 0, 1, -1 }, { 0, -1, -1 } };
+        const double* gr = g[h % 12];
+        n[c] = gr[0] * (fx - dx) + gr[1] * (fy - dy) + gr[2] * (fz - dz);
+    }
+    const double u = fade(fx), v = fade(fy), w = fade(fz);
+    const double x00 = n[0] + (n[1] - n[0]) * u, x10 = n[2] + (n[3] - n[2]) * u;
+    const double x01 = n[4] + (n[5] - n[4]) * u, x11 = n[6] + (n[7] - n[6]) * u;
+    const double y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
+    return (y0 + (y1 - y0) * w);
+}
+
+// Octaves of perlin3 over the unit cube, `cells` cells across at the first.
+double perlinFbm(double x, double y, double z, int cells, int octaves, unsigned int seed)
+{
+    double sum = 0.0, amp = 1.0, norm = 0.0;
+    for (int o = 0; o < octaves; ++o)
+    {
+        const int c = cells << o;
+        sum += amp * perlin3(x * c, y * c, z * c, c, seed + o);
+        norm += amp;
+        amp *= 0.5;
+    }
+    return sum / norm;
+}
+
+// Worley F1, squared, `cells` cells across the unit cube (Dagor's voronoi().r).
+double worley(double x, double y, double z, int cells, unsigned int seed)
+{
+    const double px = x * cells, py = y * cells, pz = z * cells;
+    const int xi = static_cast<int>(std::floor(px)), yi = static_cast<int>(std::floor(py)),
+              zi = static_cast<int>(std::floor(pz));
+    double best = 1e9;
+    for (int k = -1; k <= 1; ++k)
+        for (int j = -1; j <= 1; ++j)
+            for (int i = -1; i <= 1; ++i)
+            {
+                const unsigned int h = hash3(wrap(xi + i, cells), wrap(yi + j, cells), wrap(zi + k, cells), seed);
+                const double fx = xi + i + unitHash(h) - px;
+                const double fy = yi + j + unitHash(h * 0x2545f491u + 1u) - py;
+                const double fz = zi + k + unitHash(h * 0x9e3779b1u + 7u) - pz;
+                best = std::min(best, fx * fx + fy * fy + fz * fz);
+            }
+    return std::min(best, 1.0);
+}
+
+// Dagor's get_worley_3_octaves2: 1 - (w(s) + w(2s) / 2 + w(4s) / 4).
+double worley3(double x, double y, double z, int cells, unsigned int seed)
+{
+    return 1.0 - (worley(x, y, z, cells, seed) + 0.5 * worley(x, y, z, cells * 2, seed + 1)
+                  + 0.25 * worley(x, y, z, cells * 4, seed + 2));
+}
+
+double clamp01(double v) { return v < 0.0 ? 0.0 : v > 1.0 ? 1.0 : v; }
+double remap(double v, double a, double b, double c, double d) { return c + (v - a) / (b - a) * (d - c); }
+
+// Dagor's get_cloud_shape (generate_clouds2.dshl): Perlin dilated by Worley, eroded by three
+// Worley octaves; dilation 0.3, erosion 1, gamma 1.25.
+double cloudShape(double x, double y, double z)
+{
+    const double perlin = clamp01(remap(perlinFbm(x, y, z, 4, 7, 11u), -0.9, 0.9, 0.0, 1.0));
+    const double wr = worley3(x, y, z, 7, 21u);
+    const double wg = worley3(x, y, z, 6, 31u), wb = worley3(x, y, z, 11, 41u), wa = worley3(x, y, z, 23, 51u);
+    const double perlinWorley = remap(perlin, (1.0 - wr) * 0.3, 1.0, 0.0, 1.0);
+    const double shape = clamp01(remap(perlinWorley, -(1.0 - (0.625 * wg + 0.25 * wb + 0.124 * wa)), 1.0, 0.0, 1.0));
+    return std::pow(shape, 1.25);
+}
+
+// Dagor's get_cloud_detail: three Worley octaves at 2, 7 and 11 cells.
+double cloudDetail(double x, double y, double z)
+{
+    return clamp01(0.425 * worley3(x, y, z, 2, 61u) + 0.35 * worley3(x, y, z, 7, 71u)
+                   + 0.35 * worley3(x, y, z, 11, 81u));
+}
+
+// One byte per texel, texel centres over the unit cube; rows split across threads.
+void buildVolume(std::vector<unsigned char>& out, unsigned int w, unsigned int h, unsigned int d,
+                 double (*fn)(double, double, double))
+{
+    out.assign(static_cast<size_t>(w) * h * d, 0);
+    unsigned int threads = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
+    std::vector<std::thread> pool;
+    for (unsigned int t = 0; t < threads; ++t)
+        pool.push_back(std::thread([&out, w, h, d, fn, t, threads]() {
+            for (unsigned int z = t; z < d; z += threads)
+                for (unsigned int y = 0; y < h; ++y)
+                    for (unsigned int x = 0; x < w; ++x)
+                    {
+                        const double v = fn((x + 0.5) / w, (y + 0.5) / h, (z + 0.5) / d);
+                        out[(static_cast<size_t>(z) * h + y) * w + x] =
+                            static_cast<unsigned char>(clamp01(v) * 255.0 + 0.5);
+                    }
+        }));
+    for (size_t i = 0; i < pool.size(); ++i)
+        pool[i].join();
+}
+
+// ---- the weather (Dagor's gen_weather.dshl, on the CPU) ----
+
+double setRange(double v, double lo, double hi) { return clamp01((v - lo) / (hi - lo)); }
+double setRangeSmoother(double v, double lo, double hi, double pt)
+{
+    if (v > hi * pt)
+        return setRange(hi * pt, lo, hi) + (1.0 - setRange(hi * pt, lo, hi)) * (v - hi * pt) / (1.0 - pt);
+    return setRange(v, lo, hi);
+}
+
+struct WeatherInputs
+{
+    int preset;
+    double coverage;
+    double seconds;     // since the level started: the clouds' life phase
+};
+
+// Dagor's coverage to (humidity, gamma) for a layer's signal.
+void coverageCurve(double coverage, double gammaRate, double& humidity, double& gamma)
+{
+    humidity = std::sqrt(2.0 * std::min(coverage, 0.5)) - 1.0;
+    gamma = 1.5 * std::exp((2.0 * std::max(coverage, 0.5) - 1.0) * -gammaRate);
+}
+
+void buildWeather(const WeatherInputs& in, std::vector<unsigned int>& out)
+{
+    const Preset& p = kPresets[in.preset];
+    out.assign(kWeatherSize * kWeatherSize, 0);
+    double h1, g1, h2, g2;
+    coverageCurve(in.coverage, 2.5, h1, g1);
+    coverageCurve(in.coverage * 0.6, 2.0, h2, g2);   // the mid layer: thinner than the low one
+    for (unsigned int y = 0; y < kWeatherSize; ++y)
+        for (unsigned int x = 0; x < kWeatherSize; ++x)
+        {
+            const double u = (x + 0.5) / kWeatherSize, v = (y + 0.5) / kWeatherSize;
+            // Life: each ~2 km region's signal swells and shrinks around its mean, its own phase and
+            // period (10-30 min), so the mean coverage holds while the clouds evolve.
+            const double phase = perlinFbm(u, v, 0.3, 32, 2, 91u) * 2.0;
+            const double period = 600.0 + 1200.0 * clamp01(perlinFbm(u, v, 0.7, 16, 1, 93u) * 0.5 + 0.5);
+            const double life = 0.18 * std::sin(2.0 * kPi * (in.seconds / period + phase));
+
+            const double s1 = perlinFbm(u, v, 0.1, 2, 5, 101u) + life;
+            const double l1 = std::pow(clamp01(setRangeSmoother(s1, -0.65, 0.65, 0.9) + h1), g1);
+            const double s2 = perlinFbm(1.0 - v, 1.0 - u, 0.5, 4, 5, 111u) + 0.5 * life;
+            const double l2 = std::pow(clamp01(setRangeSmoother(s2, -0.65, 0.65, 0.9) + h2), g2);
+
+            const double typeSignal = clamp01(setRange(perlinFbm(u, v, 0.9, 3, 5, 121u), -0.25, 0.25));
+            const double s5 = perlinFbm(u, v, 0.2, 9, 3, 131u), s6 = perlinFbm(1.0 - v, 1.0 - u, 0.4, 9, 3, 141u);
+            const double k = 1.0 - (1.0 - typeSignal) * (1.0 - typeSignal);
+            const double m5 = std::sqrt(std::max(s5 * 0.5 + 0.75, 0.0)) * (1.0 - k) + k;
+            const double m6 = std::sqrt(std::max(s6 * 0.5 + 0.75, 0.0)) * (1.0 - k) + k;
+            const double type = p.typeLo + (p.typeHi - p.typeLo) * typeSignal;
+
+            const unsigned int r = static_cast<unsigned int>(clamp01(l1 * m5) * 255.0 + 0.5);
+            const unsigned int g = static_cast<unsigned int>(clamp01(l2 * m6) * 255.0 + 0.5);
+            const unsigned int b = static_cast<unsigned int>(clamp01(type) * 255.0 + 0.5);
+            out[y * kWeatherSize + x] = (255u << 24) | (r << 16) | (g << 8) | b;
+        }
+}
+
+// ---- state ----
+
+enum Stage { kIdle, kField, kCoarse, kLight };
+
+struct VolumeSet
+{
+    IDirect3DTexture9* field;
+    IDirect3DTexture9* coarse;
+    IDirect3DTexture9* light;
+};
+
+struct State
+{
+    // Settings (console).
+    float coverage;
+    int preset;
+    bool enabled;
+    // CPU-built.
+    bool noiseStarted, noiseReady;
+    std::atomic<bool> noiseDone;
+    std::thread noiseThread;
+    std::vector<unsigned char> shapeData, detailData;
+    double noiseMs;
+    IDirect3DVolumeTexture9* shape;
+    IDirect3DVolumeTexture9* detail;
+    IDirect3DTexture9* weather;
+    double weatherMs;
+    WeatherInputs built;      // the weather of the set being built
+    WeatherInputs liveInputs; // of the live set
+    // GPU.
+    VolumeSet sets[2];
+    int live;                 // -1 none
+    Stage stage;
+    unsigned int next;        // the next tile of the stage
+    unsigned int buildFrames;
+    unsigned int lastBuildFrames;
+    LARGE_INTEGER start, lastBuild;
+    bool started;
+    bool settingsChanged;
+    bool effectMissing;
+    unsigned int builds;
+};
+
+State* g_state = 0;
+State& st()
+{
+    if (!g_state)
+    {
+        g_state = new State();
+        g_state->coverage = 0.4f;
+        g_state->preset = 0;
+        g_state->enabled = true;
+        g_state->live = -1;
+        g_state->stage = kIdle;
+    }
+    return *g_state;
+}
+
+IDirect3DDevice9* device()
+{
+    return g_rendererBase ? static_cast<RendDX9Base*>(g_rendererBase)->device : 0;
+}
+
+double secondsSince(const LARGE_INTEGER& t0)
+{
+    LARGE_INTEGER t, f;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&f);
+    return f.QuadPart ? static_cast<double>(t.QuadPart - t0.QuadPart) / f.QuadPart : 0.0;
+}
+
+void release(IDirect3DTexture9*& t)
+{
+    if (t)
+        t->Release();
+    t = 0;
+}
+
+void releaseSets()
+{
+    State& s = st();
+    for (int i = 0; i < 2; ++i)
+    {
+        release(s.sets[i].field);
+        release(s.sets[i].coarse);
+        release(s.sets[i].light);
+    }
+    s.live = -1;
+    s.stage = kIdle;
+}
+
+bool createTarget(unsigned int w, unsigned int h, D3DFORMAT format, IDirect3DTexture9*& t)
+{
+    if (t)
+        return true;
+    const HRESULT hr = device()->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, &t, 0);
+    if (hr < 0)
+    {
+        std::fprintf(stderr, "[CLOUDS] target %ux%u format %d failed: hr=0x%08lX\n", w, h,
+                     static_cast<int>(format), static_cast<unsigned long>(hr));
+        t = 0;
+        return false;
+    }
+    return true;
+}
+
+bool ensureSet(VolumeSet& v)
+{
+    return createTarget(kFieldAtlas, kFieldAtlas, D3DFMT_A8R8G8B8, v.field)
+        && createTarget(kCoarseXz * 2, kCoarseXz, D3DFMT_A8R8G8B8, v.coarse)
+        && createTarget(kLightAtlas, kLightAtlas, D3DFMT_A16B16G16R16F, v.light);
+}
+
+bool uploadVolume(IDirect3DVolumeTexture9*& t, const std::vector<unsigned char>& data, unsigned int w,
+                  unsigned int h, unsigned int d)
+{
+    if (!t && device()->CreateVolumeTexture(w, h, d, 1, 0, D3DFMT_L8, D3DPOOL_MANAGED, &t, 0) < 0)
+    {
+        std::fprintf(stderr, "[CLOUDS] volume %ux%ux%u not created\n", w, h, d);
+        t = 0;
+        return false;
+    }
+    D3DLOCKED_BOX box;
+    if (t->LockBox(0, &box, 0, 0) < 0)
+        return false;
+    for (unsigned int z = 0; z < d; ++z)
+        for (unsigned int y = 0; y < h; ++y)
+            std::memcpy(static_cast<unsigned char*>(box.pBits) + z * box.SlicePitch + y * box.RowPitch,
+                        &data[(static_cast<size_t>(z) * h + y) * w], w);
+    t->UnlockBox(0);
+    return true;
+}
+
+bool uploadWeather(const std::vector<unsigned int>& data)
+{
+    State& s = st();
+    if (!s.weather && device()->CreateTexture(kWeatherSize, kWeatherSize, 1, 0, D3DFMT_A8R8G8B8,
+                                              D3DPOOL_MANAGED, &s.weather, 0) < 0)
+    {
+        s.weather = 0;
+        return false;
+    }
+    D3DLOCKED_RECT lr;
+    if (s.weather->LockRect(0, &lr, 0, 0) < 0)
+        return false;
+    for (unsigned int y = 0; y < kWeatherSize; ++y)
+        std::memcpy(static_cast<unsigned char*>(lr.pBits) + y * lr.Pitch, &data[y * kWeatherSize], kWeatherSize * 4);
+    s.weather->UnlockRect(0);
+    return true;
+}
+
+// RaClouds' constants (layout in RaClouds.fx).
+void fillConstants(float c[8][4], const WeatherInputs& w, unsigned int first)
+{
+    std::memset(c, 0, sizeof(float) * 32);
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    const Preset& p = kPresets[w.preset];
+    const float base = static_cast<float>(a.refHeight + p.baseM), top = static_cast<float>(a.refHeight + p.topM);
+    c[0][0] = static_cast<float>(-kWorldSize * 0.5);
+    c[0][1] = static_cast<float>(-kWorldSize * 0.5);
+    c[0][2] = static_cast<float>(1.0 / kWorldSize);
+    c[0][3] = static_cast<float>(kWorldSize);
+    c[1][0] = base;
+    c[1][1] = top;
+    c[1][2] = 1.0f / (top - base);
+    c[1][3] = top - base;
+    for (int k = 0; k < 3; ++k)
+        c[2][k] = a.toSun[k];
+    c[2][3] = static_cast<float>(p.lwc);
+    c[3][0] = static_cast<float>(p.dropletUm);
+    c[3][1] = static_cast<float>(p.layer2);
+    c[3][2] = 8.0f;    // shape tiles across the world (8 km each, Dagor's clouds_shape_scale)
+    c[3][3] = 16.0f;   // the cumulonimbus shape's (4 km)
+    c[4][0] = static_cast<float>(first);
+}
+
+bool drawTiles(void* effect, const char* technique, IDirect3DTexture9* target, unsigned int tileSize,
+               unsigned int tilesAcross, unsigned int first, unsigned int count, float c[8][4],
+               IDirect3DTexture9* field, IDirect3DTexture9* coarse)
+{
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
+    if (!d3dx || !effectSetTechniqueByName(effect, technique))
+        return false;
+    State& s = st();
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 8);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudWeather"))
+        d3dx->SetTexture(h, s.weather);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShape"))
+        d3dx->SetTexture(h, s.shape);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudField"))
+        d3dx->SetTexture(h, field);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudCoarse"))
+        d3dx->SetTexture(h, coarse);
+
+    IDirect3DSurface9* surface = 0;
+    target->GetSurfaceLevel(0, &surface);
+    stateManagerSetRenderTarget(0, surface);
+    flushRenderTargetsSeam();
+    effectBegin(effect);
+    effectBeginPass(effect, 0);
+    for (unsigned int t = first; t < first + count; ++t)
+    {
+        const D3DVIEWPORT9 viewport = { (t % tilesAcross) * tileSize, (t / tilesAcross) * tileSize,
+                                        tileSize, tileSize, 0.0f, 1.0f };
+        device()->SetViewport(&viewport);
+        geom::fsQuadDrawerDrawCurrentEffect();
+    }
+    effectEnd(effect);
+    if (surface)
+        surface->Release();
+    return true;
+}
+
+void startNoise()
+{
+    State& s = st();
+    s.noiseStarted = true;
+    s.noiseThread = std::thread([]() {
+        State& t = st();
+        LARGE_INTEGER t0;
+        QueryPerformanceCounter(&t0);
+        buildVolume(t.shapeData, kShapeXz, kShapeXz, kShapeY, cloudShape);
+        buildVolume(t.detailData, kDetailSize, kDetailSize, kDetailSize, cloudDetail);
+        t.noiseMs = secondsSince(t0) * 1000.0;
+        t.noiseDone = true;
+    });
+}
+
+// One step of the build: the next stage's tiles into the set that is not live.
+void buildStep(void* effect)
+{
+    State& s = st();
+    const int target = s.live == 0 ? 1 : 0;
+    VolumeSet& v = s.sets[target];
+    float c[8][4];
+    fillConstants(c, s.built, s.next);
+    ++s.buildFrames;
+    if (s.stage == kField)
+    {
+        const unsigned int n = std::min(kFieldTilesPerFrame, kFieldTiles * kFieldTiles - s.next);
+        drawTiles(effect, "RaCloudBuildField", v.field, kFieldXz, kFieldTiles, s.next, n, c, 0, 0);
+        s.next += n;
+        if (s.next >= kFieldTiles * kFieldTiles)
+        {
+            s.stage = kCoarse;
+            s.next = 0;
+        }
+    }
+    else if (s.stage == kCoarse)
+    {
+        drawTiles(effect, "RaCloudBuildCoarse", v.coarse, kCoarseXz, 2, 0, 2, c, v.field, 0);
+        s.stage = kLight;
+        s.next = 0;
+    }
+    else if (s.stage == kLight)
+    {
+        const unsigned int n = std::min(kLightTilesPerFrame, kLightTiles * kLightTiles - s.next);
+        drawTiles(effect, "RaCloudBuildLight", v.light, kLightXz, kLightTiles, s.next, n, c, v.field, v.coarse);
+        s.next += n;
+        if (s.next >= kLightTiles * kLightTiles)
+        {
+            s.stage = kIdle;
+            s.live = target;
+            s.liveInputs = s.built;
+            s.lastBuildFrames = s.buildFrames;
+            ++s.builds;
+            if (s.builds == 1)
+                std::fprintf(stderr, "[CLOUDS] first set live: %s, coverage %.2f, %u frames; noise %.0f ms, "
+                             "weather %.1f ms\n", kPresets[s.built.preset].name, s.built.coverage,
+                             s.buildFrames, s.noiseMs, s.weatherMs);
+        }
+    }
+}
+
+} // anonymous namespace
+
+float& rendererCloudCoverage() { return st().coverage; }
+int& rendererCloudPreset() { return st().preset; }
+void rendererCloudSettingsChanged() { st().settingsChanged = true; }
+
+void rendererCloudsFrame()
+{
+    State& s = st();
+    if (!device() || !s.enabled || !rendererAtmosphereInfo().fitted)
+        return;
+    if (!s.started)
+    {
+        QueryPerformanceCounter(&s.start);
+        s.started = true;
+    }
+    if (!s.noiseStarted)
+        startNoise();
+    if (!s.noiseReady)
+    {
+        if (s.noiseThread.joinable() && s.noiseDone)
+        {
+            s.noiseThread.join();
+            s.noiseReady = uploadVolume(s.shape, s.shapeData, kShapeXz, kShapeXz, kShapeY)
+                        && uploadVolume(s.detail, s.detailData, kDetailSize, kDetailSize, kDetailSize);
+            std::vector<unsigned char>().swap(s.shapeData);
+            std::vector<unsigned char>().swap(s.detailData);
+        }
+        if (!s.noiseReady)
+            return;
+    }
+
+    if (s.stage == kIdle)
+    {
+        const bool due = s.live < 0 || s.settingsChanged || secondsSince(s.lastBuild) >= kRebuildSeconds;
+        if (!due)
+            return;
+        s.settingsChanged = false;
+        if (!ensureSet(s.sets[0]) || !ensureSet(s.sets[1]))
+            return;
+        WeatherInputs w;
+        w.preset = std::min(std::max(s.preset, 0), 1);
+        w.coverage = std::min(std::max(static_cast<double>(s.coverage), 0.0), 1.0);
+        w.seconds = secondsSince(s.start);
+        LARGE_INTEGER t0;
+        QueryPerformanceCounter(&t0);
+        std::vector<unsigned int> weather;
+        buildWeather(w, weather);
+        s.weatherMs = secondsSince(t0) * 1000.0;
+        // The live set's field was drawn from the old weather and is no longer read from it.
+        if (!uploadWeather(weather))
+            return;
+        s.built = w;
+        s.stage = kField;
+        s.next = 0;
+        s.buildFrames = 0;
+        QueryPerformanceCounter(&s.lastBuild);
+    }
+
+    void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaClouds");
+    if (!effect || !effectD3dxHandle(effect))
+    {
+        if (!s.effectMissing)
+            std::fprintf(stderr, "[CLOUDS] Shaders/RaClouds not loaded: no cloud volumes\n");
+        s.effectMissing = true;
+        if (effect)
+            effectRelease(static_cast<Effect*>(effect));
+        return;
+    }
+    s.effectMissing = false;
+
+    IDirect3DSurface9* savedTarget = stateManagerGetRenderTarget(0);
+    IDirect3DSurface9* savedDepth = stateManagerGetDepthStencilSurface();
+    if (!savedTarget)
+        savedTarget = rendererSceneColorSurface();
+    if (savedTarget)
+        savedTarget->AddRef();
+    if (savedDepth)
+        savedDepth->AddRef();
+    D3DVIEWPORT9 savedViewport;
+    device()->GetViewport(&savedViewport);
+    stateManagerPush();
+    stateManagerSetDepthStencilSurface(0);
+
+    buildStep(effect);
+
+    stateManagerPop();
+    stateManagerSetRenderTarget(0, savedTarget);
+    stateManagerSetDepthStencilSurface(savedDepth);
+    flushRenderTargetsSeam();
+    device()->SetViewport(&savedViewport);
+    if (savedTarget)
+        savedTarget->Release();
+    if (savedDepth)
+        savedDepth->Release();
+    effectRelease(static_cast<Effect*>(effect));
+}
+
+void rendererCloudsRelease()
+{
+    if (g_state)
+        releaseSets();   // render targets; the weather and noise are managed
+}
+
+CloudsInfo rendererCloudsInfo()
+{
+    State& s = st();
+    CloudsInfo i;
+    std::memset(&i, 0, sizeof(i));
+    i.live = s.live >= 0;
+    i.weather = s.weather;
+    i.shape = s.shape;
+    i.detail = s.detail;
+    if (s.live >= 0)
+    {
+        i.field = s.sets[s.live].field;
+        i.coarse = s.sets[s.live].coarse;
+        i.light = s.sets[s.live].light;
+    }
+    const WeatherInputs& w = s.live >= 0 ? s.liveInputs : s.built;
+    const Preset& p = kPresets[std::min(std::max(w.preset, 0), 1)];
+    i.preset = p.name;
+    i.coverage = static_cast<float>(w.coverage);
+    i.seconds = static_cast<float>(w.seconds);
+    i.baseM = static_cast<float>(p.baseM);
+    i.topM = static_cast<float>(p.topM);
+    i.lwc = static_cast<float>(p.lwc);
+    i.dropletUm = static_cast<float>(p.dropletUm);
+    i.noiseMs = static_cast<float>(s.noiseMs);
+    i.weatherMs = static_cast<float>(s.weatherMs);
+    i.buildFrames = s.lastBuildFrames;
+    i.builds = s.builds;
+    return i;
+}
+
+} // namespace dx9rend
+} // namespace hfe
+} // namespace dice
+
+#endif // BF2_IMAGE_RENDDX9
