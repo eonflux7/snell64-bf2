@@ -1127,6 +1127,11 @@ AtmosphereInfo rendererAtmosphereInfo()
     return i;
 }
 
+void rendererAtmosphereConstants(float c[16][4])
+{
+    fillConstants(c);
+}
+
 bool rendererAtmosphereDrawsSky()
 {
     return g.fitted && g.skyView && !g.skyViewDirty;
@@ -1173,6 +1178,7 @@ bool rendererAtmosphereDrawSky(void* effect, bool underWater)
         { vp[0], vp[1], vp[2] > 0.0f ? 1.0f / vp[2] : 0.0f, vp[3] > 0.0f ? 1.0f / vp[3] : 0.0f },
     };
     d3dx->SetVectorArray(skyHandle, reinterpret_cast<const D3DXVECTOR4*>(sky), 3);
+    rendererCloudsBindSky(d3dx);   // milestone 12: the cloud panoramas in front of it
 
     stateManagerPush();
     effectBegin(effect);

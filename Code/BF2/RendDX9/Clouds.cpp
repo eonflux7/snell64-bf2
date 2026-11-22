@@ -20,6 +20,14 @@
 //             transmittance toward the sun at the last scattering octave's extinction, g the
 //             ambient's visibility from above (sky), b from below (ground)
 //
+// Task 3 (contract 14): the panorama, 1024 x 512 A16B16G16R16F over the upper hemisphere from the
+// level's origin (RaCloudPanorama.fxh), marched through the live set by technique RaCloudPanorama
+// a band of 64 rows a frame. Three in a ring: the sky (rendererCloudsBindSky) blends the previous
+// and the newest complete one by the progress of the one being drawn, so a new panorama fades in
+// over the 8 frames the next one takes (Dagor's daSkiesPanorama). Each is drawn from the set and
+// the time latched at its first band; the wind drifts the field under it. renderer.clouds 0 stops
+// the builds and the panorama and draws the clear sky.
+//
 // The weather evolves (each region's clouds grow and decay over 10-30 minutes); every
 // kRebuildSeconds a new set is built into the other half of a double buffer, two field tiles and
 // eight light tiles a frame, then made live. Presets (desert, maritime) set the slab, the cloud
@@ -65,6 +73,11 @@ const unsigned int kLightAtlas = kLightXz * kLightTiles;                    // 2
 const double kWorldSize = 65536.0;   // m, the tiled weather world
 const double kRebuildSeconds = 10.0;
 const unsigned int kFieldTilesPerFrame = 2, kLightTilesPerFrame = 8;
+const unsigned int kPanoW = 1024, kPanoH = 512, kPanoBands = 8;             // RaCloudPanorama.fxh
+const double kPlanetRadius = 6360000.0;   // m, the atmosphere's ground radius (Atmosphere.cpp)
+const double kPanoReach = 150000.0;       // m: the march stops here (full haze near the horizon)
+const double kDetailTileM = 1500.0;       // m: the detail noise's tile
+const double kHighStreak = 4.0;           // the high cloud's streaks: length over width
 
 struct Preset
 {
@@ -74,13 +87,17 @@ struct Preset
     double lwc;                    // g/m^3 at density 1
     double dropletUm;              // droplet diameter
     double layer2;                 // the mid layer's density against the low one's
+    double windX, windZ, windMs;   // the wind at cloud level: direction (world x, z), speed
+    double highM, highCoverage, highTau;   // the high cloud: height, coverage, vertical optical depth
 };
 // Desert: a hot dry afternoon (T 35 C, dew point 7 C: base ~125 m x 28 = 3.5 km), deep dry
 // convection to ~8 km; continental air, many small droplets. Maritime: a moist boundary layer
 // (T - Td ~ 4 C: base ~500 m) under an inversion, stratus to stratocumulus; few, large droplets.
+// Both carry thin cirrus above the slab (vertical optical depth 0.3-0.4 where densest, the
+// common range of 0.03-1), streaked along the wind.
 const Preset kPresets[2] = {
-    { "desert", 3500.0, 9500.0, 0.25, 0.55, 0.6, 12.0, 0.25 },
-    { "maritime", 500.0, 5500.0, 0.0, 0.3, 0.35, 20.0, 0.35 },
+    { "desert", 3500.0, 9500.0, 0.25, 0.55, 0.6, 12.0, 0.25, 0.94, 0.34, 8.0, 11000.0, 0.35, 0.3 },
+    { "maritime", 500.0, 5500.0, 0.0, 0.3, 0.35, 20.0, 0.35, 0.6, -0.8, 12.0, 8000.0, 0.5, 0.4 },
 };
 
 // ---- noise (tileable) ----
@@ -315,6 +332,14 @@ struct State
     bool settingsChanged;
     bool effectMissing;
     unsigned int builds;
+    // The panorama (task 3).
+    IDirect3DTexture9* pano[3];
+    int panoNew, panoOld, panoDraw;   // ring indices; -1 none
+    unsigned int panoBand;            // the next band of panoDraw; 0: the next one starts
+    unsigned int panoramas;           // completed
+    int panoSet;                      // the volume set the one being drawn reads
+    WeatherInputs panoInputs;
+    double panoSeconds;
 };
 
 State* g_state = 0;
@@ -328,6 +353,7 @@ State& st()
         g_state->enabled = true;
         g_state->live = -1;
         g_state->stage = kIdle;
+        g_state->panoNew = g_state->panoOld = g_state->panoDraw = g_state->panoSet = -1;
     }
     return *g_state;
 }
@@ -364,6 +390,10 @@ void releaseSets()
     s.live = -1;
     if (s.stage != kWeather)   // a weather thread finishes into a new set
         s.stage = kIdle;
+    for (int i = 0; i < 3; ++i)
+        release(s.pano[i]);
+    s.panoNew = s.panoOld = s.panoDraw = s.panoSet = -1;
+    s.panoBand = 0;
 }
 
 bool createTarget(unsigned int w, unsigned int h, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -509,6 +539,8 @@ void buildStep(void* effect)
 {
     State& s = st();
     const int target = s.live == 0 ? 1 : 0;
+    if (s.panoBand != 0 && s.panoSet == target)
+        return;   // the panorama being drawn still reads it
     VolumeSet& v = s.sets[target];
     float c[8][4];
     fillConstants(c, s.built, s.next);
@@ -550,7 +582,117 @@ void buildStep(void* effect)
     }
 }
 
+// RaClouds [5..7] for the panorama (layout in RaClouds.fx).
+void fillPanoramaConstants(float c[8][4], const WeatherInputs& w, double seconds)
+{
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    const Preset& p = kPresets[w.preset];
+    const double len = std::sqrt(p.windX * p.windX + p.windZ * p.windZ);
+    const double dx = p.windX / len, dz = p.windZ / len;
+    c[5][0] = static_cast<float>(std::fmod(dx * p.windMs * seconds, kWorldSize));
+    c[5][1] = static_cast<float>(std::fmod(dz * p.windMs * seconds, kWorldSize));
+    c[5][2] = a.refHeight;
+    c[5][3] = static_cast<float>(kPlanetRadius);
+    c[6][0] = static_cast<float>(a.refHeight + p.highM);
+    c[6][1] = static_cast<float>(p.highCoverage);
+    c[6][2] = static_cast<float>(p.highTau);
+    c[6][3] = static_cast<float>(kHighStreak);
+    c[7][0] = static_cast<float>(dx);
+    c[7][1] = static_cast<float>(dz);
+    c[7][2] = static_cast<float>(kDetailTileM);
+    c[7][3] = static_cast<float>(kPanoReach);
+}
+
+// One band of the panorama being drawn; a finished one joins the ring as the newest.
+void panoramaStep(void* effect)
+{
+    State& s = st();
+    for (int i = 0; i < 3; ++i)
+        if (!createTarget(kPanoW, kPanoH, D3DFMT_A16B16G16R16F, s.pano[i]))
+            return;
+    if (s.panoBand == 0)
+    {
+        s.panoSet = s.live;
+        s.panoInputs = s.liveInputs;
+        s.panoSeconds = secondsSince(s.start);
+        for (int i = 0; i < 3; ++i)
+            if (i != s.panoNew && i != s.panoOld)
+            {
+                s.panoDraw = i;
+                break;
+            }
+    }
+    const VolumeSet& v = s.sets[s.panoSet];
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
+    if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudPanorama"))
+        return;
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    float c[8][4];
+    fillConstants(c, s.panoInputs, 0);
+    fillPanoramaConstants(c, s.panoInputs, s.panoSeconds);
+    float atmosphere[16][4];
+    rendererAtmosphereConstants(atmosphere);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 8);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
+    struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
+        { "RaCloudShape", s.shape }, { "RaCloudDetail", s.detail }, { "RaCloudField", v.field },
+        { "RaCloudCoarse", v.coarse }, { "RaCloudLight", v.light }, { "RaCloudLightTable", a.cloudLight },
+        { "RaSkyViewTable", a.skyView },
+    };
+    for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
+        if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, textures[i].semantic))
+            d3dx->SetTexture(h, textures[i].texture);
+
+    IDirect3DSurface9* surface = 0;
+    s.pano[s.panoDraw]->GetSurfaceLevel(0, &surface);
+    stateManagerSetRenderTarget(0, surface);
+    flushRenderTargetsSeam();
+    const unsigned int rows = kPanoH / kPanoBands;
+    const D3DVIEWPORT9 viewport = { 0, s.panoBand * rows, kPanoW, rows, 0.0f, 1.0f };
+    device()->SetViewport(&viewport);
+    effectBegin(effect);
+    effectBeginPass(effect, 0);
+    geom::fsQuadDrawerDrawCurrentEffect();
+    effectEnd(effect);
+    if (surface)
+        surface->Release();
+
+    if (++s.panoBand == kPanoBands)
+    {
+        s.panoBand = 0;
+        s.panoOld = s.panoNew < 0 ? s.panoDraw : s.panoNew;
+        s.panoNew = s.panoDraw;
+        if (++s.panoramas == 1)
+            std::fprintf(stderr, "[CLOUDS] first panorama drawn\n");
+    }
+}
+
 } // anonymous namespace
+
+bool& rendererCloudsEnabled() { return st().enabled; }
+
+void rendererCloudsBindSky(void* d3dxEffect)
+{
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(d3dxEffect);
+    const D3DXHANDLE h = d3dx ? d3dx->GetParameterBySemantic(0, "RaSkyClouds") : 0;
+    if (!h)
+        return;
+    State& s = st();
+    D3DXVECTOR4 v(0.0f, 0.0f, 0.0f, 0.0f);
+    if (s.enabled && s.panoNew >= 0 && s.pano[s.panoNew] && s.pano[s.panoOld])
+    {
+        // The newest fades in while the next is drawn: full by its last band.
+        v.x = static_cast<float>(s.panoBand) / (kPanoBands - 1);
+        v.y = 1.0f;
+        if (const D3DXHANDLE t = d3dx->GetParameterBySemantic(0, "RaCloudPanoramaOld"))
+            d3dx->SetTexture(t, s.pano[s.panoOld]);
+        if (const D3DXHANDLE t = d3dx->GetParameterBySemantic(0, "RaCloudPanoramaNew"))
+            d3dx->SetTexture(t, s.pano[s.panoNew]);
+    }
+    d3dx->SetVector(h, &v);
+}
 
 float& rendererCloudCoverage() { return st().coverage; }
 int& rendererCloudPreset() { return st().preset; }
@@ -582,48 +724,52 @@ void rendererCloudsFrame()
             return;
     }
 
+    // The volumes: start a build when due; a GPU step while one is under way.
     if (s.stage == kIdle)
     {
         const bool due = s.live < 0 || s.settingsChanged || secondsSince(s.lastBuild) >= kRebuildSeconds;
-        if (!due)
-            return;
-        s.settingsChanged = false;
-        if (!ensureSet(s.sets[0]) || !ensureSet(s.sets[1]))
-            return;
-        WeatherInputs w;
-        w.preset = std::min(std::max(s.preset, 0), 1);
-        w.coverage = std::min(std::max(static_cast<double>(s.coverage), 0.0), 1.0);
-        w.seconds = secondsSince(s.start);
-        s.built = w;
-        s.weatherDone = false;
-        s.weatherThread = std::thread([w]() {
-            State& t = st();
-            LARGE_INTEGER t0;
-            QueryPerformanceCounter(&t0);
-            buildWeather(w, t.weatherData);
-            t.weatherMs = secondsSince(t0) * 1000.0;
-            t.weatherDone = true;
-        });
-        s.stage = kWeather;
-        s.buildFrames = 0;
-        QueryPerformanceCounter(&s.lastBuild);
-        return;
+        if (due && ensureSet(s.sets[0]) && ensureSet(s.sets[1]))
+        {
+            s.settingsChanged = false;
+            WeatherInputs w;
+            w.preset = std::min(std::max(s.preset, 0), 1);
+            w.coverage = std::min(std::max(static_cast<double>(s.coverage), 0.0), 1.0);
+            w.seconds = secondsSince(s.start);
+            s.built = w;
+            s.weatherDone = false;
+            s.weatherThread = std::thread([w]() {
+                State& t = st();
+                LARGE_INTEGER t0;
+                QueryPerformanceCounter(&t0);
+                buildWeather(w, t.weatherData);
+                t.weatherMs = secondsSince(t0) * 1000.0;
+                t.weatherDone = true;
+            });
+            s.stage = kWeather;
+            s.buildFrames = 0;
+            QueryPerformanceCounter(&s.lastBuild);
+        }
     }
-    if (s.stage == kWeather)
+    else if (s.stage == kWeather)
     {
         ++s.buildFrames;
-        if (!s.weatherDone)
-            return;
-        s.weatherThread.join();
-        // The live set's field was drawn from the old weather and no longer reads it.
-        if (!ensureSet(s.sets[0]) || !ensureSet(s.sets[1]) || !uploadWeather(s.weatherData))
+        if (s.weatherDone)
         {
-            s.stage = kIdle;
-            return;
+            s.weatherThread.join();
+            // The live set's field was drawn from the old weather and no longer reads it.
+            if (!ensureSet(s.sets[0]) || !ensureSet(s.sets[1]) || !uploadWeather(s.weatherData))
+                s.stage = kIdle;
+            else
+            {
+                s.stage = kField;
+                s.next = 0;
+            }
         }
-        s.stage = kField;
-        s.next = 0;
     }
+    const bool building = s.stage == kField || s.stage == kCoarse || s.stage == kLight;
+    const bool panorama = s.live >= 0;
+    if (!building && !panorama)
+        return;
 
     void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaClouds");
     if (!effect || !effectD3dxHandle(effect))
@@ -650,7 +796,10 @@ void rendererCloudsFrame()
     stateManagerPush();
     stateManagerSetDepthStencilSurface(0);
 
-    buildStep(effect);
+    if (building)
+        buildStep(effect);
+    if (panorama)
+        panoramaStep(effect);
 
     stateManagerPop();
     stateManagerSetRenderTarget(0, savedTarget);
@@ -698,6 +847,8 @@ CloudsInfo rendererCloudsInfo()
     i.weatherMs = static_cast<float>(s.weatherMs);
     i.buildFrames = s.lastBuildFrames;
     i.builds = s.builds;
+    i.panorama = s.panoNew >= 0 ? s.pano[s.panoNew] : 0;
+    i.panoramas = s.panoramas;
     return i;
 }
 

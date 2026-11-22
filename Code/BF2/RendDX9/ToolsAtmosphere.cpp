@@ -767,6 +767,54 @@ bool toolsWriteClouds(const char* base, const char*& message)
     else
         failed += "light ";
 
+    // The panorama (task 3): decoded (rgb / (1 - luminance)), the light it adds and its
+    // transmittance; per band of elevation, the mean transmittance and the cloud share.
+    Table pano;
+    if (readTable(c.panorama, pano, why) && pano.w == 1024 && pano.h == 512)
+    {
+        std::fprintf(f, "[panorama] %u drawn; rows by elevation (deg): mean transmittance | share < 0.5 | "
+                        "mean added luminance\n", c.panoramas);
+        Table alpha = pano;
+        for (size_t i = 0; i < pano.rgba.size(); i += 4)
+        {
+            float* const p = &pano.rgba[i];
+            const float l = 0.2126f * p[0] + 0.7152f * p[1] + 0.0722f * p[2];
+            for (int k = 0; k < 3; ++k)
+                p[k] /= std::max(1.0f - l, 1e-4f);
+        }
+        const float edges[] = { 0.0f, 2.0f, 5.0f, 10.0f, 20.0f, 40.0f, 90.0f };
+        for (int b = 0; b + 1 < 7; ++b)
+        {
+            double t = 0.0, lum = 0.0;
+            unsigned int n = 0, covered = 0;
+            for (unsigned int y = 0; y < pano.h; ++y)
+            {
+                const float v = (y + 0.5f) / pano.h, e = v * v * 90.0f;
+                if (e < edges[b] || e >= edges[b + 1])
+                    continue;
+                for (unsigned int x = 0; x < pano.w; ++x)
+                {
+                    const float* const p = pano.at(x, y);
+                    t += p[3];
+                    covered += p[3] < 0.5f;
+                    lum += 0.2126f * p[0] + 0.7152f * p[1] + 0.0722f * p[2];
+                    ++n;
+                }
+            }
+            if (n)
+                std::fprintf(f, "[panorama]  %2.0f-%2.0f: %.3f | %.3f | %.4f\n", edges[b], edges[b + 1], t / n,
+                             static_cast<double>(covered) / n, lum / n);
+        }
+        float scale;
+        if (writePng(pano, root + "-panorama.png", false, scale))
+            std::fprintf(f, "[panorama] png %s-panorama.png (row 0 the horizon, the zenith at the bottom; "
+                            "x %.4g)\n", root.c_str(), scale);
+        if (writePng(alpha, root + "-panorama-t.png", true, scale))
+            std::fprintf(f, "[panorama] png %s-panorama-t.png (transmittance)\n", root.c_str());
+    }
+    else
+        failed += "panorama ";
+
     std::fclose(f);
     g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";
     message = g_message.c_str();
