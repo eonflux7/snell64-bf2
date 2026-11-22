@@ -9,6 +9,7 @@ namespace hfe {
 
 namespace dx9rend {
 struct EngineTexture;
+class Effect;
 }
 
 namespace Math {
@@ -67,6 +68,9 @@ FSQuadDrawerSettings fsQuadDrawerGetSettings();
 void fsQuadDrawerSetSettings(const FSQuadDrawerSettings& settings);
 // Replaces the blur strength of the drawer's settings block (and rebuilds its glow taps).
 void fsQuadDrawerSetBlurStrength(float strength);
+// [RENDER] The drawer's effect (Shaders/FSQuadDrawer), for parameters its passes read that the
+// drawer does not set: the frame grade's (pass 0, HdrPost.cpp, render milestone 13).
+dx9rend::Effect* fsQuadDrawerEffect();
 
 // sub_10084660: {1 / width, 1 / height} of a texture, from the low 16 bits of each dimension.
 // Retail StaticMeshMaterial binds it as the detail-map texel size.

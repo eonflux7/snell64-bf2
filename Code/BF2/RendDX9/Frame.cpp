@@ -315,6 +315,7 @@ void rendererBindParticleLighting(void* effect)
     }
     static const std::string kSoft("RaSoftParticles");
     effectGetShaderParameterBorrowedTyped(fx, kSoft)->setValue(soft, 0);
+    rendererHdrPostBindParticles(effect);   // emissives undo the exposure (milestone 13)
 }
 
 float& softParticleDistance()

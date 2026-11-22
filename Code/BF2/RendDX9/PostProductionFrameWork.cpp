@@ -1420,9 +1420,11 @@ bool postProductionDrawDepthRebuild(const float constants[4])
 }
 
 // renderScene (PE 0x1002BF42..0x1002BF52): the owner's +0x24 takes the flags' post-production byte.
+// [RENDER] Not while the bloom stands in for the glow (render milestone 13, renderer.bloom): the
+// scene glow and the glow materials' queue are then not drawn, as with retail's glow off.
 void postProductionSetGlowEnabled(unsigned char enabled)
 {
-    Bt<0x24>(publishedOwner()) = enabled;
+    Bt<0x24>(publishedOwner()) = (enabled && !rendererBloomReplacesGlow()) ? enabled : 0;
 }
 
 namespace {
@@ -1806,7 +1808,10 @@ void postProductionFinish()
     }
     rendererHdrEndScene();          // [RENDER] HDR: from here the null target is the back buffer
     if (drawPostProduction(o))
+    {
+        rendererHdrPost(rendererPostSceneTexture());   // [RENDER] bloom, exposure (milestone 13)
         geom::fsQuadDrawerBlitToBackBuffer(rendererPostSceneTexture());
+    }
     if (rendererPostMultisampleActive())
         stateManagerSetRenderStatePersistent(D3DRS_MULTISAMPLEANTIALIAS, 1);
     rendererPostSetTarget(0);

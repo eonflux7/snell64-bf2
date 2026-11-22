@@ -1044,6 +1044,7 @@ void releaseRendererPathResources(Renderer* renderer)
     dx9rend::rendererAtmosphereRelease();                         // [RENDER] atmosphere tables
     dx9rend::rendererCloudsRelease();                             // [RENDER] cloud volumes
     dx9rend::rendererWaterRelease();                              // [RENDER] water's waves
+    dx9rend::rendererHdrPostRelease();                            // [RENDER] bloom, exposure
     dx9rend::submitInstancesRelease();                            // [RENDER] instance records
     dx9rend::gpuTimersRelease();                                  // [DEV] BF2_GPU_TIMERS
     dx9rend::uiLayerDeviceLost();                                 // [UI] ImGui device objects

@@ -1484,6 +1484,37 @@ void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
                                  kRendererConsoleTag)
 
+// [RENDER] Bloom and auto-exposure (render milestone 13, HdrPost.cpp).
+bool getBloom() { return rendererBloomEnabled(); }
+void setBloom(bool value) { rendererBloomEnabled() = value; }
+BF2_CONSOLE_PROPERTY_FN(bloom, bool, true, getBloom(), setBloom, kRendererConsoleTag)
+float getBloomStrength() { return rendererBloomStrength(); }
+void setBloomStrength(float value) { rendererBloomStrength() = clampf(value, 0.0f, 0.5f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(bloomStrength, float, true, getBloomStrength(), setBloomStrength, 0.0f, 0.5f,
+                                 kRendererConsoleTag)
+bool getExposure() { return rendererExposureAuto(); }
+void setExposure(bool value) { rendererExposureAuto() = value; }
+BF2_CONSOLE_PROPERTY_FN(exposure, bool, true, getExposure(), setExposure, kRendererConsoleTag)
+float getExposureBias() { return rendererExposureBias(); }
+void setExposureBias(float value) { rendererExposureBias() = clampf(value, -8.0f, 8.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureBias, float, true, getExposureBias(), setExposureBias, -8.0f, 8.0f,
+                                 kRendererConsoleTag)
+float getExposureMin() { return rendererExposureMin(); }
+void setExposureMin(float value) { rendererExposureMin() = clampf(value, -12.0f, 12.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureMin, float, true, getExposureMin(), setExposureMin, -12.0f, 12.0f,
+                                 kRendererConsoleTag)
+float getExposureMax() { return rendererExposureMax(); }
+void setExposureMax(float value) { rendererExposureMax() = clampf(value, -12.0f, 12.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureMax, float, true, getExposureMax(), setExposureMax, -12.0f, 12.0f,
+                                 kRendererConsoleTag)
+float getExposureSpeed() { return rendererExposureSpeed(); }
+void setExposureSpeed(float value) { rendererExposureSpeed() = clampf(value, 0.05f, 20.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureSpeed, float, true, getExposureSpeed(), setExposureSpeed, 0.05f, 20.0f,
+                                 kRendererConsoleTag)
+bool getEncodeSrgb() { return rendererEncodeSrgb(); }
+void setEncodeSrgb(bool value) { rendererEncodeSrgb() = value; }
+BF2_CONSOLE_PROPERTY_FN(encodeSrgb, bool, true, getEncodeSrgb(), setEncodeSrgb, kRendererConsoleTag)
+
 } // anonymous namespace
 
 // The help lines of the fork's renderer variables, for the debug menu (docs/lanes/ui.md).
@@ -1514,6 +1545,14 @@ const char* rendererVariableHelp(const char* name)
         { "cloudMidDensity", "Sky clouds' mid layer: density against the low layer's; -1 the preset's (desert 0.6, maritime 0.35)" },
         { "cloudMidCoverage", "Sky clouds' mid layer: coverage, 0 clear to 1 overcast; -1 the preset's (cloudCoverage times 0.8 desert, 0.6 maritime)" },
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
+        { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
+        { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
+        { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },
+        { "exposureBias", "Exposure compensation in stops (the fixed exposure while auto-exposure is off)" },
+        { "exposureMin", "Auto-exposure: the lowest exposure, in stops (how far bright scenes are darkened)" },
+        { "exposureMax", "Auto-exposure: the highest exposure, in stops (keeps night dark)" },
+        { "exposureSpeed", "Auto-exposure: adaptation speed, times 3/s into light and 1/s into dark" },
+        { "encodeSrgb", "Display encode: the sRGB curve (darker deep shadows); off, a plain 2.2 power" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

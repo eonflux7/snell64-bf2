@@ -349,6 +349,7 @@ public:
     void drawStencilResolve(dx9rend::EngineTexture* source, bool selectBackBuffer,
                             bool pushState);                                          // sub_10086030
     const FSQuadDrawerSettings& settings() const { return m_settings; }      // sub_100845F0
+    dx9rend::Effect* effect() const { return m_effect; }                       // [RENDER]
     void setSettings(const FSQuadDrawerSettings& settings);                    // sub_10084E60
 
 private:
@@ -1304,6 +1305,12 @@ void fsQuadDrawerSourcePass(unsigned int pass, dx9rend::EngineTexture* source,
     g_FSQuadDrawer->drawSourcePass(static_cast<unsigned short>(source->width),
                                    static_cast<unsigned short>(source->height), pass, source,
                                    selectBackBuffer, pushState, grid, customMatrix);
+}
+
+// [RENDER] The published drawer's effect, 0 without one.
+dx9rend::Effect* fsQuadDrawerEffect()
+{
+    return g_FSQuadDrawer ? g_FSQuadDrawer->effect() : 0;
 }
 
 // settings() / setSettings on the published drawer.

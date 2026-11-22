@@ -840,7 +840,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 18
+#define RA_CONTRACT_VERSION 19
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -954,6 +954,39 @@ struct CloudsInfo
     unsigned int skyLights;             // ground panoramas read back for the sky light
 };
 CloudsInfo rendererCloudsInfo();
+// [RENDER] The frame's HDR post (HdrPost.cpp, render milestone 13, contract 19): bloom, the
+// luminance histogram and auto-exposure on the resolved scene, run by the post-production
+// composite just before the final copy, which it hands the exposure and the bloom (RaGrade on the
+// FSQuadDrawer effect). Thermals skip it. renderer.bloom, bloomStrength, exposure (auto 1, manual
+// 0: exposureBias stops), exposureBias, exposureMin, exposureMax (stops), exposureSpeed,
+// encodeSrgb. The targets go at a device reset.
+void rendererHdrPost(EngineTexture* scene);
+// The particle effects' RaExposureParticle and RaExposureState (their emissives undo the exposure).
+void rendererHdrPostBindParticles(void* effect);
+// True while the bloom stands in for retail's glow passes (not under thermals).
+bool rendererBloomReplacesGlow();
+void rendererHdrPostRelease();
+bool& rendererBloomEnabled();
+float& rendererBloomStrength();
+bool& rendererExposureAuto();
+float& rendererExposureBias();
+float& rendererExposureMin();
+float& rendererExposureMax();
+float& rendererExposureSpeed();
+bool& rendererEncodeSrgb();
+struct HdrPostInfo
+{
+    bool ran, thermal, bloom, exposureAuto, encodeSrgb, lastSnap;
+    float bloomStrength, exposureBias, exposureMin, exposureMax, exposureSpeed;
+    float key, evLow, evRange, lowPercentile, highPercentile, rateLight, rateDark;
+    unsigned int frames, sceneW, sceneH, levels;
+    float lastDt;
+    IDirect3DTexture9* state;       // 1 x 1 A32B32G32R32F: adapted EV, exposure, metered EV, 1; 0 none
+    IDirect3DTexture9* histogram;   // 16 x 1 A32B32G32R32F, four bins to a texel
+    IDirect3DTexture9* meter;       // 64 x 32 A16B16G16R16F: log2 luminance, centre weight
+    IDirect3DTexture9* bloomTop;    // the bloom's level 0, half the scene
+};
+HdrPostInfo rendererHdrPostInfo();
 // [RENDER] Milestone 12 task 8 (contract 16): the cloud shadow map (Clouds.cpp), a Beer shadow map
 // over 32 km of the plane at the reference height around the camera, redrawn a band a frame about
 // once a second; its receiver constants RaCloudShadow (2 float4s, RaSunShadow.fxh) go to the
