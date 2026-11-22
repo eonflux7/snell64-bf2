@@ -2474,6 +2474,16 @@ if(BUILD_TESTING)
     add_test(NAME bf2_display_mode_policy_check COMMAND bf2_display_mode_policy_check)
 endif()
 
+# [TEMP] [CHOSEN, not recovered] Content-free check of the anti-aliasing apply rule
+# (RendMisc/AntialiasingPolicy.h, issue #60): no renderer, profile or settings repository.
+add_executable(bf2_antialiasing_policy_check EXCLUDE_FROM_ALL Code/Tests/antialiasing_policy.cpp)
+bf2_configure_cpp_target(bf2_antialiasing_policy_check)
+bf2_set_platform_compat(bf2_antialiasing_policy_check)
+bf2_set_image(bf2_antialiasing_policy_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_antialiasing_policy_check COMMAND bf2_antialiasing_policy_check)
+endif()
+
 # [TEMP] [CHOSEN, not recovered] Content-free check of the queued menu-mouse rule
 # (External/gameswf/SwiffPlayer/QueuedMouse.h): input ticks against frames, no movie or player.
 add_executable(bf2_swiff_queued_mouse_check EXCLUDE_FROM_ALL Code/Tests/swiff_queued_mouse.cpp)
@@ -3221,6 +3231,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_hud_widescreen_check
             bf2_display_mode_policy_check
             bf2_swiff_queued_mouse_check
+            bf2_antialiasing_policy_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM

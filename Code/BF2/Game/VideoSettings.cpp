@@ -8,6 +8,7 @@
 #include "../Core/Ids.h"
 #include "../RendMisc/IRenderer.h"
 #include "../RendMisc/DisplayModePolicy.h"  // [CHOSEN] the new-profile resolution pick
+#include "../RendMisc/AntialiasingPolicy.h" // [CHOSEN] issue #60: the antialiasing push and notice
 #include "../Core/SettingsRepostitory.h"  // settings - "GSLoadLevel" gates the antialiasing push
 #include <cstdio>                       // [CHOSEN] sscanf for the new-profile resolution pick
 #include <new>
@@ -327,8 +328,9 @@ void VideoSettings::setDefaults()
 void VideoSettings::revertChanges() { m_pending = m_current; s_resolutionSet = false; }
 
 // (278 B): nothing is pushed while a game is loaded. Otherwise the eight rows in index order,
-// the resolution (dynamic option 1), the antialiasing (dynamic option 0) only while no level is
-// named in the settings repository, and the view-distance scale.
+// the resolution (dynamic option 1), the antialiasing (dynamic option 0) and the view-distance
+// scale. [CHOSEN] Issue #60: retail pushed the antialiasing only while no level was named in the
+// settings repository.
 void VideoSettings::applyToOptions(IVideoOptions* options)
 {
     if (game)
@@ -342,7 +344,12 @@ void VideoSettings::applyToOptions(IVideoOptions* options)
     options->setQuality(6, m_pending.textureQuality);
     options->setQuality(7, m_pending.textureFilteringQuality);
     options->setDynamicOption(1, m_pending.resolution);
-    if (settings->stringGet(std::string("GSLoadLevel"), std::string("")).size() == 0)
+    // [CHOSEN, not recovered] Issue #60 (https://github.com/kr4uzi/OpenBF2/issues/60): retail also
+    // skipped this push while GSLoadLevel names a level, i.e. after the first match of a session,
+    // and the read-back then dropped the edit. The renderer's switch (device reset, probes, define
+    // rebuild) is the one every start makes, and it marks the effects for a reload at the next
+    // level load (VideoOptions.cpp), so the level is pushed whenever no game is loaded.
+    if (dice::hfe::aapolicy::pushesAntialiasing(game != nullptr))
         options->setDynamicOption(0, m_pending.antialiasing);
     options->setViewDistanceScale(m_pending.viewDistanceScale);
 }
@@ -390,14 +397,21 @@ void VideoSettings::setCustomVideoOptionScheme() { m_pending.videoOptionScheme =
 // (23 B)
 bool VideoSettings::hasChangesInGame() { return game != nullptr && hasChanges(); }
 
-// (283 B): no changes, no restart. An antialiasing change always needs one; a quality row
+// (283 B): no changes, no restart. An antialiasing change needs one only where Apply cannot
+// push it now (issue #60; retail: always); a quality row
 // change needs one when the renderer flags that row. The resolution and the scale never do.
 bool VideoSettings::needsRestart()
 {
     if (!hasChanges())
         return false;
-    if (m_pending.antialiasing != m_current.antialiasing)
-        return true;
+    // [CHOSEN, not recovered] Issue #60 (https://github.com/kr4uzi/OpenBF2/issues/60): retail
+    // answered yes for every antialiasing change. Apply pushes the level and the renderer switches
+    // it with a device reset while no game is loaded, so only then is no restart needed.
+    if (m_pending.antialiasing != m_current.antialiasing) {
+        const bool renderer = g_bf2Render && g_bf2Render->getRenderer();
+        if (dice::hfe::aapolicy::antialiasingNeedsRestart(game != nullptr, renderer))
+            return true;
+    }
     if (m_pending.terrainQuality != m_current.terrainQuality && optionRequiresRestart(0)) return true;
     if (m_pending.geometryQuality != m_current.geometryQuality && optionRequiresRestart(1)) return true;
     if (m_pending.lightingQuality != m_current.lightingQuality && optionRequiresRestart(2)) return true;

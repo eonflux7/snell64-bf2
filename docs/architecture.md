@@ -200,6 +200,24 @@ above 30 frames a second, queues nothing the rule would drop.
 `bf2_swiff_queued_mouse_check` models both rates. A press and its release that arrive
 within one frame are still not seen by that screen, as recovered.
 
+## Anti-aliasing change without a restart
+
+`[CHOSEN, not recovered]`, issue #60 (https://github.com/kr4uzi/OpenBF2/issues/60):
+retail reports "restart needed" for every anti-aliasing change (`VideoSettings::needsRestart`),
+and `VideoSettings::applyToOptions` pushes the level only while the settings repository's
+`GSLoadLevel` is empty, so after a match the edit is dropped by the read-back. Here both
+follow one rule (`RendMisc/AntialiasingPolicy.h`): while no game is loaded, Apply pushes
+the level and no restart is announced; while a game is loaded nothing is pushed and the
+restart notice stays. The renderer switches the level the way every start does
+(`videoOptionsChangeResolution`: device reset, multisample probes, define rebuild). Two
+renderer changes keep nothing stale: the probe's force and disable bytes, which only ever
+became set, are cleared before the probe re-derives them, and a switch that changes the
+`HASALPHA2MASK` define marks the effects for the reload the next level load runs
+(`dirty116`..`dirty118`, as a texture-filtering change does). Other multisample users
+(terrain, vegetation, post-production, render targets) read the state at draw time or are
+rebuilt by the device reset. `bf2_antialiasing_policy_check` covers the rule; the
+renderer side is verified by reading only.
+
 ## Client menu disconnect
 
 The stock `mainMenu.swf` disconnect page queues `dice.bf2.Logic.disconnectGame`
