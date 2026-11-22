@@ -529,6 +529,42 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   over clouds in front of them; the ground from altitude is the haze's flat colour past fog end
   and the map a dark slab (milestone 11's view distance, not the clouds); close up the 128 m field
   reads as soft fog. Not measured: the GPU cost (task 6).
+- *Coverage drives the lighting* (task 7; `SkyCube.cpp`, `Atmosphere.cpp`, `Clouds.cpp`; contract 16).
+  A 256x128 panorama of the clouds from the level's origin, 2 m over the reference height
+  (`RaCloudPanorama` into a small target, no history), is drawn about every 30 s and when a set
+  with new settings goes live, read back two frames later and handed to the atmosphere. The sky
+  cube and its SH are rebuilt from it on a worker thread (about 90 ms; the last cube stays bound
+  meanwhile): above the horizon the clear sky times the clouds' transmittance plus their light,
+  the ground in it lit by the sun times S, the clouds' mean transmittance toward the sun's
+  elevation (all azimuths, ±3°). So overcast greys and evens the sky light and reflections of every
+  surface. The air under the clouds takes `Ra_HazeLight`: the clear sky's radiance times S plus
+  (1 − S) times the clouded sky's mean radiance (`RaAtmosphere[8]`, Dagor's statistical clouds
+  shadow): the haze, the air in front of the clouds (panorama, near clouds; only while the camera
+  is under the slab's top), the sky pass within about 3° of the horizon, and the clouds' light from
+  the ground below them. Past the panorama's 150 km reach the slab's clouds are extrapolated from
+  the marched part (to 400 km), so an overcast deck closes to the horizon. The sun on surfaces is
+  dimmed by the cloud shadow map (task 8), not by S, which takes over only past the map.
+  Kashan Desert (agent): at 0.4 S 0.99 and the sky light as clear; at 1.0 (desert preset, a deck of
+  towers 2–6 km) S 0.12–0.14, sky irradiance up 0.24/0.25/0.29 against the clear 0.09/0.18/0.39,
+  global horizontal about 17 % of the clear day's, the diffuse part 24 %. Against references:
+  the CIE overcast sky (horizon about a third of the zenith) is matched in shape, the horizon
+  darker than overhead; Kasten–Czeplak puts an 8/8 deck at about 25 % of clear and mostly diffuse,
+  so this coverage 1.0 reads as a storm deck (towers with optical depths in the hundreds), as the
+  coverage scale intends, darker and more direct than a stratus overcast. `renderer.clouds 0`
+  restores the clear sky's light (checked: the same irradiance as before).
+- *Cloud shadows* (task 8; `Clouds.cpp` `shadowStep`, `RaClouds.fx` technique `RaCloudShadow`,
+  `RaSunShadow.fxh`; contract 16). A Beer shadow map (Hillaire 2020), 1024² `A16B16G16R16F` over
+  32 km of the plane at the reference height, centred where the camera's sun ray meets it and
+  snapped to its 32 m texels: per texel the optical depth toward the sun through the slab (48 steps,
+  field and detail erosion at full strength, delta-scaled extinction), and the world heights where
+  the ray enters and leaves cloud. Double-buffered, drawn a band of 128 rows a frame and restarted
+  a second after the last; the wind's drift since it was drawn goes into the receivers' constants.
+  Receivers move along the sun ray to the plane and take exp(−τ × the share above them), so
+  aircraft in or above the deck are lit right; the outer tenth fades to S. Every sun receiver
+  takes it: the shared resolves (statics, bundled and skinned meshes, trees, terrain, roads,
+  decals), water, undergrowth, and particles per vertex. Kashan Desert at 1.0: mean
+  transmittance 0.11 (S 0.08–0.14), 90 % of the ground under 0.5. Open: the first-person passes
+  (RASM zero) take no cloud shadow.
 
 ### 13. HDR bloom + auto-exposure
 
@@ -762,12 +798,13 @@ and add its row here.
 | 13 | Sky clouds' volumes (render milestone 12, task 2): effect `Shaders/RaClouds`, techniques `RaCloudBuildField`, `RaCloudBuildCoarse`, `RaCloudBuildLight`, drawn by the engine (`Clouds.cpp`) a viewport per atlas tile into its own targets; parameters by semantic `RaClouds` (`float4[8]`: field world origin, size; slab base, top; toward the sun, LWC at density 1; droplet diameter, mid layer's density, shape tiles), `RaCloudWeather`, `RaCloudShape`, `RaCloudDetail` (volume textures), `RaCloudField`, `RaCloudCoarse`, `RaCloudLight`. Layouts in the shaders' `RaCloudField.fxh` and below |
 | 14 | Sky clouds' panorama (render milestone 12, task 3): technique `RaCloudPanorama` in `Shaders/RaClouds`, drawn by the engine a band of rows at a time into its own targets, with `RaClouds` [4].y a jitter seed and [5]–[7] the panorama's (observer, drift, high cloud, wind; layout in the effect), `RaAtmosphere` rows 0–10 (camera rows zero), `RaSkyViewTable`, `RaCloudLightTable`. `RaSky` gets `RaSkyClouds` (`float4`: x the newest panorama's weight, y 1 while live) and `RaCloudPanoramaOld`, `RaCloudPanoramaNew` (2048x1024 `A16B16G16R16F`, linear, u wrapping); layout and decoding in the shaders' `RaCloudPanorama.fxh` |
 | 15 | Reachable clouds (render milestone 12, task 4): `RaClouds` grows to 20 float4s ([8] the observer's x, z, the reference height and the handoff distance; [9]–[18] the near passes'; layout in `RaClouds.fx`), and [5].z is the observer's (camera's) y. The panorama covers the whole sphere from the camera (`RaCloudPanorama.fxh`). Techniques `RaCloudNear` (two targets), `RaCloudNearResolve`, `RaCloudNearComposite` with `RaCloudNearCurrent`, `RaCloudNearDepth`, `RaCloudNearHistory`, and the scene's linear depth on s15 |
+| 16 | Cloud shadows and the light under the clouds (render milestone 12, tasks 7–8): pixel registers c189–c190 `RaCloudShadow` (engine-owned, published with `RASM`, zero outside the main world pass) and the cloud shadow map on the reserved sampler s14 (1024² `A16B16G16R16F`, bilinear, clamp; r optical depth toward the sun, g, b the world heights the sun ray enters and leaves cloud); particles get `RaCloudShadow` and `RaCloudShadowMap` (point) as parameters. Layout in the shaders' `RaSunShadow.fxh`. `RaAtmosphere[8]`: w the clouds' mean sun transmittance S, rgb the clouds' light on the air under them ((0, 0, 0, 1) clear). Technique `RaCloudShadow` in `Shaders/RaClouds` (`RaClouds[8]` the map's corner, the reference height, its size); `RaClouds[4].w` the panorama target's height. `RaSkyClouds.z` how far the camera is under the slab |
 
-Samplers 9–13 and 15 are reserved for renderer frame resources, and pixel registers
-c191–c223 for `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
+Samplers 9–15 are reserved for renderer frame resources, and pixel registers
+c189–c223 for `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
-over between effects, so neither value is left to default. The engine binds s9–s13 and s15 with it FALSE.
+over between effects, so neither value is left to default. The engine binds s9–s15 with it FALSE.
 
 Every `sampler_state` also states its filter. A material sampler (a colour, normal or detail texture
 mapped onto world geometry) is 16x anisotropic: min `ANISOTROPIC`, mag and mip `LINEAR`. A data
@@ -781,6 +818,7 @@ directory no longer carries it (`_3153_0`).
 | s9 | Aerial-perspective atlas (1024x32: 32 distance slices of 32x32 screen tiles) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`) | During the water queue only, while `RaWaterSsr.x` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
+| s14 | Cloud shadow map (contract 16) | `A16B16G16R16F` | From the clouds' frame step (before the prepass), rest of the frame; read while `RaCloudShadow[0].w` > 0 |
 | s15 | Linear view depth | `R32F` | After the prepass, rest of the frame; particles read it only while `RaSoftParticles.x` > 0 |
 
 Techniques the engine looks up by name:
