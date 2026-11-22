@@ -24,7 +24,9 @@
 // level's origin (RaCloudPanorama.fxh), marched through the live set by technique RaCloudPanorama
 // a band of 64 rows a frame. Three in a ring: the sky (rendererCloudsBindSky) blends the previous
 // and the newest complete one by the progress of the one being drawn, so a new panorama fades in
-// over the 8 frames the next one takes (Dagor's daSkiesPanorama). Each is drawn from the set and
+// over the 8 frames the next one takes (Dagor's daSkiesPanorama). Each is blended into the newest
+// complete one (weight kPanoHistoryWeight), so its march's jitter averages out across panoramas
+// instead of showing as grain that changes with each. Each is drawn from the set and
 // the time latched at its first band; the wind drifts the field under it. renderer.clouds 0 stops
 // the builds and the panorama and draws the clear sky.
 //
@@ -89,6 +91,7 @@ const double kDetailTileM = 1500.0;       // m: the detail noise's tile
 const double kHighStreak = 10.0;          // the high cloud's streaks: length over width
 const unsigned int kRows = 20;            // RaClouds' float4s (RaCloudField.fxh, RaClouds.fx)
 const float kNearHistoryWeight = 0.1f;    // the current frame's weight in the near clouds' history
+const float kPanoHistoryWeight = 0.25f;   // a new panorama's weight against the previous one
 
 struct Preset
 {
@@ -683,6 +686,9 @@ void panoramaStep(void* effect)
     fillConstants(c, s.panoInputs, 0);
     fillPanoramaConstants(c, s.panoInputs, s.panoSeconds, s.panoObserver, nearHandoff());
     c[4][1] = static_cast<float>(s.panoramas % 64);   // the march's jitter changes per panorama
+    // Blended into the newest complete panorama, so the jitter averages out (RaClouds.fx).
+    IDirect3DTexture9* const history = s.panoNew >= 0 ? s.pano[s.panoNew] : 0;
+    c[4][2] = history ? kPanoHistoryWeight : 1.0f;
     float atmosphere[16][4];
     rendererAtmosphereConstants(atmosphere);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaClouds"))
@@ -692,7 +698,7 @@ void panoramaStep(void* effect)
     struct { const char* semantic; IDirect3DBaseTexture9* texture; } const textures[] = {
         { "RaCloudShape", s.shape }, { "RaCloudDetail", s.detail }, { "RaCloudField", v.field },
         { "RaCloudCoarse", v.coarse }, { "RaCloudLight", v.light }, { "RaCloudLightTable", a.cloudLight },
-        { "RaSkyViewTable", a.skyView },
+        { "RaSkyViewTable", a.skyView }, { "RaCloudPanoramaHistory", history },
     };
     for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
         if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, textures[i].semantic))
