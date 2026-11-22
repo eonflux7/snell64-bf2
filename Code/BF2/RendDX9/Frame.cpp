@@ -511,7 +511,8 @@ void releaseWaterScene()
     g_waterSceneTexture = 0;
 }
 
-// The copy's texture at the scene colour's size and format (single sample).
+// The copy's texture at the scene colour's size and format (single sample), with a full mip chain:
+// rough water reads its reflections blurred (render milestone 16, task 3).
 bool ensureWaterScene(const D3DSURFACE_DESC& scene)
 {
     if (g_waterSceneTexture)
@@ -523,7 +524,7 @@ bool ensureWaterScene(const D3DSURFACE_DESC& scene)
         releaseWaterScene();
     }
     const HRESULT hr = static_cast<RendDX9Base*>(g_rendererBase)->device->CreateTexture(
-        scene.Width, scene.Height, 1, D3DUSAGE_RENDERTARGET, scene.Format, D3DPOOL_DEFAULT,
+        scene.Width, scene.Height, 0, D3DUSAGE_RENDERTARGET, scene.Format, D3DPOOL_DEFAULT,
         &g_waterSceneTexture, 0);
     std::fprintf(stderr, "[WATERSSR] scene copy %ux%u fmt %u: hr=0x%08lX\n", scene.Width,
                  scene.Height, static_cast<unsigned int>(scene.Format),
@@ -551,6 +552,22 @@ void rendererWaterSceneBegin()
             if (copy && static_cast<RendDX9Base*>(g_rendererBase)->device->StretchRect(
                     scene, 0, copy, 0, D3DTEXF_NONE) >= 0)
             {
+                // The mips, each a 2 x 2 box of the one above
+                IDirect3DDevice9* const device = static_cast<RendDX9Base*>(g_rendererBase)->device;
+                const DWORD levels = g_waterSceneTexture->GetLevelCount();
+                for (DWORD l = 1; l < levels; ++l)
+                {
+                    IDirect3DSurface9* src = 0;
+                    IDirect3DSurface9* dst = 0;
+                    g_waterSceneTexture->GetSurfaceLevel(l - 1, &src);
+                    g_waterSceneTexture->GetSurfaceLevel(l, &dst);
+                    if (src && dst)
+                        device->StretchRect(src, 0, dst, 0, D3DTEXF_LINEAR);
+                    if (src)
+                        src->Release();
+                    if (dst)
+                        dst->Release();
+                }
                 constants[0] = 1.0f;
                 constants[1] = 1.0f / static_cast<float>(desc.Width);
                 constants[2] = 1.0f / static_cast<float>(desc.Height);
@@ -560,7 +577,11 @@ void rendererWaterSceneBegin()
         }
     }
     if (constants[0] > 0.0f)
+    {
         bindSampler(kWaterSceneSampler, g_waterSceneTexture, D3DTEXF_LINEAR);
+        static_cast<RendDX9Base*>(g_rendererBase)->device->SetSamplerState(kWaterSceneSampler,
+            D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+    }
     if (rendererWaterBindWaves())   // milestone 16: the waves (contract 17)
         constants[3] = 1.0f;
     stateManagerSetWaterSsr(constants);
