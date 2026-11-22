@@ -45,8 +45,9 @@ Tasks:
    light built (agent), judged with task 10. Left: point lights against the new sun.
 9. Bundled meshes (judged on test_bootcamp). Done (owner: looks good). Left: render.md's
    "Built so far".
-10. Static meshes. Look for: glass and metal on buildings reflecting the sky; walls lit by the sky
-    from its direction.
+10. Static meshes. Built (agent, Muttrah City `street`, `sun`, `antisun`, shots `t10-*-old`/`-new`);
+    awaiting the owner's look. Walls had the sky's direction since task 8; the reflections show
+    only where the gloss is near 1 (windows read 0 in PR's data).
 11. Soldiers (hemi map), decals and terrain.
 12. Water SSR (`renderer.waterSsr`). Look for: buildings and shore reflected.
 13. Acceptance: the owner's look at the reference views on the three maps against milestone 10;

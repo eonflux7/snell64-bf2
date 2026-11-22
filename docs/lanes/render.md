@@ -351,6 +351,12 @@ Built so far, engine side (tasks 2–5, 2026-11-20):
   shaders read the SH as `RaSkyShVertex` (contract 10): mesh particles at their normal,
   billboards and trails averaged over every normal. The hemi map's ground tint on particles
   applies only to the old flat sky.
+- **Static meshes** (task 10, shader side only): the shared material model with sky reflections,
+  specular occluded by the lightmap's sky visibility. One technique serves every material, so
+  the class is the detail map's gloss, read as the old specular mask it is: Muttrah City's
+  stone and plaster sit at 0.3 to 0.5 and stay matte, metal and glass near 1 go glass-sharp
+  (dielectric: metal cannot be told apart). Windows there read gloss 0, so they do not reflect;
+  against the build before it the reference views barely change (shots `t10-*`).
 - **Bundled meshes** (task 9, shader side only): the class is picked in the shader from the
   permutation's flags and the material's `AlphaBlendEnable` (the class mapping lives with the
   shaders); no engine change, no class index in the engine yet. Paint, glass and matte are keyed;
