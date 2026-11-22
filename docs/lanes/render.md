@@ -769,7 +769,8 @@ only: no collision or gameplay out there.
   City, Saaremaa). The rings are not land: on each level they are flat and one colour (Kashan grey,
   Fallujah slate blue), at most a coastline and the river's or roads' meshes running on into them.
   Past the ring: on Kashan the sky's repeated horizon row; on Fallujah West (a desert city) sea cells
-  with waves to the horizon, so the open-sea test is wrong there; on Muttrah City sea cells and ring
+  with waves to the horizon (its ring is flat at 0 m, under the river's 22.5 m water level; the
+  test's heights were also misread until task 2); on Muttrah City sea cells and ring
   sectors shaded differently, the tiles' squares visible from 2 km. From 600 m up the playable map
   reads as a slab with a cliff at its edge. So the far ground replaces the ring's look too: the ring
   is an input (heights, coast), not something to extend.
@@ -798,6 +799,22 @@ only: no collision or gameplay out there.
 
 Tasks:
 1. Measure (done, above). Every PR level has nine heightmaps; none was found without a ring.
+   As built for task 2 (`Geom/FarGround.cpp`, contract 21; `renderer.farGround` 0 draws the retail
+   ring): seven levels of 64 x 64 cells, 16 m to 1 km, out to about 32 km from the camera, one draw
+   of about 43,000 triangles; each level snapped on the CPU to twice its cell, its outer cells
+   morphed onto the next level's grid from 16 to 26 cells out, the levels overlapping by one coarse
+   cell. Heights: the ring's vertices into a grid at the ring's cell over its square (769 nodes a
+   side on the measured levels), pull-push filled; 3 km past the ring they reach the base height.
+   Colour: every patch's colormap shrunk into one texture (512 texels a side at most), read at the
+   map's nearest edge and blurred by the distance past it; patches without a colormap take the others'
+   mean. Lit by the sun toward `RASM[17]` under the cloud shadow, the sky's SH and aerial perspective,
+   normals from the heights per pixel; inside the map the pixels are clipped. The ring had never had
+   sun: it read `SUNDIRECTION`, which the engine does not set on the terrain effect, hence its flat
+   grey. The ring's heights were misread by the sea test (`measureHeights`: the slot's height stream
+   taken for grid positions); fixed. A level without a ring (Saaremaa) gets sea all round when its
+   map's lowest point is under the sea level. Left for task 3: the far ground is darker and greyer
+   than the map at its edge (the map's detail layers are not in its colour), the smear past the edge
+   shows streaks, Fallujah West's sea.
 2. The grid, its texture slot and the curvature, drawn over the ring's area too, with a flat ground
    at the base height and the playable map's edge colour: the void gone on every level.
 3. Generated heights and colours, edge classes (land, water, nothing); sea cells only where the
@@ -1018,6 +1035,7 @@ and add its row here.
 | 18 | Water's foam (render milestone 16, task 5): the `Shaders/RaWater` atlas is 1024 × 256 (a fourth block: rg Jxz of cascades 0 + i 1, ba of cascade 2), technique `RaWaterFoam` with parameter `RaWaterHistory` (semantic) and `RaWater[0].w` the fade, `[1].w` the choppiness, `[3].zw` the threshold and 1 / ramp; while the water queue draws with waves, the 87 m and 17.3 m cascades' foam maps on s4–s5 (256² `R16F`, mips, 16x anisotropic, wrap) and pixel register c188 `RaWaterFoam` (x 1 while bound, y the depth waves break at, z the waves' loop seconds), zero otherwise |
 | 19 | Bloom and auto-exposure (render milestone 13): effect `Shaders/RaHdrPost`, techniques `RaBloomDownKaris`, `RaBloomDown`, `RaBloomUp` (blends ONE, ONE), `RaLumMeter`, `RaLumHistogramRows`, `RaLumHistogram`, `RaExposureAdapt`, drawn by the engine (`HdrPost.cpp`) before the grade; parameters by semantic `RaHdrPost` (`float4[4]`, layout in the effect), `RaHdrSource`, `RaHdrHistory`. The FSQuadDrawer effect (pass 0, the grade) gets `RaGrade` (`float4[2]`: auto-exposure on, the bloom's share, sRGB encode, frame mod 64; 1 / the bloom's size, manual exposure in stops, 1 / level count), `RaGradeExposure` (the 1 x 1 state: adapted EV, exposure, metered EV, written) and `RaGradeBloom`; all zero means 0 stops, no bloom, the 2.2 encode. Particle effects get `RaExposureParticle` (`float4`: x 1 auto, y manual stops) and `RaExposureState` (the 1 x 1 state, for a vertex sampler) |
 | 20 | The haze's light per pixel: the aerial-perspective atlas is 1056 x 32, its 33rd block (x 1024 + column, row r) the haze's light (rgb, a 1) toward the azimuth where tile column x's rays meet the horizon, at sin(elevation) = (r / 31)^2 (rays below the horizon read row 0); `Ra_GetAerial` lights a pixel by its own ray's elevation, its in-scatter that light times one minus the transmittance. |
+| 21 | The far ground (render milestone 17): technique `RaFarGround` (pass 0, depth LESSEQUAL and written, no blend) on the terrain effect, drawn in the surrounding ring's place; its vertex stream one `SHORT4` POSITION0 (grid x, z in cells, level). Parameters by semantic `RaFarGroundLevels` (`float4[8]`: the level's origin x, z, cell, 1 when it morphs), `RaFarGround` (`float4[4]`: camera, 1 / 2R; the height texture's uv scale and offset, the ring's half side, 1 / the fade; the map's half side, colour uv per m, colour texels per m, the base height; the morph's start and 1 / range in cells, the height texel), textures `RaFarGroundHeight` (R32F, read in the vertex and pixel shaders) and `RaFarGroundColor` (A8R8G8B8, sRGB, mips). Layout in the engine's `FarGround.cpp` |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
