@@ -326,9 +326,55 @@ placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in fu
 - Stars and the night sky (owner, 2026-11-22): the painted dome's stars and night clouds went with
   milestone 11; the night layers get them back here.
 
-First task: a prototype of the sky clouds and the coverage value alone, judged on Kashan Desert
-from the ground and the air at coverage 0.3, 0.7 and 1.0, before the lighting is coupled. Budget
-about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at acceptance.
+Planned (owner, 2026-11-22), from a survey of the literature (below):
+
+- **Physics sets the structure, noise the detail.** Real cloud behaviour enters through a small
+  atmosphere per climate preset (hot desert, temperate maritime, more as levels need them): surface
+  temperature and dew point give the cumulus base (lifting condensation level, about
+  125 m × (T − Td)), the inversion height caps the tops, stability picks flat cumulus over towering
+  ones, wind and shear orient streets and cirrus fall streaks. Genera sit in slabs at their WMO
+  altitudes (low Cu/Sc/St, mid Ac/As, high Ci/Cc/Cs). A 2D weather map per slab (coverage, genus,
+  height) feeds Perlin-Worley shape and erosion noise; its statistics are checked against real
+  clouds (power-law cloud sizes, a fractal perimeter).
+- **Coverage stays an explicit value per level**, not derived from humidity (real cover follows
+  large-scale weather a level does not model). The preset says which clouds; coverage says how many.
+- **Clouds evolve, cheaply:** each weather-map cell has its own life phase (growth and decay over
+  10–30 min) on top of the wind drift, so a round does not watch one texture slide by. Coverage and
+  time of day are constant for the round.
+- **Light transport in physical units.** Density is liquid water content (g/m³); extinction
+  3·LWC / (2·ρ_water·r_eff), about 0.03–0.15 m⁻¹ for cumulus. The phase function is Jendersie and
+  d'Eon's Henyey-Greenstein + Draine fit to Mie for a droplet diameter (10–20 µm), replacing the
+  dual-lobe phase; multiple scattering by octaves (Wrenninge; Hillaire) replaces the powder term,
+  since clouds are optically thick and most of their light is multiply scattered. One shader include
+  holds this cloud material, shared later by the 3D particle clouds.
+- **Not done:** a coarse atmospheric simulation at load (Goswami and Neyret 2017; Vimont et al.
+  2020) writing the weather map. Its gain is clouds tied to terrain (sea breezes, ridge caps), which
+  a sky at infinity does not show; reconsidered only if a mountain level looks wrong. Full cloud
+  fluid simulation (Stormscapes 2020, Weatherscapes 2021, Nubis³ 2023) is out of reach of D3D9 and
+  wasted without parallax.
+
+**Reference set.** Poly Haven's outdoor HDRIs (CC0; 647, 454 with an open sky: 225 partly cloudy,
+173 clear, 47 overcast, 7 fog; 285 from southern Africa, 225 from Europe, 120 without coordinates),
+fetched at 2k–4k by a script and not stored in the repo. The sun's position comes from each one's
+coordinates and date (or its brightest pixel), and the script checks its sun peak is unclipped. No
+skies from the Middle East: the dry southern African ones stand in for the desert preset. Uses, in
+order of value:
+1. Side-by-side panoramas: our cloud panorama (same equirectangular layout) rendered at a reference's
+   sun position, preset and coverage.
+2. Luminance ratios within one image (sunlit cumulus against the sky beside it, cloud base against
+   the horizon, overcast against clear zenith), measured in the reference and in ours. Where no
+   cloud covers the sun, the sun disc against our atmosphere's scales the reference to absolute
+   luminance.
+3. The coverage-driven lighting, checked before the clouds exist: the scene lit from a real
+   overcast reference's SH against what our coverage value gives.
+4. Cloud statistics (coverage, size distribution) from a red/blue segmentation, masking about 5°
+   around the sun for flare.
+
+First task: a prototype of the sky clouds, the two presets (desert, maritime) and the coverage
+value, with the Mie phase and multiple scattering, before the lighting is coupled. Judged on Kashan
+Desert from the ground and the air at coverage 0.3, 0.7 and 1.0, against the reference set by
+uses 1, 2 and 4. Budget about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at
+acceptance.
 
 ### 13. HDR bloom + auto-exposure
 

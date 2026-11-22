@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds), to be planned | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds), planned; task 1 next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -16,8 +16,23 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 ## Current: `render` milestone 12, clouds
 
-Not started. Its design is in [render.md](lanes/render.md#12-clouds); it is planned in full, and
-broken into tasks here, before work starts.
+Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started.
+
+1. Reference set: a script fetches chosen Poly Haven outdoor HDRIs (by preset and coverage, open
+   sky) at 2k–4k, computes each one's sun position and checks its sun is unclipped; an offline
+   analysis gives luminance ratios and cloud statistics per reference. The chosen list goes in
+   render.md.
+2. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
+   octave multiple scattering.
+3. Weather map and noise: presets (desert, maritime) to slabs, genera and heights; per-cell life
+   phase; Perlin-Worley volumes built at load.
+4. Cloud panorama (about 1024x512, updated over frames) marched through the slabs, ambient from the
+   sky-view table, aerial perspective; drawn behind the sky. Coverage console variable.
+5. Prototype judged on Kashan Desert (ground and air, coverage 0.3/0.7/1.0) against the references.
+6. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
+   overcast reference's SH.
+7. Cloud shadows on the ground and into the sky cube; then the night layers' stars.
+8. Sparse 3D particle clouds (its own task, later).
 
 Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`, earlier
 `m10-<view>` at 1600x900): Muttrah City and Fallujah West `sun`, `antisun`, `ridges`, `valley`,
