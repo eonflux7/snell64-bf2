@@ -796,8 +796,11 @@ only: no collision or gameplay out there.
   named place for the primary heightmap over position, rotation and scale; the fit gives the
   level's latitude, longitude, heading, scale, height offset (a level's 0 m is not sea level) and
   vertical ratio, and a poor fit means the name is borrowed and the level stays generated.
-  Undecided (owner): the bake at real heights (a step at the blend where real relief is 10-20x the
-  map's) or scaled by the fitted ratio.
+  Two variants, tried side by side (owner, 2026-11-23): unscaled (real heights, a step at the
+  blend where real relief is 10-20x the map's) and scaled (heights about a pivot times the fitted
+  ratio). One file holds the real heights in the level's datum with the ratio and pivot; a console
+  variable picks the variant and the height texture is rebuilt on the CPU (ring near the map,
+  blended to the bake), so the shader is unchanged.
 - **Which levels are real places** (review 2026-11-23, PR 1.9.0.0, 81 playable levels, by name,
   not yet checked by the fit): about 33 real places of relief like the map's (Fallujah West,
   Khamisiyah, Kashan, Debrecen, Normandy levels, Saaremaa, the Falklands, ...); about 18 real
@@ -842,7 +845,8 @@ Tasks:
 4. Shading: per-pixel normals, cloud shadows, the detail fade.
 5. The override file, the placement fit, and one real-place bake as the test: the Falklands
    (jets; its playable area is the islands, which the generated path would leave a flat plain),
-   else Kashan or Khamisiyah (jets, low relief).
+   else Kashan or Khamisiyah (jets, low relief); the two variants compared where they differ, on a
+   mountain level with jets (Kunar Province).
 6. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
 
