@@ -2484,6 +2484,16 @@ if(BUILD_TESTING)
     add_test(NAME bf2_antialiasing_policy_check COMMAND bf2_antialiasing_policy_check)
 endif()
 
+# [CHOSEN, not recovered] Content-free check of the whole-pixel menu glyph placement
+# (GeomMisc/FontSystem/GlyphPixelSnap.h, issue #45): synthetic layout cells, no font or renderer.
+add_executable(bf2_glyph_pixel_snap_check EXCLUDE_FROM_ALL Code/Tests/glyph_pixel_snap_policy.cpp)
+bf2_configure_cpp_target(bf2_glyph_pixel_snap_check)
+bf2_set_platform_compat(bf2_glyph_pixel_snap_check)
+bf2_set_image(bf2_glyph_pixel_snap_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_glyph_pixel_snap_check COMMAND bf2_glyph_pixel_snap_check)
+endif()
+
 # [TEMP] [CHOSEN, not recovered] Content-free check of the queued menu-mouse rule
 # (External/gameswf/SwiffPlayer/QueuedMouse.h): input ticks against frames, no movie or player.
 add_executable(bf2_swiff_queued_mouse_check EXCLUDE_FROM_ALL Code/Tests/swiff_queued_mouse.cpp)
@@ -3232,6 +3242,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_display_mode_policy_check
             bf2_swiff_queued_mouse_check
             bf2_antialiasing_policy_check
+            bf2_glyph_pixel_snap_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM
