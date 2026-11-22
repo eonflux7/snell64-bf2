@@ -298,27 +298,29 @@ Decided from these numbers (2026-11-22):
 ### 12. Clouds
 
 Decided by the owner, 2026-11-20: the levels' painted cloud layers are replaced by modern clouds,
-not constrained by the game's approach; the sky is clear until then. Clouds must not change
-gameplay: aircraft have no ceiling the clouds could sit above, so nothing that hides a target is
-placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full before it starts:
+not constrained by the game's approach; the sky is clear until then.
 
-- **Sky clouds (first).** Overcast decks, high cloud and distant banks drawn into the sky at
-  infinity, so they are never reached, flown above or into, and hide nothing. Raymarched per
-  direction through baked volumes (structure after Gaijin's Dagor daSkies2, below): Perlin-Worley
-  shape and erosion noise, the sky-view table as ambient, aerial perspective toward the horizon.
-  Rendered into a cloud panorama of its own (about 1024x512; the 192x108 sky-view table is too
-  coarse for cloud edges), updated over several frames, drifting with the wind. No parallax, so it
-  carries no near cumulus. The panorama's march is a real loop: unrolled it compiled for 17 s on
-  the main thread, and the loop draws the same under DXVK (the load-time tables' loops did not).
+**Reachable clouds** (owner, 2026-11-22, replacing the rule of 2026-11-20 that clouds stay at
+infinity and hide nothing): with Dagor's structure the clouds are volumes in the flight space,
+flown under, into and above, and they may hide aircraft and the ground. The GPU budget is set
+later (owner); until then it is measured, not capped.
+
+- **Volumetric clouds.** Low and mid cloud in baked volumes (structure after Gaijin's Dagor
+  daSkies2, below): Perlin-Worley shape and erosion noise, the cloud light table and sky as
+  ambient, aerial perspective. Near clouds are marched from the camera per screen pixel at reduced
+  resolution with temporal reprojection, stopped at the scene's depth; far ones come from a
+  cloud panorama (about 1024x512; the 192x108 sky-view table is too coarse for cloud edges),
+  updated over several frames, drifting with the wind. The marches are real loops: unrolled, the
+  panorama compiled for 17 s on the main thread, and the loop draws the same under DXVK (the
+  load-time tables' loops did not).
 - **Coverage drives the lighting.** One coverage value per level (0 clear, 1 storm; picked per
   level outside this tree, a default otherwise) sets the clouds and the light together: the sun
   dimmed and its shadows softened, sky light greyer, more even and relatively brighter, the haze and
   reflections greyer through the sky they read. Overcast reads through the lighting, not the
   texture.
-- **Sparse 3D clouds (later, its own task).** Small cumulus, and under overcast low ragged scud
-  below the deck, in the flight space and flown through: clusters of lit soft particles (no
-  raymarching, no temporal reprojection). Thin and sparse, so they hide almost nothing; they give
-  parallax and the feel of flying under weather.
+- **Low scud (perhaps, later).** The volumes now give parallax and fly-through, which the planned
+  sparse particle clouds were for; ragged scud under an overcast deck, finer than the 128 m field,
+  is left as an option once the volumes are judged.
 - Cloud shadows on the ground (a 2D map from the sun, scrolling with the wind) and into the sky
   cube.
 
@@ -369,7 +371,8 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
   sunset; tops warmer than bases), a continuous cloud type for the height profiles, the haze dimmed
   by the sun ray's length through the cloud slab, the panorama crossfaded between two updates and
   blended in tonemapped space, Beer shadow maps for ground shadows, and stars and moon placed by
-  latitude and sidereal time. Not taken: near-cloud reprojection (no parallax here), the clear-hole
+  latitude and sidereal time; with reachable clouds (2026-11-22) also the camera-traced near
+  clouds with temporal reprojection and the panorama for the far field. Not taken: the clear-hole
   logic, the rain map (perhaps with weather later), node-graph generation.
 - **Not done:** a coarse atmospheric simulation at load (Goswami and Neyret 2017; Vimont et al.
   2020) writing the weather map. Its gain is clouds tied to terrain (sea breezes, ridge caps), which
@@ -395,11 +398,11 @@ order of value:
 4. Cloud statistics (coverage, size distribution) from a red/blue segmentation, masking about 5°
    around the sun for flare; only if the prototype's clouds look wrong (Dagor's noise is tuned).
 
-First task: a prototype of the sky clouds, the two presets (desert, maritime) and the coverage
-value, with the Mie phase and multiple scattering, before the lighting is coupled. Judged on Kashan
-Desert from the ground and the air at coverage 0.3, 0.7 and 1.0, against the reference set by
-uses 1, 2 and 4. Budget about 0.3–0.6 ms at 1920x1080, measured on the benchmark paths at
-acceptance.
+The prototype (the two presets, the coverage value, the Mie phase and multiple scattering, before
+the lighting is coupled) is judged on Kashan Desert from the ground, the air and inside a cloud at
+coverage 0.3, 0.7 and 1.0, against the reference set by uses 1, 2 and 4. Its GPU time at
+1920x1080 is measured on the benchmark paths; the budget is the owner's to set (the first plan's
+0.3–0.6 ms was for the panorama alone).
 
 **Built so far.**
 - *Task 1, the cloud material* (`RaCloud.fxh`, shaders outside this tree). Density
@@ -457,7 +460,8 @@ acceptance.
   low coverage they bunch in one ~20 km weather region (Dagor's weather frequency, 2 per world).
   `tools.clouds` dumps every volume.
 - *The panorama* (`Clouds.cpp`, `RaClouds.fx` technique `RaCloudPanorama`, `RaCloudPanorama.fxh`,
-  contract 14). 1024x512 `A16B16G16R16F` over the upper hemisphere seen from the level's origin at
+  contract 14), built while clouds stayed at infinity; task 4 makes it the far field seen from the
+  camera's height. 1024x512 `A16B16G16R16F` over the upper hemisphere seen from the level's origin at
   the reference height (no parallax): u the azimuth, v sqrt(elevation / 90°), finer toward the
   horizon. rgb the light the clouds and the air in front of them add, stored as
   rgb / (1 + luminance); a the clouds' transmittance. Drawn a band of 64 rows a frame into a ring

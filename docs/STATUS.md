@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–3 built; task 4 (reference set) next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–3 built; task 4 (reachable clouds) next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -25,19 +25,29 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
    cloud's flat layer moves to task 3 with the panorama that draws it.
 3. Cloud panorama, high cloud and wind (contract 14; `renderer.clouds`): built (agent: Kashan
    Desert at coverage 0.3/0.4/1.0, ground and 600 m, `tools.clouds`).
-4. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
+4. Reachable clouds (owner, 2026-11-22: clouds are flown through and may hide aircraft; the GPU
+   budget is set later). Near clouds marched from the camera per screen pixel at reduced
+   resolution (Dagor: quarter, checkerboard) through the live volumes, stopped at the scene's
+   linear depth (s15), with temporal reprojection (camera motion and the wind's drift), which
+   also settles the march's noise; composited over the opaque scene before the transparent
+   queues. The panorama becomes the far field, marched from the camera's height, with a handoff
+   distance to the near march. Inside a cloud the view fades to its light. Detail noise carries
+   the close range (the field's 128 m texels are soft up close). Each level's flight ceiling
+   checked against the slabs (desert base 3.5 km, maritime 0.5 km).
+5. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
    maritime, coverage about 0.3/0.7/1.0, 2 sunsets; open sky) with each one's sun position and an
    unclipped-sun check; a second script measures the luminance ratios. The list goes in render.md.
    Cloud statistics only if the prototype looks wrong.
-5. Prototype judged on Kashan Desert (ground and air, coverage 0.3/0.7/1.0) against the references.
-6. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
+6. Prototype judged on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0) against the
+   references; its GPU time measured.
+7. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
    overcast reference's SH. The haze and sky light are dimmed by the sun ray's length through the
    cloud slab times coverage (Dagor's `statistical_clouds_shadow`).
-7. Cloud shadows on the ground (Beer shadow maps, Hillaire 2020) and into the sky cube; then the
+8. Cloud shadows on the ground (Beer shadow maps, Hillaire 2020) and into the sky cube; then the
    night layers: stars from a catalog with the moon, the sky's rotation from latitude and sidereal
    time (Dagor's `daStars`, `daSkiesAstronomy`; the catalog's source and licence checked first).
    PR's sun direction is kept (baked lightmaps follow it); a date is fitted to it.
-8. Sparse 3D particle clouds (its own task, later).
+9. Low scud under overcast (perhaps; render.md).
 
 Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`, earlier
 `m10-<view>` at 1600x900): Muttrah City and Fallujah West `sun`, `antisun`, `ridges`, `valley`,

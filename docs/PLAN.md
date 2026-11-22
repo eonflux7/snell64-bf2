@@ -22,7 +22,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 10. Terrain in one pass | Accepted | `2eb4d02d`, `c21a012e`, `0d9e15a6`, `57fa2899`, `3b9da48c`, `6fd523bb`, and the deletion ("milestone 10 accepted") |
 | 11. Atmosphere, sky IBL, water reflections | Accepted | `git log --grep 'milestone 11'`, and the deletion ("milestone 11's switches and the sky dome deleted") |
 | 15. Shader pipeline (ahead of 12) | Accepted | `a14e57a6`, `cbbe8725` |
-| 12. Clouds | Not started | — |
+| 12. Clouds | In progress (tasks in STATUS.md) | `git log --grep 'milestone 12'` |
 | 13. HDR bloom + auto-exposure | Not started | — |
 | 14. GTAO + lightmap channel ownership | Not started | — |
 
