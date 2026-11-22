@@ -114,7 +114,7 @@ in [Frame](#frame), the sampler rules in the [shader contract](#shader-contract)
   the last tenth of the view distance; near and far overgrowth share one lighting model
   (`a7d9e0e1`, `1e7a1c89`, `680d8890`).
 - Dropped: thin-geometry widening (cables break into dashes beyond about 100 m, as in retail).
-  Moved to milestone 13: the compressed (Karis) resolve.
+  Moved to milestone 13, then dropped there: the compressed (Karis) resolve.
 
 Limits: shading once per pixel leaves glossy surfaces sparkling (specular AA is milestone 11). The
 default video profile still picks 8x antialiasing while the scene runs 4x. `Ra_LodDitherClip` runs
@@ -679,7 +679,7 @@ As built:
 
 ### 13. HDR bloom + auto-exposure
 
-Tasks 1–5 built (2026-11-22), in game, awaiting the owner's look; 6 open. Everything runs in
+Tasks 1–5 built (2026-11-22), in game, awaiting the owner's look; 6 dropped. Everything runs in
 `HdrPost.cpp` (effect `Shaders/RaHdrPost`, contract 19), called by the post-production composite
 (`postProductionFinish`) on the resolved single-sample float scene just before the final copy
 (FSQuadDrawer pass 0, the grade), after tinnitus, flashbang and gas mask; skipped when TV draws
@@ -723,14 +723,11 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    ceiling: at +4 stops its terrain draws at about 25/255 (2.2 encode at 0 stops: 8/255; retail
    about 30/255, reached at +4.5, where the scene starts to read as an overcast dusk). The toe is
    not changed. Night particles: not yet looked at there.
-6. **Compressed (Karis) resolve: decided by A/B** (moved here from milestone 10, owner,
-   2026-11-20): at a window seen from a dark interior and at foliage against the sky. It pays only
-   where an edge's samples straddle the tonemap's shoulder, which auto-exposure makes more common
-   (an interior exposed up puts the window far past it). Cost found in a first attempt: every
-   scene pixel shader encodes through a flag in an engine-owned pixel register, the resolve
-   expands in the depth rebuild's full-screen pass, and every pass blending before the resolve
-   (decals, particles, water, first-person transparents, additive light passes) blends compressed
-   values, with additive sums clamped at the expansion. Dropped if the A/B shows no gain.
+6. **Compressed (Karis) resolve: dropped** (owner, 2026-11-22). The owner sees no aliasing at
+   bright edges with auto-exposure and bloom on. It would have meant every scene pixel shader
+   writing compressed colour through an engine-owned register flag, an expansion pass at the
+   resolve, and every pass blending before the resolve (decals, particles, water, first-person
+   transparents, additive light passes) blending compressed values.
 7. **Judged by eye** on Muttrah City (street to open ground), Fallujah West (interiors), Saaremaa,
    The Falklands (water glitter, night); GPU cost with the final GPU pass.
 

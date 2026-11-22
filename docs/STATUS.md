@@ -24,7 +24,7 @@ Design and as built in [render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
 4. Bloom (`renderer.bloom`, `bloomStrength`), replacing retail's glow while on: built.
 5. Night: The Falklands' night layer on the +4-stop ceiling (owner to judge); night particles not
    yet looked at.
-6. Compressed (Karis) resolve, by A/B: open.
+6. Compressed (Karis) resolve: dropped (owner, 2026-11-22: no aliasing seen at bright edges).
 7. Judged by eye; GPU cost with the final GPU pass.
 
 ## Paused: `render` milestone 12, clouds
