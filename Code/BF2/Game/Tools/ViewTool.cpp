@@ -1031,6 +1031,30 @@ std::string toolsClouds(const std::string& requested)
     return std::string(ok ? "tools.clouds: wrote " : "tools.clouds: failed: ") + (message ? message : "");
 }
 
+// tools.exposure [NAME] (render milestone 13): <outputDir>\<map>\exposure\<NAME>.txt, written at
+// once: the auto-exposure's state, histogram and meter, and the bloom. NAME as for tools.atmosphere.
+std::string toolsExposure(const std::string& requested)
+{
+    dx9rend::IRendererTools* const tools = rendererTools();
+    if (!tools)
+        return "tools.exposure: the renderer has no tools";
+    std::string map = game ? game->getCurrentMapName() : std::string();
+    if (map.empty())
+        return "tools.exposure: no map loaded";
+    for (size_t i = 0; i < map.size(); ++i)
+        map[i] = static_cast<char>(tolower(static_cast<unsigned char>(map[i])));
+    const std::string name = requested.empty()
+        ? (g_state.view.empty() ? std::string("camera") : g_state.view) : requested;
+    if (!validShotName(name))
+        return "tools.exposure: a name has only letters, digits, '_', '-' and '.'";
+    const std::string dir = outputDirectory() + "\\" + map + "\\exposure";
+    if (!makeDirectories(dir))
+        return "tools.exposure: cannot create " + dir;
+    const char* message = "";
+    const bool ok = tools->toolsWriteExposure((dir + "\\" + name).c_str(), message);
+    return std::string(ok ? "tools.exposure: wrote " : "tools.exposure: failed: ") + (message ? message : "");
+}
+
 // Once per frame while a survey is pending.
 void surveyStep()
 {
@@ -1716,6 +1740,8 @@ BF2_CONSOLE_METHOD_0_RET_ACTIVE(lastSurvey, toolsLastSurvey, std::string, true, 
 BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(atmosphere, toolsAtmosphere, std::string, true, std::string,
                                   std::string(), kViewToolConsoleTag)
 BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(clouds, toolsClouds, std::string, true, std::string,
+                                  std::string(), kViewToolConsoleTag)
+BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(exposure, toolsExposure, std::string, true, std::string,
                                   std::string(), kViewToolConsoleTag)
 
 dx9rend::IUiViewTool* viewToolUi()

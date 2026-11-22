@@ -231,6 +231,10 @@ public:
     {
         return dx9rend::toolsWriteClouds(base, message);
     }
+    virtual bool toolsWriteExposure(const char* base, const char*& message)
+    {
+        return dx9rend::toolsWriteExposure(base, message);
+    }
 };
 
 RendererTools g_tools;

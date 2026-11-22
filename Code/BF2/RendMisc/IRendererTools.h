@@ -70,6 +70,10 @@ public:
     // and base-<volume>.png, at once, as toolsWriteAtmosphere.
     virtual bool toolsWriteClouds(const char* base, const char*& message) = 0;
 
+    // Exposure (docs/lanes/tools.md#exposure): writes render milestone 13's auto-exposure state,
+    // histogram, meter and bloom to base.txt and base-bloom.png, at once, as toolsWriteAtmosphere.
+    virtual bool toolsWriteExposure(const char* base, const char*& message) = 0;
+
 protected:
     ~IRendererTools() {}
 };

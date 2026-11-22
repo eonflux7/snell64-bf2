@@ -9,6 +9,8 @@ namespace dx9rend {
 bool toolsWriteAtmosphere(const char* base, const char*& message);
 // IRendererTools::toolsWriteClouds (render milestone 12).
 bool toolsWriteClouds(const char* base, const char*& message);
+// IRendererTools::toolsWriteExposure (render milestone 13).
+bool toolsWriteExposure(const char* base, const char*& message);
 
 } // namespace dx9rend
 } // namespace hfe

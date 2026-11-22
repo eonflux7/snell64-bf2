@@ -889,6 +889,129 @@ bool toolsWriteClouds(const char* base, const char*& message)
     return failed.empty();
 }
 
+// tools.exposure (render milestone 13): the auto-exposure's state, histogram and meter as the last
+// frame left them, and the settings.
+bool toolsWriteExposure(const char* base, const char*& message)
+{
+    message = "";
+    const HdrPostInfo e = rendererHdrPostInfo();
+    if (!base || !device())
+        g_message = "no renderer";
+    else if (!e.frames)
+        g_message = "the HDR post has not run (Shaders/RaHdrPost missing, or bloom and exposure off)";
+    else
+        g_message.clear();
+    if (!g_message.empty())
+    {
+        message = g_message.c_str();
+        return false;
+    }
+    const std::string root(base);
+    FILE* const f = std::fopen((root + ".txt").c_str(), "w");
+    if (!f)
+    {
+        g_message = "cannot write " + root + ".txt";
+        message = g_message.c_str();
+        return false;
+    }
+    std::string failed;
+    std::fprintf(f, "# tools.exposure (render milestone 13): bloom and auto-exposure, the last frame's\n");
+    std::fprintf(f, "[settings] exposure %s, bias %.2f, min %.2f, max %.2f stops, speed %.2f (into light %.1f/s, "
+                    "dark %.1f/s); key %.3f; bloom %s, strength %.3f; encode %s\n",
+                 e.exposureAuto ? "auto" : "manual", e.exposureBias, e.exposureMin, e.exposureMax, e.exposureSpeed,
+                 e.rateLight * e.exposureSpeed, e.rateDark * e.exposureSpeed, e.key, e.bloom ? "on" : "off",
+                 e.bloomStrength, e.encodeSrgb ? "sRGB" : "2.2");
+    std::fprintf(f, "[frame] %u frames, last ran %s%s, dt %.4f s%s; scene %ux%u, %u bloom levels\n", e.frames,
+                 e.ran ? "yes" : "no", e.thermal ? " (thermal view: skipped)" : "", e.lastDt,
+                 e.lastSnap ? " (snapped)" : "", e.sceneW, e.sceneH, e.levels);
+
+    Table state;
+    std::string why;
+    if (e.state && readTable(e.state, state, why))
+    {
+        const float* const v = state.at(0, 0);
+        std::fprintf(f, "[state] adapted %.3f EV (luminance %.5f), metered %.3f EV (%.5f), exposure x%.4f "
+                        "(%+.3f stops), written %.0f\n", v[0], std::exp2(v[0]), v[2], std::exp2(v[2]), v[1],
+                     v[1] > 0.0f ? std::log2(v[1]) : -99.0, v[3]);
+    }
+    else
+    {
+        std::fprintf(f, "[state] none%s%s\n", e.state ? ": " : "", e.state ? why.c_str() : "");
+        if (e.state)
+            failed += "state ";
+    }
+
+    Table hist;
+    if (e.histogram && readTable(e.histogram, hist, why))
+    {
+        double total = 0.0;
+        for (unsigned int i = 0; i < 64; ++i)
+            total += hist.at(i / 4, 0)[i % 4];
+        std::fprintf(f, "[histogram] 64 bins over %.1f .. %.1f EV, total weight %.1f (bin: low EV, weight, share, "
+                        "cumulative share)\n", e.evLow, e.evLow + e.evRange, total);
+        double below = 0.0;
+        for (unsigned int i = 0; i < 64; ++i)
+        {
+            const double w = hist.at(i / 4, 0)[i % 4];
+            below += w;
+            if (w > 0.0)
+                std::fprintf(f, "  %2u %+7.3f %8.2f %.4f %.4f\n", i, e.evLow + i * e.evRange / 64.0, w,
+                             total > 0.0 ? w / total : 0.0, total > 0.0 ? below / total : 0.0);
+        }
+    }
+    else
+    {
+        std::fprintf(f, "[histogram] none\n");
+        if (e.histogram)
+            failed += "histogram ";
+    }
+
+    Table meter;
+    if (e.meter && readTable(e.meter, meter, why))
+    {
+        float lo = 1e9f, hi = -1e9f;
+        double sum = 0.0;
+        for (unsigned int y = 0; y < meter.h; ++y)
+            for (unsigned int x = 0; x < meter.w; ++x)
+            {
+                const float v = meter.at(x, y)[0];
+                lo = v < lo ? v : lo;
+                hi = v > hi ? v : hi;
+                sum += v;
+            }
+        std::fprintf(f, "[meter] %ux%u log2 luminance: min %.3f, max %.3f, mean %.3f EV; rows (every 4th, every 8th "
+                        "texel):\n", meter.w, meter.h, lo, hi, sum / (meter.w * meter.h));
+        for (unsigned int y = 0; y < meter.h; y += 4)
+        {
+            std::fprintf(f, "  %2u", y);
+            for (unsigned int x = 0; x < meter.w; x += 8)
+                std::fprintf(f, " %+6.2f", meter.at(x, y)[0]);
+            std::fprintf(f, "\n");
+        }
+    }
+    else
+    {
+        std::fprintf(f, "[meter] none\n");
+        if (e.meter)
+            failed += "meter ";
+    }
+
+    Table bloom;
+    if (e.bloom && e.bloomTop && readTable(e.bloomTop, bloom, why))
+    {
+        writeStats(f, "bloom", bloom);
+        float scale;
+        if (writePng(bloom, root + "-bloom.png", false, scale))
+            std::fprintf(f, "[bloom] png %s-bloom.png (level 0 after the up chain, the sum of %u levels; rgb x%.4g)\n",
+                         root.c_str(), e.levels, scale);
+    }
+
+    std::fclose(f);
+    g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";
+    message = g_message.c_str();
+    return failed.empty();
+}
+
 } // namespace dx9rend
 } // namespace hfe
 } // namespace dice
