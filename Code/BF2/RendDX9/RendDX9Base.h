@@ -758,7 +758,7 @@ const unsigned int kWaterSceneSampler = 12;
 // direction. The targets go at a device reset.
 const unsigned int kWaterWaveSampler = 6;
 // [RENDER] Render milestone 16 task 5, water's foam (contract 18): the two finer cascades' foam
-// maps (256 x 256 R16F with mips, coverage 0-1) on kWaterFoamSampler .. + 1 (16x anisotropic,
+// maps (256 x 256 G16R16F with mips, r coverage 0-1, g the compression in ramps) on kWaterFoamSampler .. + 1 (16x anisotropic,
 // wrap) and RaWaterFoam in kWaterFoamRegister (1, the depth waves break at in metres, the waves'
 // loop seconds, 0) while the water queue draws with waves; zero otherwise. renderer.waterFoam
 // scales the crest foam's coverage (1 Monahan's for the wind; 0 no foam maps).

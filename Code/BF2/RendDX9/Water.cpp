@@ -30,7 +30,7 @@
 //                    photographs of the sun's glitter", 1954): sigma_u^2 = 0.00316 U, sigma_c^2 =
 //                    0.003 + 0.00192 U, at least kTailFloor of them
 //   RaWaterFoam      per foam cascade (the two finer ones; the coarsest is swell, which does not
-//                    break) into its own 256 x 256 R16F target with mips, ping-ponged with last
+//                    break) into its own 256 x 256 G16R16F target with mips, ping-ponged with last
 //                    frame's (render milestone 16, task 5, contract 18): the surface's compression
 //                    1 - J (J the Jacobian of the displaced surface, Tessendorf's x + lambda D,
 //                    lambda kChoppiness) past a threshold makes fresh foam, and last frame's fades
@@ -39,7 +39,9 @@
 //                    is the Gaussian quantile that whitecaps start on a fraction of the surface such
 //                    that, with their fade, the foam covers Monahan's measured whitecap coverage for
 //                    the wind (3.84e-6 U^3.41; Monahan and O'Muircheartaigh 1980). The mips average
-//                    coverage, so distant foam filters to its share of the pixel.
+//                    coverage, so distant foam filters to its share of the pixel. The maps' g is the
+//                    compression over the ramp, by which the water shader weights the finer
+//                    cascade's foam (short waves break on the longer ones' crests).
 //
 // The three slope maps are bound to the reserved samplers s6-s8 (16x anisotropic, wrap) while the
 // water queue draws, and RaWaterSsr.w is set to 1 (rendererWaterBindWaves). The wind's direction is
@@ -516,7 +518,7 @@ void logFoamCoverage()
         IDirect3DSurface9* top = 0;
         IDirect3DSurface9* mem = 0;
         t->GetSurfaceLevel(t->GetLevelCount() - 1, &top);
-        if (top && device()->CreateOffscreenPlainSurface(1, 1, D3DFMT_R16F, D3DPOOL_SYSTEMMEM, &mem, 0) >= 0
+        if (top && device()->CreateOffscreenPlainSurface(1, 1, D3DFMT_G16R16F, D3DPOOL_SYSTEMMEM, &mem, 0) >= 0
             && device()->GetRenderTargetData(top, mem) >= 0)
         {
             D3DLOCKED_RECT r;
@@ -609,7 +611,7 @@ void rendererWaterFrame()
     for (unsigned int i = 0; i < kFoamMaps && foam; ++i)
     {
         const bool had = s.foam[0][i] && s.foam[1][i];
-        foam = createTarget(kN, kN, 0, D3DFMT_R16F, s.foam[0][i]) && createTarget(kN, kN, 0, D3DFMT_R16F, s.foam[1][i]);
+        foam = createTarget(kN, kN, 0, D3DFMT_G16R16F, s.foam[0][i]) && createTarget(kN, kN, 0, D3DFMT_G16R16F, s.foam[1][i]);
         if (!had)
             s.foamFresh = true;
     }
