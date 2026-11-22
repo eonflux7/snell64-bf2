@@ -423,6 +423,38 @@ acceptance.
   the ground everywhere has the level's albedo. Kashan Desert (sun 50°): sun 7.3/7.4/7.1 at
   0.75 km to 7.7/8.1/8.9 at 11 km; sky 0.07/0.15/0.36 to 0.02/0.04/0.12; ground 0.59/0.49/0.30.
   `tools.atmosphere` dumps it (`[cloudlight]`). Nothing samples it before task 3.
+- *Weather and volumes* (`Clouds.cpp`, contract 13; Dagor's structure in D3D9 form). A weather
+  map, 128² A8R8G8B8 over a 65,536 m world that wraps (r low layer's coverage, g mid layer's,
+  b cloud type: 0 stratus, 0.5 cumulus, 1 cumulonimbus), built on a worker thread from Dagor's
+  `gen_weather` (28 ms; Perlin octave sums unnormalized, as Dagor's thresholds expect). Each
+  region (~2 km) of the low and mid signals swells and shrinks by its own phase and period
+  (10–30 min) around its mean, so coverage holds while clouds evolve. Noise volumes (built once on
+  worker threads, ~190 ms; managed L8): shape 128²×32, Dagor's Perlin-Worley at five Perlin
+  octaves (six and seven alias at 128 texels), and detail 32³ Worley for task 3's erosion. Built
+  by pixel passes into a double buffer and made live whole (about 23 frames: the weather, 8
+  frames of field, 1 coarse, 8 light; again every 10 s, or at once when a setting changes):
+  - field, 512²×64 density over the world and the slab (128 m across), a 2048² A8R8G8B8 atlas of
+    4×4 tiles, four slices per texel in rgba. Dagor's density with its cloud-type height profiles
+    (low layer the lower 80 % of the slab, mid layer the top third, bottom rounding, the
+    cumulonimbus waist and anvil) and its shape tiling (each 4 km cell its own offset and
+    rotation); not taken: the curl-noise turbulence, the rain map. Read with two fetches and a
+    blend between slices (`Ra_CloudFieldDensity`).
+  - coarse, the field's maximum over 8×8×8 texels, 128×64 A8R8G8B8 (2 tiles of 4 slice groups),
+    for task 3 to skip empty space; the dump checks it bounds the field.
+  - light, 256²×64 A16B16G16R16F, 8×8 tiles: the transmittance toward the sun at the last
+    octave's extinction (32 steps, quadratic, to the slab's top or 30 km), and the octave-weighted
+    visibility straight up and straight down (8 steps each), which weigh the sky's and the
+    ground's light in `Ra_CloudAmbient`.
+  Presets (`renderer.cloudPreset`): *desert* slab 3.5–9.5 km above the reference height (hot,
+  dry: base 125 m × (T − Td) ≈ 3.5 km), cloud type 0.25–0.55, LWC 0.6 g/m³, droplets 12 µm
+  (continental); *maritime* 0.5–5.5 km, type 0–0.3 (stratus to stratocumulus), 0.35 g/m³,
+  20 µm. `renderer.cloudCoverage` (default 0.4) feeds Dagor's coverage curve; the mid layer
+  takes 0.6 of it. Kashan Desert, desert preset, from above: the share of the sky with column
+  optical depth over 1 is 0.14, 0.72 and 0.95 at coverage 0.3, 0.7 and 1.0 (seen from the
+  ground towers' sides add to it); the clouds sit 3.6–7 km. Open, for the panorama (task 3) to
+  show: the field's shapes read as fuzz from above rather than distinct cumulus cells, and at
+  low coverage they bunch in one ~20 km weather region (Dagor's weather frequency, 2 per world).
+  `tools.clouds` dumps every volume.
 
 ### 13. HDR bloom + auto-exposure
 
@@ -652,6 +684,7 @@ and add its row here.
 | 10 | Sky cube (render milestone 11, task 7): the sky cube on the reserved sampler s10 (`A16B16G16R16F` cube, 128 per face, 6 mips, trilinear, clamp): mip m is GGX-prefiltered for perceptual roughness m / 5 (alpha its square), so `texCUBElod(dir, roughness * 5)`; the model's clear sky above the horizon (no sun disc), the lit ground hazed toward the horizon below it; in scene units, the drawn sky's scale. The split-sum BRDF table on s11 (64x64 `A16B16G16R16F`, bilinear, clamp): u n.v, v perceptual roughness, r scale and g bias on F0 (Smith GGX, k = alpha / 2). `RaSkySH` in pixel registers c192–c198 (engine-owned): the sky's irradiance / pi (the authored sky colour's unit) at normal n per channel ch = dot([ch], (n, 1)) + dot([3 + ch], n.xyzz * n.yzzx) + [6][ch] * (n.x² − n.y²); [6].w 1 while live, all zero (and s10, s11 unbound) before the first fit. Particle effects get the same 7 float4s as the parameter `RaSkyShVertex` (`rendererBindParticleLighting`), for their vertex shaders. Its sky part is scaled so its upward value keeps the authored sky colour's luminance; the ground's bounce is not scaled |
 | 11 | One light (render milestone 11, task 8): the atmosphere's sun at the ground (`RaAtmosphere[9]`, the sky, disc and haze) is the surfaces' sun, the authored colour^2.2 x 2^2.2; the sky is physical under it, unscaled (the sky gain is gone, `RaAtmosphere[4].w` is 1); `RaSkySH` and the sky cube are in those units, unscaled, so a shader uses them as they are next to `Ra_SunIrradiance` |
 | 12 | Water reflections (render milestone 11, task 12): just before the water queue draws, above water, with this frame's prepass, the scene colour is copied into a single-sample texture of its size and format on the reserved sampler s12 (bilinear, clamp), and pixel register c191 is `RaWaterSsr` (1, 1 / width, 1 / height, 0); zero otherwise and after the water. While water draws, s15 holds the opaque linear depth only (water's own goes to the multisampled target, resolved later) |
+| 13 | Sky clouds' volumes (render milestone 12, task 2): effect `Shaders/RaClouds`, techniques `RaCloudBuildField`, `RaCloudBuildCoarse`, `RaCloudBuildLight`, drawn by the engine (`Clouds.cpp`) a viewport per atlas tile into its own targets; parameters by semantic `RaClouds` (`float4[8]`: field world origin, size; slab base, top; toward the sun, LWC at density 1; droplet diameter, mid layer's density, shape tiles), `RaCloudWeather`, `RaCloudShape`, `RaCloudDetail` (volume textures), `RaCloudField`, `RaCloudCoarse`, `RaCloudLight`. Layouts in the shaders' `RaCloudField.fxh` and below |
 
 Samplers 9–13 and 15 are reserved for renderer frame resources, and pixel registers
 c191–c223 for `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

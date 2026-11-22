@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): task 1 built; task 2 (weather map, baked volumes) next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–2 built; task 3 (cloud panorama) next | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -20,15 +20,14 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
 
 1. Cloud material (`RaCloud.fxh`: delta-scaled droplet phase, octaves) and the cloud light table: built
    (agent: compiled, table dumped on Kashan Desert); nothing draws with it before task 3.
-2. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
-   slabs, heights and a continuous cloud type (stratus to cumulonimbus: height profile, base
-   rounding, anvil; Dagor's `gen_clouds_lut`); per-cell life phase; the density field and the
-   sun-transmittance and ambient volume as 2D slice atlases, rendered by pixel shaders over frames;
-   an ⅛ field for empty space; high cloud (Ci/Cc/Cs) as a procedural flat layer at its altitude.
+2. Weather map and baked volumes (`Clouds.cpp`, `RaClouds.fx`, contract 13; `renderer.cloudPreset`,
+   `renderer.cloudCoverage`): built (agent: `tools.clouds` on Kashan Desert at 0.3/0.7/1.0); high
+   cloud's flat layer moves to task 3 with the panorama that draws it.
 3. Cloud panorama (about 1024x512) marching the baked atlases with detail noise at sample time,
-   ambient from the sky-view table, aerial perspective; drawn behind the sky. Updated over 8
-   frames and crossfaded between two panoramas, blended in a compressed (tonemapped) space so
-   evolution does not pop or flicker (Dagor's `daSkiesPanorama`). Coverage console variable.
+   ambient from the cloud light table (task 1), aerial perspective; drawn behind the sky. Updated
+   over 8 frames and crossfaded between two panoramas, blended in a compressed (tonemapped) space
+   so evolution does not pop or flicker (Dagor's `daSkiesPanorama`). With it the high cloud
+   (Ci/Cc/Cs) as a procedural flat layer, and the wind drift.
 4. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
    maritime, coverage about 0.3/0.7/1.0, 2 sunsets; open sky) with each one's sun position and an
    unclipped-sun check; a second script measures the luminance ratios. The list goes in render.md.

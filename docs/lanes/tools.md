@@ -419,3 +419,22 @@ the debug menu. Fails before the first fit.
   irradiance, the sky's radiance from above and the ground's from below.
 
 The managed tables are locked where they are; the atlas is read back from its render target.
+
+## Clouds
+
+`tools.clouds [NAME]` (render milestone 12, task 2; `tools(clouds)`) writes
+`<outputDir>/<map>/clouds/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
+`RendDX9/ToolsAtmosphere.cpp`: the sky clouds' live volumes. Fails before the first set is live
+(about 25 frames after the atmosphere's fit).
+
+- `[clouds]`: preset, coverage, the weather's life time, the slab, LWC and droplet size; the
+  noise's and the weather's build time, frames per build, builds so far.
+- `[weather]`: statistics and `<NAME>-weather.png`. `[shape]`, `[detail]`: the noise volumes'
+  slices, `<NAME>-shape.png`, `<NAME>-detail.png`.
+- `[field]`: per slice its height, the share of texels over 0.02, the mean and the maximum; from
+  above, the share of the sky whose column optical depth (RaCloud.fxh's extinction) is over 1 and
+  over 10, its mean and maximum; `<NAME>-field-columns.png` (each column's maximum) and
+  `<NAME>-field-slices.png` (every 4th slice). `[coarse]`: field texels above their block's bound
+  (0 expected).
+- `[light]`: per slice the mean sun (last octave), sky and ground visibility, and the darkest sun;
+  `<NAME>-light.png` (every 4th slice, sun and sky visibility).
