@@ -653,23 +653,28 @@ As built:
   Jxz of all three cascades, so each has its whole Jacobian of the displaced surface (x + λD,
   D = i k̂ h toward the crests, λ 1). `RaWaterFoam` per foam cascade (87 and 17.3 m; the 503 m one
   is swell and does not break): the compression 1 − J past a threshold ramps in fresh foam over
-  0.5 σ, last frame's fades by 1/e in 3 s; 256² `R16F` maps with mips, ping-ponged, on s4–s5. To
+  0.5 σ, last frame's fades by 1/e in 3 s; 256² `G16R16F` maps with mips (r the foam, g the
+  compression in ramps), ping-ponged, on s4–s5. To
   first order the compression is the displacement's divergence, of variance the cascade's mean
   square slope σ²; the threshold is the Gaussian quantile at which whitecaps start on Monahan's
   coverage (3.84e-6 U^3.41) / (4 × 2) of each cascade, the 4 the fade's spread. Measured from the
   maps' last mips (logged once, 30 s after a spectrum): 4.97 % at 15 m/s against Monahan's 3.93 %.
-  The surface shader combines the two cascades and the shore as independent layers; the shore's
-  share is 1 − depth / (Hs / 0.78), the depth waves break at, from the water body's depth to the
-  bed (so also around piers and rocks, and over shoals). The finest cascade's foam is weighted by
-  a 12 m value-noise field of mean 1 drifting downwind (wave groups), and the coverage is drawn as
+  The surface shader combines the two cascades and the shore as independent layers. The 17.3 m
+  cascade's foam is weighted by the 87 m cascade's compression (1 + c/σ, clamped: short waves break
+  on the longer ones' crests), so its period does not show as a tile (owner, 2026-11-22); the 87 m
+  cascade's by a 40 m value-noise field of mean 1 drifting downwind. The shore's share is
+  1 − depth / (Hs / 0.78), the depth waves break at, the depth to the bed along the unbent view
+  ray (the refracted one jitters with the waves), deep where sky is a pixel away; the ramp is
+  box-filtered over the depths the pixel spans (`fwidth`), from the surface down, so a band
+  narrower than a pixel fades instead of stepping. The coverage is drawn as
   two octaves of noise (1.6 and 0.35 m, three times longer downwind) below it, translucent as it
   thins; past 1.6 m of pixel footprint the plain coverage. Foam is a diffuse layer of albedo 0.6
   under the sun (the wave normal's N.L, shadowed) and the sky, over everything else. What shows is
   less than the maps' coverage (the fraying and the groups' clamp take some off).
   `renderer.waterFoam` scales the coverage (1; 0 no foam maps). `RaWaterFoam` (c188): x 1 while the
   maps are bound, y the breaking depth, z the waves' loop seconds.
-- Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up. The water
-  material effect (`RaShaderWaterBase`) is.
+- Water's shaders (`RaWater`, the water material) are not rebuilt by `rdev.sh reload`; a level load
+  picks them up.
 
 ### 13. HDR bloom + auto-exposure
 

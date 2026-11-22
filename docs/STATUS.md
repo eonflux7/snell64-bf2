@@ -31,7 +31,8 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#16-water)); as built the
    (agent: The Falklands `wy136`, `wlow`, `wy316` against task 3, clouds off; the crest light not
    seen yet, it wants a low sun). Found on the way: fix R (16 KB pixel shader buffer).
 5. Foam at shores and on crests: built (agent: The Falklands `wlow` at 7 and 15 m/s, `wy136`, `wshore`
-   (the small island zoomed); `renderer.waterFoam` 0 for none).
+   (the small island zoomed), `whigh`, `wy316`; `renderer.waterFoam` 0 for none); reworked after
+   the owner's look for tiling and aliasing.
 6. Geometry: normals only for now (owner, 2026-11-22).
 7. Judged by eye on The Falklands and Saaremaa; GPU cost measured.
 
@@ -70,9 +71,10 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   ground), `kas_here` and `m12-up` at `renderer.cloudCoverage` 0.3, 0.7 and 1.0 (1.0 a grey storm
   deck); `renderer.clouds 0` for the clear sky's light. `tools.clouds` writes `-shadow.png`.
 
-- Water's foam (render milestone 16, task 5): The Falklands `wshore` (the small island's waterline
-  and the shoal off it, whitecaps in groups), `wlow` at `renderer.waterWind 15` (whitecaps, fraying
-  downwind); `renderer.waterFoam` 0–4 scales the crest foam.
+- Water's foam (render milestone 16, task 5), after the owner's first look (whitecaps tiled, shore
+  foam aliased): The Falklands `whigh` (shores from 400 m), `wy316` at `renderer.waterWind 15`
+  (whitecaps over the open sea), `wshore` (the small island zoomed); `renderer.waterFoam` 0–4
+  scales the crest foam.
 - Water's body (render milestone 16, task 4): The Falklands `wy136` (deep water the level's
   grey-green, the seabed fading in toward the shores), `wlow`; `renderer.waterColor` sets the deep
   colour and with it how murky the water is.
