@@ -757,6 +757,15 @@ const unsigned int kWaterSceneSampler = 12;
 // renderer.waterWind (m/s) and renderer.waterFetch (km) set the sea, the level's WaterScroll its
 // direction. The targets go at a device reset.
 const unsigned int kWaterWaveSampler = 6;
+// [RENDER] Render milestone 16 task 5, water's foam (contract 18): the two finer cascades' foam
+// maps (256 x 256 R16F with mips, coverage 0-1) on kWaterFoamSampler .. + 1 (16x anisotropic,
+// wrap) and RaWaterFoam in kWaterFoamRegister (1, the depth waves break at in metres, the waves'
+// loop seconds, 0) while the water queue draws with waves; zero otherwise. renderer.waterFoam
+// scales the crest foam's coverage (1 Monahan's for the wind; 0 no foam maps).
+const unsigned int kWaterFoamSampler = 4;
+const unsigned int kWaterFoamRegister = 188;
+void stateManagerSetWaterFoam(const float* value /* RaWaterFoam, one float4 */);
+float& rendererWaterFoam();
 void rendererWaterFrame();
 bool rendererWaterBindWaves();
 void rendererWaterUnbindWaves();
@@ -832,7 +841,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 17
+#define RA_CONTRACT_VERSION 18
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -1041,7 +1050,7 @@ const unsigned int kSkyShVec4s = 7;
 const unsigned int kWaterSsrRegister = 191;
 // [RENDER] Milestone 12 cloud shadows (contract 16): RaCloudShadow in c189..c190, published with RASM.
 const unsigned int kCloudShadowRegister = 189;
-const unsigned int kEngineRegisterBegin = 189;
+const unsigned int kEngineRegisterBegin = 188;
 const unsigned int kEngineRegisterEnd = 224;   // c189..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);

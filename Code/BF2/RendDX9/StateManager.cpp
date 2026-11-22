@@ -893,7 +893,8 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
 // [RENDER] The registers kEngineRegisterBegin..kEngineRegisterEnd hold the frame's sun cascade
 // constants (RASM, stateManagerSetSunCascadeConstants), the entry's LOD dither (RaLodDither,
 // renderEntryBindLodDither), the aerial-perspective lookup (RaAerial and RaAerialHaze, stateManagerSetAerial)
-// the sky's irradiance (RaSkySH, stateManagerSetSkySh), water's reflection switch (RaWaterSsr, stateManagerSetWaterSsr)
+// the sky's irradiance (RaSkySH, stateManagerSetSkySh), water's reflection switch (RaWaterSsr, stateManagerSetWaterSsr),
+// water's foam (RaWaterFoam, stateManagerSetWaterFoam)
 // and the cloud shadow lookup (RaCloudShadow, stateManagerSetCloudShadow). The effects that read them declare them at those registers, and D3DX
 // uploads the parameters' own zeros at each pass; that part of a write is dropped, so the range
 // keeps the engine's values. Retail mirrors every write.
@@ -1647,6 +1648,13 @@ void stateManagerSetWaterSsr(const float* value)
 {
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kWaterSsrRegister, value, 1u);
+}
+
+// [RENDER] RaWaterFoam into its reserved pixel register (contract 18).
+void stateManagerSetWaterFoam(const float* value)
+{
+    StateManager* const self = sm();
+    constFileWrite(self->psConst, self->psConstDirty, kWaterFoamRegister, value, 1u);
 }
 
 // [RENDER] RaCloudShadow into its reserved pixel registers (contract 16).

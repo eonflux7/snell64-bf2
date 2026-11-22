@@ -649,7 +649,27 @@ As built:
   within a pixel of it (the patches' resolved edges are half sky), is deep water. Replaces the
   retail opacity, the lightmap's water depth and the retail body colour; under water nothing
   changes.
-- Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up.
+- *Foam* (task 5; contract 18). The FFT atlas has a fourth block of columns, the cross derivative
+  Jxz of all three cascades, so each has its whole Jacobian of the displaced surface (x + λD,
+  D = i k̂ h toward the crests, λ 1). `RaWaterFoam` per foam cascade (87 and 17.3 m; the 503 m one
+  is swell and does not break): the compression 1 − J past a threshold ramps in fresh foam over
+  0.5 σ, last frame's fades by 1/e in 3 s; 256² `R16F` maps with mips, ping-ponged, on s4–s5. To
+  first order the compression is the displacement's divergence, of variance the cascade's mean
+  square slope σ²; the threshold is the Gaussian quantile at which whitecaps start on Monahan's
+  coverage (3.84e-6 U^3.41) / (4 × 2) of each cascade, the 4 the fade's spread. Measured from the
+  maps' last mips (logged once, 30 s after a spectrum): 4.97 % at 15 m/s against Monahan's 3.93 %.
+  The surface shader combines the two cascades and the shore as independent layers; the shore's
+  share is 1 − depth / (Hs / 0.78), the depth waves break at, from the water body's depth to the
+  bed (so also around piers and rocks, and over shoals). The finest cascade's foam is weighted by
+  a 12 m value-noise field of mean 1 drifting downwind (wave groups), and the coverage is drawn as
+  two octaves of noise (1.6 and 0.35 m, three times longer downwind) below it, translucent as it
+  thins; past 1.6 m of pixel footprint the plain coverage. Foam is a diffuse layer of albedo 0.6
+  under the sun (the wave normal's N.L, shadowed) and the sky, over everything else. What shows is
+  less than the maps' coverage (the fraying and the groups' clamp take some off).
+  `renderer.waterFoam` scales the coverage (1; 0 no foam maps). `RaWaterFoam` (c188): x 1 while the
+  maps are bound, y the breaking depth, z the waves' loop seconds.
+- Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up. The water
+  material effect (`RaShaderWaterBase`) is.
 
 ### 13. HDR bloom + auto-exposure
 
@@ -885,9 +905,10 @@ and add its row here.
 | 15 | Reachable clouds (render milestone 12, task 4): `RaClouds` grows to 20 float4s ([8] the observer's x, z, the reference height and the handoff distance; [9]–[18] the near passes'; layout in `RaClouds.fx`), and [5].z is the observer's (camera's) y. The panorama covers the whole sphere from the camera (`RaCloudPanorama.fxh`). Techniques `RaCloudNear` (two targets), `RaCloudNearResolve`, `RaCloudNearComposite` with `RaCloudNearCurrent`, `RaCloudNearDepth`, `RaCloudNearHistory`, and the scene's linear depth on s15 |
 | 16 | Cloud shadows and the light under the clouds (render milestone 12, tasks 7–8): pixel registers c189–c190 `RaCloudShadow` (engine-owned, published with `RASM`, zero outside the main world pass) and the cloud shadow map on the reserved sampler s14 (1024² `A16B16G16R16F`, bilinear, clamp; r optical depth toward the sun, g, b the world heights the sun ray enters and leaves cloud); particles get `RaCloudShadow` and `RaCloudShadowMap` (point) as parameters. Layout in the shaders' `RaSunShadow.fxh`. `RaAtmosphere[8]`: w the clouds' mean sun transmittance S, rgb the clouds' light on the air under them ((0, 0, 0, 1) clear). Technique `RaCloudShadow` in `Shaders/RaClouds` (`RaClouds[8]` the map's corner, the reference height, its size); `RaClouds[4].w` the panorama target's height. `RaSkyClouds.z` how far the camera is under the slab |
 | 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along and across the wind, the normalised `WaterScroll.xy` ((1, 0) when zero), b, a their squares, the last cascade's plus the slope variance below its grid) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them. `RaWater[3]`: xy the wind's direction, zw the variance added to b, a |
+| 18 | Water's foam (render milestone 16, task 5): the `Shaders/RaWater` atlas is 1024 × 256 (a fourth block: rg Jxz of cascades 0 + i 1, ba of cascade 2), technique `RaWaterFoam` with parameter `RaWaterHistory` (semantic) and `RaWater[0].w` the fade, `[1].w` the choppiness, `[3].zw` the threshold and 1 / ramp; while the water queue draws with waves, the 87 m and 17.3 m cascades' foam maps on s4–s5 (256² `R16F`, mips, 16x anisotropic, wrap) and pixel register c188 `RaWaterFoam` (x 1 while bound, y the depth waves break at, z the waves' loop seconds), zero otherwise |
 
-Samplers 9–15 are reserved for renderer frame resources (and 6–8 in water effects, contract 17), and pixel registers
-c189–c223 for `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
+Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
+c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
 over between effects, so neither value is left to default. The engine binds s9–s15 (and s6–s8 for water) with it FALSE.
@@ -901,6 +922,7 @@ directory no longer carries it (`_3153_0`).
 
 | Slot | Resource | Format | Bound |
 |---|---|---|---|
+| s4–s5 | Water's foam maps, the two finer wave cascades (contract 18) | `R16F`, mipmapped | During the water queue only, while `RaWaterFoam.x` > 0 |
 | s6–s8 | Water's slope maps, one per wave cascade (contract 17) | `A16B16G16R16F`, mipmapped | During the water queue only, while `RaWaterSsr.w` > 0 |
 | s9 | Aerial-perspective atlas (1024x32: 32 distance slices of 32x32 screen tiles) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`), mipmapped | During the water queue only, while `RaWaterSsr.x` > 0 |

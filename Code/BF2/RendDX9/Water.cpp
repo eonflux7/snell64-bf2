@@ -14,9 +14,10 @@
 //   RaWaterSpectrum  h(k, t) from h0 and the dispersion (deep water, frequencies quantised to
 //                    whole cycles of kLoopSeconds so time wraps without a jump), packed as two
 //                    complex fields whose inverse transforms are real: (slope x, slope z) and
-//                    (d Dx / dx, d Dz / dz), the horizontal displacement's derivatives (foam, later)
+//                    (Jxx, Jzz), the horizontal displacement's derivatives; a fourth block of
+//                    columns holds the cross derivative Jxz of all three cascades (contract 18)
 //   RaWaterFft       8 horizontal then 8 vertical radix-2 Stockham passes, ping-ponging two
-//                    768 x 256 A32B32G32R32F targets
+//                    1024 x 256 A32B32G32R32F targets
 //   RaWaterSlopes    per cascade into its own 256 x 256 A16B16G16R16F target with a full mip chain:
 //                    the slopes along and across the wind and their squares (su, sc, su^2, sc^2);
 //                    the mips are box-filtered by StretchRect, so a mip's (b, a) minus its (r, g)
@@ -28,11 +29,23 @@
 //                    statistics for the wind ("Measurement of the roughness of the sea surface from
 //                    photographs of the sun's glitter", 1954): sigma_u^2 = 0.00316 U, sigma_c^2 =
 //                    0.003 + 0.00192 U, at least kTailFloor of them
+//   RaWaterFoam      per foam cascade (the two finer ones; the coarsest is swell, which does not
+//                    break) into its own 256 x 256 R16F target with mips, ping-ponged with last
+//                    frame's (render milestone 16, task 5, contract 18): the surface's compression
+//                    1 - J (J the Jacobian of the displaced surface, Tessendorf's x + lambda D,
+//                    lambda kChoppiness) past a threshold makes fresh foam, and last frame's fades
+//                    over kFoamSeconds. To first order the compression is the displacement's
+//                    divergence, whose variance is the cascade's mean square slope; the threshold
+//                    is the Gaussian quantile that whitecaps start on a fraction of the surface such
+//                    that, with their fade, the foam covers Monahan's measured whitecap coverage for
+//                    the wind (3.84e-6 U^3.41; Monahan and O'Muircheartaigh 1980). The mips average
+//                    coverage, so distant foam filters to its share of the pixel.
 //
 // The three slope maps are bound to the reserved samplers s6-s8 (16x anisotropic, wrap) while the
 // water queue draws, and RaWaterSsr.w is set to 1 (rendererWaterBindWaves). The wind's direction is
 // the level's WaterScroll (retail's texture scroll), its speed and fetch renderer.waterWind and
-// renderer.waterFetch.
+// renderer.waterFetch. The foam maps go to s4-s5 (kWaterFoamSampler) and RaWaterFoam (c188) is set
+// (renderer.waterFoam scales the coverage; 0 none).
 #ifdef BF2_IMAGE_RENDDX9
 
 #define NOMINMAX
@@ -73,6 +86,14 @@ const double kLoopSeconds = 1000.0; // every frequency a whole number of cycles 
 const double kPi = 3.14159265358979323846;
 const unsigned int kRows = 4;       // RaWater's float4s
 const double kTailFloor = 0.25;     // the unresolved slope variance: at least this much of Cox-Munk's
+const unsigned int kBlocks = kCascades + 1;   // the FFT atlas's blocks of 256 columns
+const unsigned int kFoamFirst = 1;  // the cascades that carry foam: kFoamFirst .. kCascades - 1
+const unsigned int kFoamMaps = kCascades - kFoamFirst;
+const double kChoppiness = 1.0;     // lambda: the displacement the Jacobian is taken of
+const double kFoamSeconds = 3.0;    // a whitecap's foam fades by 1/e over this
+const double kFoamPersist = 4.0;    // foam covers about this many times the area breaking
+const double kFoamRamp = 0.5;       // fresh foam ramps in over this many standard deviations
+const double kFoamCheckSeconds = 30.0; // the coverage is read back once, this long after a spectrum
 
 struct Wind
 {
@@ -98,12 +119,23 @@ struct State
     double hs, mss;              // the built spectrum's significant height and mean square slope
     double mssU, mssC;           // its slope variance along and across the wind
     float tail[2], liveTail[2];  // the unresolved slope variance along and across the wind (built, live)
+    double cascadeMss[kCascades], liveMss[kCascades];   // each cascade's mean square slope (built, live)
+    double liveHs;               // the live spectrum's significant height
+    float foamScale;             // renderer.waterFoam
     double buildMs;
     // GPU.
     IDirect3DTexture9* h0;
     IDirect3DTexture9* fft[2];
     IDirect3DTexture9* slopes[kCascades];
+    IDirect3DTexture9* foam[2][kFoamMaps];   // this frame's and last frame's
+    int foamCurrent;
+    bool foamFresh;              // no history yet (created, reset, or foam off)
+    double lastSeconds;
+    double liveSince;            // seconds when the live spectrum was taken up
+    bool foamChecked;
+    float foamThreshold[kFoamMaps], foamRamp[kFoamMaps];
     bool ready;                  // the slope maps hold this frame's waves
+    bool foamReady;              // and the foam maps this frame's foam
     bool effectMissing;
     bool logged;
     LARGE_INTEGER start;
@@ -119,6 +151,8 @@ State& st()
         g_state->enabled = true;
         g_state->windSpeed = 7.0f;
         g_state->fetchKm = 60.0f;
+        g_state->foamScale = 1.0f;
+        g_state->foamFresh = true;
     }
     return *g_state;
 }
@@ -172,7 +206,8 @@ double spreading(double theta, double omega, double omegaPeak, const Wind& w)
 
 // h0 for every cascade: rgba = h0(k), conj(h0(-k)). Also the significant wave height and the
 // mean square slope it adds up to (along and across the wind).
-void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& mss, double& mssU, double& mssC)
+void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& mss, double& mssU, double& mssC,
+                   double cascadeMss[kCascades])
 {
     out.assign(kN * kCascades * kN * 4, 0.0f);
     std::vector<double> re(kN * kN), im(kN * kN);
@@ -182,6 +217,7 @@ void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& m
     double variance = 0.0, slope = 0.0, slopeU = 0.0;
     for (unsigned int c = 0; c < kCascades; ++c)
     {
+        const double slopeBefore = slope;
         const double dk = 2.0 * kPi / kPatch[c];
         const double kLow = c == 0 ? 0.0 : kBandSplit * 2.0 * kPi / kPatch[c];
         const double kHigh = c + 1 < kCascades ? kBandSplit * 2.0 * kPi / kPatch[c + 1] : 1e30;
@@ -220,6 +256,7 @@ void buildSpectrum(const Wind& w, std::vector<float>& out, double& hs, double& m
                 p[2] = static_cast<float>(re[nn * kN + mm]);
                 p[3] = static_cast<float>(-im[nn * kN + mm]);
             }
+        cascadeMss[c] = slope - slopeBefore;
     }
     hs = 4.0 * std::sqrt(variance);
     mss = slope;
@@ -234,6 +271,40 @@ void tailVariance(const Wind& w, double mssU, double mssC, float tail[2])
     const double coxMunkC = 0.003 + 0.00192 * w.speed;
     tail[0] = static_cast<float>(std::max(coxMunkU - mssU, kTailFloor * coxMunkU));
     tail[1] = static_cast<float>(std::max(coxMunkC - mssC, kTailFloor * coxMunkC));
+}
+
+// The upper tail of the unit normal distribution, and its inverse (by bisection).
+double gaussTail(double z) { return 0.5 * std::erfc(z / std::sqrt(2.0)); }
+double gaussTailInverse(double p)
+{
+    double lo = -8.0, hi = 8.0;
+    for (int i = 0; i < 60; ++i)
+    {
+        const double mid = 0.5 * (lo + hi);
+        (gaussTail(mid) > p ? lo : hi) = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+// Monahan's whitecap coverage for the wind, as a fraction.
+double monahanCoverage(double speed)
+{
+    return std::min(3.84e-6 * std::pow(speed, 3.41), 0.5);
+}
+
+// Each foam cascade's threshold on the compression and 1 / its ramp: whitecaps start on
+// coverage / (kFoamPersist x the foam cascades) of each cascade's surface.
+void foamThresholds(const Wind& w, const double mss[kCascades], float scale, float threshold[kFoamMaps],
+                    float ramp[kFoamMaps])
+{
+    const double breaking = std::max(monahanCoverage(w.speed) * scale, 1e-7) / (kFoamPersist * kFoamMaps);
+    const double z = gaussTailInverse(std::min(breaking, 0.5));
+    for (unsigned int i = 0; i < kFoamMaps; ++i)
+    {
+        const double sigma = kChoppiness * std::sqrt(std::max(mss[kFoamFirst + i], 1e-8));
+        threshold[i] = static_cast<float>(z * sigma);
+        ramp[i] = static_cast<float>(1.0 / (kFoamRamp * sigma));
+    }
 }
 
 bool createTarget(unsigned int w, unsigned int h, unsigned int levels, D3DFORMAT format, IDirect3DTexture9*& t)
@@ -321,8 +392,34 @@ void drawInto(void* effect, IDirect3DTexture9* target, unsigned int w, unsigned 
         surface->Release();
 }
 
-// The waves at `seconds`: spectrum, the inverse transforms, the slope maps and their mips.
-bool drawWaves(void* effect, double seconds)
+void setHistory(ID3DXEffect* d3dx, IDirect3DTexture9* t)
+{
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaWaterHistory"))
+        d3dx->SetTexture(h, t);
+}
+
+// Box-filters level 0 down the chain.
+void buildMips(IDirect3DTexture9* t)
+{
+    const DWORD levels = t->GetLevelCount();
+    for (DWORD l = 1; l < levels; ++l)
+    {
+        IDirect3DSurface9* src = 0;
+        IDirect3DSurface9* dst = 0;
+        t->GetSurfaceLevel(l - 1, &src);
+        t->GetSurfaceLevel(l, &dst);
+        if (src && dst)
+            device()->StretchRect(src, 0, dst, 0, D3DTEXF_LINEAR);
+        if (src)
+            src->Release();
+        if (dst)
+            dst->Release();
+    }
+}
+
+// The waves at `seconds`: spectrum, the inverse transforms, the slope maps and their mips; with
+// `foam`, the foam maps `dt` seconds after the last ones.
+bool drawWaves(void* effect, double seconds, double dt, bool foam)
 {
     State& s = st();
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
@@ -335,12 +432,13 @@ bool drawWaves(void* effect, double seconds)
     c[1][2] = static_cast<float>(2.0 * kPi / kLoopSeconds);
     for (unsigned int i = 0; i < kCascades; ++i)
         c[2][i] = static_cast<float>(2.0 * kPi / kPatch[i]);
+    c[1][3] = static_cast<float>(kChoppiness);
 
     if (!effectSetTechniqueByName(effect, "RaWaterSpectrum"))
         return false;
     setConstants(d3dx, c);
     setInput(d3dx, s.h0);
-    drawInto(effect, s.fft[0], kN * kCascades, kN);
+    drawInto(effect, s.fft[0], kN * kBlocks, kN);
 
     if (!effectSetTechniqueByName(effect, "RaWaterFft"))
         return false;
@@ -351,7 +449,7 @@ bool drawWaves(void* effect, double seconds)
         c[0][1] = pass < kLogN ? 1.0f : 0.0f;                 // horizontal, then vertical
         setConstants(d3dx, c);
         setInput(d3dx, s.fft[from]);
-        drawInto(effect, s.fft[1 - from], kN * kCascades, kN);
+        drawInto(effect, s.fft[1 - from], kN * kBlocks, kN);
         from = 1 - from;
     }
 
@@ -368,30 +466,80 @@ bool drawWaves(void* effect, double seconds)
         setConstants(d3dx, c);
         drawInto(effect, s.slopes[i], kN, kN);
     }
+    if (foam)
+    {
+        if (!effectSetTechniqueByName(effect, "RaWaterFoam"))
+            return false;
+        const int previous = s.foamCurrent;
+        const int current = 1 - previous;
+        c[0][3] = s.foamFresh ? -1.0f : static_cast<float>(std::exp(-dt / kFoamSeconds));
+        for (unsigned int i = 0; i < kFoamMaps; ++i)
+        {
+            c[0][2] = static_cast<float>(kFoamFirst + i);
+            c[3][2] = s.foamThreshold[i];
+            c[3][3] = s.foamRamp[i];
+            setConstants(d3dx, c);
+            setHistory(d3dx, s.foam[previous][i]);
+            drawInto(effect, s.foam[current][i], kN, kN);
+        }
+        setHistory(d3dx, 0);
+        s.foamCurrent = current;
+        s.foamFresh = false;
+    }
     setInput(d3dx, 0);
     for (unsigned int i = 0; i < kCascades; ++i)
-    {
-        const DWORD levels = s.slopes[i]->GetLevelCount();
-        for (DWORD l = 1; l < levels; ++l)
-        {
-            IDirect3DSurface9* src = 0;
-            IDirect3DSurface9* dst = 0;
-            s.slopes[i]->GetSurfaceLevel(l - 1, &src);
-            s.slopes[i]->GetSurfaceLevel(l, &dst);
-            if (src && dst)
-                device()->StretchRect(src, 0, dst, 0, D3DTEXF_LINEAR);
-            if (src)
-                src->Release();
-            if (dst)
-                dst->Release();
-        }
-    }
+        buildMips(s.slopes[i]);
+    if (foam)
+        for (unsigned int i = 0; i < kFoamMaps; ++i)
+            buildMips(s.foam[s.foamCurrent][i]);
     return true;
+}
+
+// Half to float (the foam maps' format), for the coverage check.
+float halfToFloat(unsigned short h)
+{
+    const unsigned int sign = (h >> 15) & 1u, exponent = (h >> 10) & 0x1Fu, mantissa = h & 0x3FFu;
+    const float m = exponent == 0 ? std::ldexp(static_cast<float>(mantissa), -24)
+                                  : std::ldexp(static_cast<float>(mantissa | 0x400u), static_cast<int>(exponent) - 25);
+    return sign ? -m : m;
+}
+
+// The foam's mean coverage: each map's last mip read back (a one-off stall), combined as
+// independent layers.
+void logFoamCoverage()
+{
+    State& s = st();
+    double clear = 1.0;
+    for (unsigned int i = 0; i < kFoamMaps; ++i)
+    {
+        IDirect3DTexture9* const t = s.foam[s.foamCurrent][i];
+        IDirect3DSurface9* top = 0;
+        IDirect3DSurface9* mem = 0;
+        t->GetSurfaceLevel(t->GetLevelCount() - 1, &top);
+        if (top && device()->CreateOffscreenPlainSurface(1, 1, D3DFMT_R16F, D3DPOOL_SYSTEMMEM, &mem, 0) >= 0
+            && device()->GetRenderTargetData(top, mem) >= 0)
+        {
+            D3DLOCKED_RECT r;
+            if (mem->LockRect(&r, 0, D3DLOCK_READONLY) >= 0)
+            {
+                clear *= 1.0 - std::min(std::max(static_cast<double>(halfToFloat(*static_cast<unsigned short*>(r.pBits))), 0.0), 1.0);
+                mem->UnlockRect();
+            }
+        }
+        if (mem)
+            mem->Release();
+        if (top)
+            top->Release();
+    }
+    std::fprintf(stderr, "[WATER] foam: covers %.2f %% of the open sea (Monahan at %.1f m/s: %.2f %%, times "
+                 "renderer.waterFoam %.2f); thresholds %.4f, %.4f\n", (1.0 - clear) * 100.0, s.live.speed,
+                 monahanCoverage(s.live.speed) * 100.0, s.foamScale, s.foamThreshold[0], s.foamThreshold[1]);
 }
 
 } // namespace
 
 bool& rendererWaterWavesEnabled() { return st().enabled; }
+float& rendererWaterFoam() { return st().foamScale; }
 float& rendererWaterWind() { return st().windSpeed; }
 float& rendererWaterFetch() { return st().fetchKm; }
 
@@ -399,6 +547,7 @@ void rendererWaterFrame()
 {
     State& s = st();
     s.ready = false;
+    s.foamReady = false;
     if (!device() || !s.enabled || !geom::terrain())
         return;
     if (!s.started)
@@ -418,6 +567,11 @@ void rendererWaterFrame()
             s.live = s.built;
             s.liveTail[0] = s.tail[0];
             s.liveTail[1] = s.tail[1];
+            for (unsigned int i = 0; i < kCascades; ++i)
+                s.liveMss[i] = s.cascadeMss[i];
+            s.liveHs = s.hs;
+            s.liveSince = secondsSince(s.start);
+            s.foamChecked = false;
             s.haveLive = true;
             std::fprintf(stderr, "[WATER] spectrum: wind %.1f m/s toward (%.2f, %.2f), fetch %.0f km: "
                          "significant height %.2f m, mean square slope %.4f (along the wind %.4f, "
@@ -436,7 +590,7 @@ void rendererWaterFrame()
             State& t = st();
             LARGE_INTEGER t0;
             QueryPerformanceCounter(&t0);
-            buildSpectrum(wind, t.h0Data, t.hs, t.mss, t.mssU, t.mssC);
+            buildSpectrum(wind, t.h0Data, t.hs, t.mss, t.mssU, t.mssC, t.cascadeMss);
             tailVariance(wind, t.mssU, t.mssC, t.tail);
             t.buildMs = secondsSince(t0) * 1000.0;
             t.done = true;
@@ -445,12 +599,24 @@ void rendererWaterFrame()
     if (!s.haveLive)
         return;
 
-    bool targets = createTarget(kN * kCascades, kN, 1, D3DFMT_A32B32G32R32F, s.fft[0])
-                && createTarget(kN * kCascades, kN, 1, D3DFMT_A32B32G32R32F, s.fft[1]);
+    bool targets = createTarget(kN * kBlocks, kN, 1, D3DFMT_A32B32G32R32F, s.fft[0])
+                && createTarget(kN * kBlocks, kN, 1, D3DFMT_A32B32G32R32F, s.fft[1]);
     for (unsigned int i = 0; i < kCascades && targets; ++i)
         targets = createTarget(kN, kN, 0, D3DFMT_A16B16G16R16F, s.slopes[i]);
     if (!targets)
         return;
+    bool foam = s.foamScale > 0.0f;
+    for (unsigned int i = 0; i < kFoamMaps && foam; ++i)
+    {
+        const bool had = s.foam[0][i] && s.foam[1][i];
+        foam = createTarget(kN, kN, 0, D3DFMT_R16F, s.foam[0][i]) && createTarget(kN, kN, 0, D3DFMT_R16F, s.foam[1][i]);
+        if (!had)
+            s.foamFresh = true;
+    }
+    if (!foam)
+        s.foamFresh = true;
+    else
+        foamThresholds(s.live, s.liveMss, s.foamScale, s.foamThreshold, s.foamRamp);
 
     void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaWater");
     if (!effect || !effectD3dxHandle(effect))
@@ -477,7 +643,16 @@ void rendererWaterFrame()
     stateManagerPush();
     stateManagerSetDepthStencilSurface(0);
 
-    s.ready = drawWaves(effect, secondsSince(s.start));
+    const double seconds = secondsSince(s.start);
+    const double dt = std::min(std::max(seconds - s.lastSeconds, 0.0), 0.25);
+    s.lastSeconds = seconds;
+    s.ready = drawWaves(effect, seconds, dt, foam);
+    s.foamReady = s.ready && foam;
+    if (s.foamReady && !s.foamChecked && seconds - s.liveSince > kFoamCheckSeconds)
+    {
+        logFoamCoverage();
+        s.foamChecked = true;
+    }
     if (s.ready && !s.logged)
     {
         std::fprintf(stderr, "[WATER] first waves drawn\n");
@@ -514,14 +689,42 @@ bool rendererWaterBindWaves()
         d->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
         d->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, FALSE);
     }
+    // The foam (task 5): x 1 while its maps are bound, y the depth waves break at (the significant
+    // height / 0.78), z the seconds of the waves' loop
+    float foam[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (s.foamReady)
+    {
+        for (unsigned int i = 0; i < kFoamMaps; ++i)
+        {
+            const DWORD stage = kWaterFoamSampler + i;
+            d->SetTexture(stage, s.foam[s.foamCurrent][i]);
+            d->SetSamplerState(stage, D3DSAMP_MINFILTER, D3DTEXF_ANISOTROPIC);
+            d->SetSamplerState(stage, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+            d->SetSamplerState(stage, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+            d->SetSamplerState(stage, D3DSAMP_MAXANISOTROPY, 16);
+            d->SetSamplerState(stage, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+            d->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+            d->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, FALSE);
+        }
+        foam[0] = 1.0f;
+        foam[1] = static_cast<float>(std::max(s.liveHs / 0.78, 0.3));
+        foam[2] = static_cast<float>(std::fmod(s.lastSeconds, kLoopSeconds));
+    }
+    stateManagerSetWaterFoam(foam);
     return true;
 }
 
 void rendererWaterUnbindWaves()
 {
     if (IDirect3DDevice9* const d = device())
+    {
         for (unsigned int i = 0; i < kCascades; ++i)
             d->SetTexture(kWaterWaveSampler + i, 0);
+        for (unsigned int i = 0; i < kFoamMaps; ++i)
+            d->SetTexture(kWaterFoamSampler + i, 0);
+        static const float kNone[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        stateManagerSetWaterFoam(kNone);
+    }
 }
 
 void rendererWaterRelease()
@@ -533,7 +736,14 @@ void rendererWaterRelease()
     release(s.fft[1]);
     for (unsigned int i = 0; i < kCascades; ++i)
         release(s.slopes[i]);
-    s.ready = false;   // the managed spectrum survives a reset
+    for (unsigned int i = 0; i < kFoamMaps; ++i)
+    {
+        release(s.foam[0][i]);
+        release(s.foam[1][i]);
+    }
+    s.foamFresh = true;
+    s.ready = false;
+    s.foamReady = false;   // the managed spectrum survives a reset
 }
 
 } // namespace dx9rend
