@@ -407,8 +407,9 @@ Decided from these numbers (2026-11-22):
 - No permutation collapse for now. Merging the bm flags that only add a texture fetch needs
   per-draw material constants in the draw path for the same 5 s. Worth it if a shader family's
   compile grows again.
-- Plain vertex and pixel shaders in place of D3DX effects: owner's decision; compile time is not a
-  reason (the same compiler, the same shaders).
+- Plain vertex and pixel shaders in place of D3DX effects: deferred (owner, 2026-11-22). Compile
+  time is not a reason (the same compiler, the same shaders), and draws already bypass D3DX
+  (`Submit.cpp`); it becomes the first task of a move off D3D9, where effects do not exist.
 
 ### 12. Clouds
 

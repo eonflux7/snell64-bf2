@@ -63,8 +63,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   compile with `d3dcompiler_47`. test_bootcamp to in game: every effect stale 30 s (was about 10
   min), after a bm shader edit 22 s, warm 17 s; views `gloss`, `gloss2`, `glass` unchanged.
   `d3dx9_43` is now the only D3DX (`d3dx9_24`/`_25` gone, `BF2_FX_COMPILER` deleted): Muttrah City,
-  Fallujah West and Saaremaa load, views and frame time as with `d3dx9_25`. Open: plain shaders in
-  place of D3DX effects (owner's call).
+  Fallujah West and Saaremaa load, views and frame time as with `d3dx9_25`. Plain shaders in place
+  of D3DX effects deferred to a move off D3D9.
 - Atmosphere tab (`tools.atmosphere`, milestone 11 task 2).
 - Sky cube (milestone 11 task 7): `tools.atmosphere NAME` writes `NAME-skycube.png` (faces across,
   mips down) on Muttrah City; nothing in the scene reads it until task 8.
