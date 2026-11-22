@@ -31,8 +31,10 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
 5. Far cloud noise and shimmer, tweaked by eye (owner, 2026-11-22, in place of the reference set):
    the panorama accumulated over panoramas, then 2048x1024 read with Catmull-Rom: built (agent:
    Kashan Desert `m12-up90`, the grain gone, sharper, steady between shots; cost not measured).
-   Desert slab lowered to 2–8 km (was 3.5–9.5; owner, by eye); `renderer.cloudBase`/`cloudTop`
-   override it.
+   Desert clouds lowered to 2 km (was 3.5; owner, by eye). Two layers with their own heights
+   (Dagor's): desert cumulus 2–6 km and an altocumulus sheet 6.5–8 km; `renderer.cloudBase`,
+   `cloudTop`, `cloudMidBase`, `cloudMidTop`, `cloudMidDensity`, `cloudMidCoverage` (agent: Kashan
+   Desert `m12-up`, `m12-up180`, the mid layer alone at coverage 0.5).
 6. Prototype judged by eye on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0);
    its GPU time measured.
 7. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
@@ -64,8 +66,10 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Reachable clouds (render milestone 12, task 4): Kashan Desert, views `m12t4-base` (3 km),
   `m12t4-in` (4.5 km; `renderer.cloudCoverage 1` puts the camera in the deck), `m12t4-above`,
   `m12t4-above2` (8 km), `m12-up`; `renderer.cloudNear 0` for the panorama alone.
-- Far clouds without grain or shimmer (render milestone 12, task 5): Kashan Desert, `m12-up90`
-  (the horizon band).
+- Far clouds without grain or shimmer, sharper (render milestone 12, task 5): Kashan Desert,
+  `m12-up90` (the horizon band).
+- Two cloud layers, desert base 2 km (task 5): Kashan Desert `m12-up180`; `renderer.cloudCoverage 0`
+  with `renderer.cloudMidCoverage 0.5` shows the mid layer alone.
 
 ## Open issues
 
