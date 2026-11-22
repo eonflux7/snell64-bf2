@@ -845,6 +845,44 @@ bool toolsWriteClouds(const char* base, const char*& message)
     else
         std::fprintf(f, "[near] none (renderer.cloudNear %.0f, or not drawn last frame)\n", c.nearDistance);
 
+    // The cloud shadow map (task 8) and the clouds' light from the ground (task 7).
+    const SkyCubeCloudLight cloudSky = rendererSkyCubeCloudLight();
+    std::fprintf(f, "[skylight] ground panoramas read %u; sun transmittance %.3f, haze light %.4f %.4f %.4f\n",
+                 c.skyLights, cloudSky.sunTransmittance, cloudSky.hazeLight[0], cloudSky.hazeLight[1], cloudSky.hazeLight[2]);
+    Table shadowT;
+    if (c.shadow && readTable(c.shadow, shadowT, why))
+    {
+        // Transmittance at the reference height (every receiver under the deck takes the whole column).
+        double t = 0.0, enter = 0.0, leave = 0.0;
+        unsigned int shaded = 0, cloudy = 0;
+        const size_t n = shadowT.rgba.size() / 4;
+        for (size_t i = 0; i < shadowT.rgba.size(); i += 4)
+        {
+            float* const q = &shadowT.rgba[i];
+            const float tr = std::exp(-q[0]);
+            t += tr;
+            shaded += tr < 0.5f;
+            if (q[0] > 0.0f)
+            {
+                ++cloudy;
+                enter += q[1];
+                leave += q[2];
+            }
+            q[3] = tr;
+        }
+        std::fprintf(f, "[shadow] %ux%u over %.0f m from (%.0f, %.0f), maps %u: mean transmittance %.3f, share < 0.5 "
+                        "%.3f, mean enter %.0f m, leave %.0f m (world y)\n", shadowT.w, shadowT.h, c.shadowSize,
+                     c.shadowCorner[0], c.shadowCorner[1], c.shadowMaps, n ? t / n : 1.0,
+                     n ? static_cast<double>(shaded) / n : 0.0, cloudy ? enter / cloudy : 0.0,
+                     cloudy ? leave / cloudy : 0.0);
+        float scale;
+        if (writePng(shadowT, root + "-shadow.png", true, scale))
+            std::fprintf(f, "[shadow] png %s-shadow.png (transmittance at the reference height; row 0 at the "
+                            "corner's z)\n", root.c_str());
+    }
+    else
+        std::fprintf(f, "[shadow] none\n");
+
     std::fclose(f);
     g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";
     message = g_message.c_str();
