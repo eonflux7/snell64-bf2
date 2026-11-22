@@ -94,8 +94,10 @@ bool readTable(IDirect3DTexture9* texture, Table& out, std::string& why)
             for (unsigned int x = 0; x < out.w; ++x)
                 for (int k = 0; k < 4; ++k)
                 {
-                    float v;   // D3D's ABGR formats store R first
-                    if (desc.Format == D3DFMT_A32B32G32R32F)
+                    float v;   // D3D's ABGR formats store R first, ARGB ones B first
+                    if (desc.Format == D3DFMT_A8R8G8B8 || desc.Format == D3DFMT_X8R8G8B8)
+                        v = row[x * 4 + (k == 3 ? 3 : 2 - k)] * (1.0f / 255.0f);
+                    else if (desc.Format == D3DFMT_A32B32G32R32F)
                         std::memcpy(&v, row + x * 16 + k * 4, sizeof(v));
                     else
                     {
@@ -525,6 +527,246 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     }
     if (!writeSkyCube(f, root))
         failed += std::string(failed.empty() ? "" : ", ") + "skycube";
+    std::fclose(f);
+    g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";
+    message = g_message.c_str();
+    return failed.empty();
+}
+
+// ---- tools.clouds (render milestone 12, task 2) ----
+
+namespace {
+
+// Jendersie and d'Eon's Draine weight for a droplet diameter (RaCloud.fxh, Ra_CloudDroplet.x).
+double drainWeight(double d)
+{
+    d = std::min(std::max(d, 5.0), 50.0);
+    return std::exp(-0.599085 / (d - 0.641583) - 0.665888);
+}
+
+// Field slice s's density at texel (x, z) of the packed atlas (4 x 4 tiles, 4 slices each).
+float fieldAt(const Table& f, unsigned int s, unsigned int x, unsigned int z)
+{
+    const unsigned int t = s / 4;
+    return f.at((t % 4) * 512 + x, (t / 4) * 512 + z)[s % 4];
+}
+
+bool writeVolumeMontage(IDirect3DVolumeTexture9* v, const std::string& path)
+{
+    D3DVOLUME_DESC d;
+    D3DLOCKED_BOX box;
+    if (!v || v->GetLevelDesc(0, &d) < 0 || v->LockBox(0, &box, 0, D3DLOCK_READONLY) < 0)
+        return false;
+    const unsigned int across = 8, rows = (d.Depth + across - 1) / across;
+    Table t;
+    t.w = d.Width * across;
+    t.h = d.Height * rows;
+    t.rgba.assign(static_cast<size_t>(t.w) * t.h * 4, 0.0f);
+    for (unsigned int z = 0; z < d.Depth; ++z)
+        for (unsigned int y = 0; y < d.Height; ++y)
+            for (unsigned int x = 0; x < d.Width; ++x)
+            {
+                const float c = static_cast<const unsigned char*>(box.pBits)[z * box.SlicePitch + y * box.RowPitch + x] / 255.0f;
+                float* const p = &t.rgba[((static_cast<size_t>((z / across) * d.Height + y)) * t.w + (z % across) * d.Width + x) * 4];
+                p[0] = p[1] = p[2] = c;
+                p[3] = 1.0f;
+            }
+    v->UnlockBox(0);
+    float scale;
+    return writePng(t, path, false, scale);
+}
+
+} // namespace
+
+bool toolsWriteClouds(const char* base, const char*& message)
+{
+    message = "";
+    const CloudsInfo c = rendererCloudsInfo();
+    if (!base || !device())
+        g_message = "no renderer";
+    else if (!c.live)
+        g_message = "no cloud volumes yet (the atmosphere's fit, the noise or Shaders/RaClouds missing)";
+    else
+        g_message.clear();
+    if (!g_message.empty())
+    {
+        message = g_message.c_str();
+        return false;
+    }
+    const std::string root(base);
+    FILE* const f = std::fopen((root + ".txt").c_str(), "w");
+    if (!f)
+    {
+        g_message = "cannot write " + root + ".txt";
+        message = g_message.c_str();
+        return false;
+    }
+    std::string failed;
+    std::fprintf(f, "# tools.clouds (render milestone 12): the sky clouds' baked volumes, live set\n");
+    std::fprintf(f, "[clouds] preset %s, coverage %.2f, life time %.0f s; slab %.0f-%.0f m above the "
+                    "reference height; LWC %.2f g/m^3 at density 1, droplets %.0f um\n",
+                 c.preset, c.coverage, c.seconds, c.baseM, c.topM, c.lwc, c.dropletUm);
+    std::fprintf(f, "[clouds] noise %.0f ms (CPU, once), weather %.1f ms; a build takes %u frames; %u builds\n",
+                 c.noiseMs, c.weatherMs, c.buildFrames, c.builds);
+
+    // The weather map.
+    Table weather;
+    std::string why;
+    if (readTable(c.weather, weather, why))
+    {
+        writeStats(f, "weather", weather);
+        float scale;
+        const std::string png = root + "-weather.png";
+        if (writePng(weather, png, false, scale))
+            std::fprintf(f, "[weather] png %s (r low, g mid coverage, b type; x %.4g)\n", png.c_str(), scale);
+    }
+    else
+        failed += "weather ";
+
+    // The noise.
+    if (writeVolumeMontage(c.shape, root + "-shape.png"))
+        std::fprintf(f, "[shape] png %s-shape.png (128 x 128 slices, 8 across)\n", root.c_str());
+    else
+        failed += "shape ";
+    if (writeVolumeMontage(c.detail, root + "-detail.png"))
+        std::fprintf(f, "[detail] png %s-detail.png (32 x 32 slices, 8 across)\n", root.c_str());
+    else
+        failed += "detail ";
+
+    // The field: per slice, the share of texels with density > 0.02, the mean and the maximum;
+    // from above, each column's optical depth (as RaCloud.fxh's extinction) and the share of the
+    // sky with tau > 1 and > 10. A column-maximum image and every 4th slice at 1/4 size.
+    Table field;
+    if (readTable(c.field, field, why) && field.w == 2048 && field.h == 2048)
+    {
+        const double dz = (c.topM - c.baseM) / 64.0;
+        const double sigmaPerDensity = 3.0 * c.lwc / c.dropletUm * drainWeight(c.dropletUm);
+        std::vector<double> tau(512 * 512, 0.0);
+        Table column;
+        column.w = column.h = 512;
+        column.rgba.assign(512 * 512 * 4, 0.0f);
+        std::fprintf(f, "[field] per slice (height above the reference, m): share > 0.02 | mean | max\n");
+        for (unsigned int s = 0; s < 64; ++s)
+        {
+            unsigned int n = 0;
+            double sum = 0.0;
+            float peak = 0.0f;
+            for (unsigned int z = 0; z < 512; ++z)
+                for (unsigned int x = 0; x < 512; ++x)
+                {
+                    const float d = fieldAt(field, s, x, z);
+                    n += d > 0.02f;
+                    sum += d;
+                    peak = std::max(peak, d);
+                    tau[z * 512 + x] += d * sigmaPerDensity * dz;
+                    float* const p = &column.rgba[(z * 512 + x) * 4];
+                    p[0] = p[1] = p[2] = std::max(p[0], d);
+                    p[3] = 1.0f;
+                }
+            std::fprintf(f, "[field]  %2u %6.0f: %.4f | %.4f | %.3f\n", s, c.baseM + (s + 0.5) * dz,
+                         n / 262144.0, sum / 262144.0, peak);
+        }
+        unsigned int over1 = 0, over10 = 0;
+        double tauSum = 0.0, tauMax = 0.0;
+        for (size_t i = 0; i < tau.size(); ++i)
+        {
+            over1 += tau[i] > 1.0;
+            over10 += tau[i] > 10.0;
+            tauSum += tau[i];
+            tauMax = std::max(tauMax, tau[i]);
+        }
+        std::fprintf(f, "[field] from above: sky share with column tau > 1: %.3f, > 10: %.3f; mean tau %.2f, "
+                        "max %.1f (sigma %.4f /m per unit density)\n",
+                     over1 / 262144.0, over10 / 262144.0, tauSum / 262144.0, tauMax, sigmaPerDensity);
+        float scale;
+        if (writePng(column, root + "-field-columns.png", false, scale))
+            std::fprintf(f, "[field] png %s-field-columns.png (each column's maximum, x %.4g)\n", root.c_str(), scale);
+        Table slices;
+        slices.w = 128 * 4;
+        slices.h = 128 * 4;
+        slices.rgba.assign(static_cast<size_t>(slices.w) * slices.h * 4, 0.0f);
+        for (unsigned int i = 0; i < 16; ++i)
+            for (unsigned int z = 0; z < 128; ++z)
+                for (unsigned int x = 0; x < 128; ++x)
+                {
+                    const float d = fieldAt(field, i * 4 + 1, x * 4, z * 4);
+                    float* const p = &slices.rgba[(((i / 4) * 128 + z) * slices.w + (i % 4) * 128 + x) * 4];
+                    p[0] = p[1] = p[2] = d;
+                    p[3] = 1.0f;
+                }
+        if (writePng(slices, root + "-field-slices.png", false, scale))
+            std::fprintf(f, "[field] png %s-field-slices.png (slices 1, 5 .. 61 at 1/4, 4 across, x %.4g)\n",
+                         root.c_str(), scale);
+
+        // The coarse copy must bound the field from above.
+        Table coarse;
+        if (readTable(c.coarse, coarse, why) && coarse.w == 128 && coarse.h == 64)
+        {
+            unsigned int under = 0;
+            for (unsigned int s = 0; s < 64; ++s)
+                for (unsigned int z = 0; z < 512; ++z)
+                    for (unsigned int x = 0; x < 512; ++x)
+                    {
+                        const unsigned int g = s / 8;
+                        const float bound = coarse.at((g / 4) * 64 + x / 8, z / 8)[g % 4];
+                        under += fieldAt(field, s, x, z) > bound + 1.0f / 255.0f;
+                    }
+            std::fprintf(f, "[coarse] field texels above their block's bound: %u (0 expected)\n", under);
+        }
+        else
+            failed += "coarse ";
+    }
+    else
+        failed += "field ";
+
+    // The light: per slice, the mean of each channel, and a montage of the sun channel (r) and the
+    // sky visibility (g), every 4th slice at 1/2 size.
+    Table light;
+    if (readTable(c.light, light, why) && light.w == 2048 && light.h == 2048)
+    {
+        std::fprintf(f, "[light] per slice: mean sun (last octave) | sky visibility | ground visibility; min sun\n");
+        Table sun;
+        sun.w = 128 * 8;
+        sun.h = 128 * 4;
+        sun.rgba.assign(static_cast<size_t>(sun.w) * sun.h * 4, 0.0f);
+        for (unsigned int s = 0; s < 64; ++s)
+        {
+            const unsigned int ox = (s % 8) * 256, oy = (s / 8) * 256;
+            double m[3] = {};
+            float lo = 1e9f;
+            for (unsigned int z = 0; z < 256; ++z)
+                for (unsigned int x = 0; x < 256; ++x)
+                {
+                    const float* const p = light.at(ox + x, oy + z);
+                    for (int k = 0; k < 3; ++k)
+                        m[k] += p[k];
+                    lo = std::min(lo, p[0]);
+                }
+            std::fprintf(f, "[light]  %2u: %.4f | %.4f | %.4f; %.4f\n", s, m[0] / 65536.0, m[1] / 65536.0,
+                         m[2] / 65536.0, lo);
+            if (s % 4 == 1)
+            {
+                const unsigned int i = s / 4;   // 0..15
+                for (unsigned int z = 0; z < 128; ++z)
+                    for (unsigned int x = 0; x < 128; ++x)
+                    {
+                        const float* const p = light.at(ox + x * 2, oy + z * 2);
+                        float* const q = &sun.rgba[(((i / 8) * 256 + z) * sun.w + (i % 8) * 128 + x) * 4];
+                        q[0] = q[1] = q[2] = p[0];
+                        float* const r = &sun.rgba[(((i / 8) * 256 + 128 + z) * sun.w + (i % 8) * 128 + x) * 4];
+                        r[0] = r[1] = r[2] = p[1];
+                        q[3] = r[3] = 1.0f;
+                    }
+            }
+        }
+        float scale;
+        if (writePng(sun, root + "-light.png", false, scale))
+            std::fprintf(f, "[light] png %s-light.png (slices 1, 5 .. 61 at 1/2: rows of 8, sun then sky "
+                            "visibility, x %.4g)\n", root.c_str(), scale);
+    }
+    else
+        failed += "light ";
+
     std::fclose(f);
     g_message = failed.empty() ? root + ".txt" : root + ".txt (not read: " + failed + ")";
     message = g_message.c_str();

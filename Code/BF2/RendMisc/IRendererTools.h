@@ -66,6 +66,10 @@ public:
     // Valid until the next call.
     virtual bool toolsWriteAtmosphere(const char* base, const char*& message) = 0;
 
+    // Clouds (docs/lanes/tools.md#clouds): writes render milestone 12's live cloud volumes to base.txt
+    // and base-<volume>.png, at once, as toolsWriteAtmosphere.
+    virtual bool toolsWriteClouds(const char* base, const char*& message) = 0;
+
 protected:
     ~IRendererTools() {}
 };

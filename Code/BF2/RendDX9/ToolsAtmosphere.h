@@ -7,6 +7,8 @@ namespace dx9rend {
 
 // IRendererTools::toolsWriteAtmosphere, answered from ToolsCapture.cpp's class.
 bool toolsWriteAtmosphere(const char* base, const char*& message);
+// IRendererTools::toolsWriteClouds (render milestone 12).
+bool toolsWriteClouds(const char* base, const char*& message);
 
 } // namespace dx9rend
 } // namespace hfe

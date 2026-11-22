@@ -227,6 +227,10 @@ public:
     {
         return dx9rend::toolsWriteAtmosphere(base, message);
     }
+    virtual bool toolsWriteClouds(const char* base, const char*& message)
+    {
+        return dx9rend::toolsWriteClouds(base, message);
+    }
 };
 
 RendererTools g_tools;
