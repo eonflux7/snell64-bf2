@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): proposed | [render.md](lanes/render.md#16-water) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -16,15 +16,15 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 ## Current: `render` milestone 13, HDR bloom and auto-exposure
 
-Proposed (agent, 2026-11-22), awaiting the owner's decision; the design and each task's detail in
-[render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
+Design and as built in [render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
 
-1. Dither after the tonemap (and the encode's curve).
-2. Scene luminance: a log histogram by vertex-texture scatter, percentile metering.
-3. Auto-exposure: adapted luminance on the GPU, clamped; `renderer.exposure*`; `tools.exposure`.
-4. Bloom: Jimenez's down/up chain, no threshold; drops retail's `Glow` pass.
-5. Night: The Falklands night layer against retail; night particles.
-6. Compressed (Karis) resolve, by A/B.
+1. Dither after the tonemap, sRGB encode (`renderer.encodeSrgb`): built.
+2. Scene luminance, a 64-bin histogram by gather, percentile metering: built.
+3. Auto-exposure (`renderer.exposure*`, `tools.exposure`): built; key calibrated on Muttrah City.
+4. Bloom (`renderer.bloom`, `bloomStrength`), replacing retail's glow while on: built.
+5. Night: The Falklands' night layer on the +4-stop ceiling (owner to judge); night particles not
+   yet looked at.
+6. Compressed (Karis) resolve, by A/B: open.
 7. Judged by eye; GPU cost with the final GPU pass.
 
 ## Paused: `render` milestone 12, clouds
@@ -41,8 +41,12 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 ## Awaiting the owner's look
 
-Built and checked by an agent; an entry goes when the owner has seen it. Empty: everything up to
-water's foam was ticked (owner, 2026-11-22).
+Built and checked by an agent; an entry goes when the owner has seen it.
+
+- Render milestone 13, tasks 1–5: on any map, A/B with `renderer.exposure 0`, `renderer.bloom 0`,
+  `renderer.encodeSrgb 0` (all three: the old look). Muttrah City `street`, `sunup` (the sun's
+  halo); The Falklands `gpm_cq 32` view `w0` (night: `renderer.exposureMax` 4 now, 4.5 matches
+  retail's brightness). Bloom strength `renderer.bloomStrength` (0.04).
 
 ## Open issues
 

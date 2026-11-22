@@ -24,7 +24,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 15. Shader pipeline (ahead of 12) | Accepted | `a14e57a6`, `cbbe8725` |
 | 12. Clouds | Paused (owner, 2026-11-22) after tasks 1–5, 7–8; open tasks in STATUS.md | `git log --grep 'milestone 12'` |
 | 16. Water | Accepted | `git log --grep 'milestone 16'`, and the deletion ("milestone 16 accepted") |
-| 13. HDR bloom + auto-exposure | Proposed, awaiting the owner (tasks in STATUS.md) | — |
+| 13. HDR bloom + auto-exposure | In progress: tasks 1–5 built (tasks in STATUS.md) | `git log --grep 'milestone 13'` |
 | 14. GTAO + lightmap channel ownership | Not started | — |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views

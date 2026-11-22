@@ -679,44 +679,50 @@ As built:
 
 ### 13. HDR bloom + auto-exposure
 
-Proposed 2026-11-22 (agent), for the owner's decision. Today the frame grade (`realitygrade.fxh`,
-FSQuadDrawer pass 0) takes the linear scene at a fixed 0 stops, through Khronos PBR Neutral, to a
-plain 2.2 encode, undithered. Everything here runs in that pass or just before it, on the resolved
-single-sample float scene, in pixel shaders (D3D9 has no compute). Thermals and the debug views
-bypass all of it: the TIS encode is not a radiance. Under water it all applies.
+Tasks 1–5 built (2026-11-22), in game, awaiting the owner's look; 6 open. Everything runs in
+`HdrPost.cpp` (effect `Shaders/RaHdrPost`, contract 19), called by the post-production composite
+(`postProductionFinish`) on the resolved single-sample float scene just before the final copy
+(FSQuadDrawer pass 0, the grade), after tinnitus, flashbang and gas mask; skipped when TV draws
+straight to the back buffer. Thermals (fog colour with no red) skip all of it: exposure 1, no bloom,
+the 2.2 encode, as before. Under water it all applies. Every pass is a full-screen pixel pass into
+a target of its own, unrolled by hand (no shader loops: they came out wrong under DXVK).
 
-1. **Dither and the encode.** Triangular-PDF noise of one 8-bit step added after the tonemap,
-   before quantising: the sky's dark blue and the sun's glare band without it (milestone 11). Blue
-   noise from a 64x64 tile, offset each frame, would hide better; a hash costs nothing to ship.
-   The encode becomes the sRGB curve the rest of the pipeline decodes with (check: the shaders
-   decode `colour^2.2`, so this goes with whatever the owner sees as darker shadows).
-2. **Scene luminance.** A 64-bin log-luminance histogram of the scene, without readback: the scene
-   down to 256x128 (log2 luminance in one channel), then 32 K points drawn with vertex texture
-   fetch, each additively into its bin of a 64x1 `R32F` target (the D3D9 form of a compute
-   histogram; Frostbite, Unreal). Range −14 to +10 stops. Metering: the mean of the bins between
-   the 50th and 95th percentile (the sky's sun and the darkest corners left out), centre-weighted.
-   Cost estimate: under 0.1 ms at 1080p.
-3. **Auto-exposure.** A 1x1 `R32F` ping-pong holds the adapted luminance; each frame moves it
-   toward the metered value exponentially, faster into light (≈ 3 /s) than into dark (≈ 1 /s),
-   frame-rate independent. Exposure = key / adapted, as compensation in stops around 0.18 grey,
-   clamped to a range: the upper limit is what keeps night dark (about retail's 30/255 on The
-   Falklands' night layer, where the terrain reaches the tonemap at 0.0155 now and the Neutral
-   toe draws it at 5/255); the toe softened only if the clamp alone cannot. The grade reads the
-   exposure from the 1x1 texture; particle emissives (`FX_PARTICLE_EMISSIVE`) read it too.
-   Console: `renderer.exposure` (auto 1 / manual 0, the A/B until acceptance),
-   `renderer.exposureBias` (stops), `renderer.exposureMin`/`Max` (stops), `renderer.exposureSpeed`.
-   A level change and a device reset snap to the metered value, no fade from black.
-4. **Bloom.** Energy-conserving, no threshold (Jimenez, *Next Generation Post Processing in Call
-   of Duty: Advanced Warfare*, 2014): the scene down a 6-level chain with the 13-tap filter, the
-   first level Karis-averaged against fireflies, back up with a 3x3 tent, each level added to the
-   one above; the result mixed into the scene at a few percent before exposure, so it is light
-   scattered in the lens, not added light. The sun disc (luminance capped at 100) becomes its
-   glare, bright windows and muzzle flashes their halo, with nothing tuned per source. It drops
-   retail's `Glow` post pass (the glow materials' blur into the frame) and with it the sky's glow
-   pass; checked first that nothing else draws into the glow target. Console:
-   `renderer.bloom` (0 off), `renderer.bloomStrength`. Cost estimate: 0.2–0.3 ms at 1080p.
-5. **Night.** With exposure running: The Falklands night layer (`gpm_cq 32`) against retail's
-   brightness, the toe if needed; night particles (milestone 7) checked there.
+1. **Dither and the encode.** The grade adds triangular noise of one 8-bit step (two interleaved
+   gradient noise values, offset each frame) after the encode. The encode is the sRGB curve
+   (`renderer.encodeSrgb 1`, the curve the samplers decode colour textures with) or the 2.2 power
+   (0, as before, the curve authored tints are decoded with); they part below 0.0031 linear, where
+   sRGB is darker. Tonemap and encode are now separate (`RGrade_Apply`, `RGrade_Encode`).
+2. **Scene luminance.** The bloom's down chain runs (to its fourth level, 1/16 of the scene) even
+   with the bloom off; that level, bilinear, down to 64 x 32 log2 luminances with a centre weight
+   (1 at the centre to 0.25 at the corners). The 64-bin histogram over −14 to +10 EV is a gather,
+   not the planned point scatter (no vertex buffer, no float blending): 16 x 64 partial sums (each
+   texel half a meter row, four bins in rgba), then 16 x 1 (`A32B32G32R32F`). Metered value: the
+   mean EV of the bins between the 50th and 95th percentile of the weight.
+3. **Auto-exposure.** A 1 x 1 `A32B32G32R32F` ping-pong: adapted EV, exposure (multiplier),
+   metered EV, 1 once written. The adapted EV moves toward the metered one by 1 − e^(−dt·rate),
+   3/s into light and 1/s into dark, times `renderer.exposureSpeed`; it snaps on the first frame
+   after a device reset and after a frame gap over 0.5 s (a level load). Exposure in stops =
+   log2(key / adapted) + `renderer.exposureBias`, clamped to `renderer.exposureMin`/`Max`
+   (−4, +4). The key is 0.42, calibrated, not 0.18: Muttrah City's reference views meter −1.0 to
+   −1.3 EV, and 0.42 (−1.25 EV) shows them at milestone 11's accepted look (0 stops). The ceiling
+   is what keeps night dark (task 5). `renderer.exposure 0`: a fixed `exposureBias` stops.
+   Particle emissives read the state per vertex (`RaExposureParticle`, `RaExposureState`) and
+   divide by the exposure, so an emissive tint reaches the tonemap at its authored value, as
+   retail showed it, by day and by night; one frame late (the state is written at the frame's end).
+4. **Bloom.** Six half-size `A16B16G16R16F` levels from the scene (level 0 half its size); down
+   with Jimenez's 13-tap filter, level 0 Karis-averaged (each of its five boxes weighted by
+   1 / (1 + luminance)) and every scene sample's luminance capped at 100; up with a 3x3 tent of
+   one smaller-level texel, added (blend ONE, ONE) into the level above; the grade takes level 0's
+   tent at full size, divided by the level count, and mixes it in before the exposure:
+   lerp(scene, bloom, `renderer.bloomStrength` 0.04). While `renderer.bloom` is on (and not in
+   thermals) retail's glow is off: `postProductionSetGlowEnabled` keeps the owner's glow byte 0,
+   so neither the scene glow (`GlowMaterial`) nor the `RSMTGlow` queue nor their composite runs,
+   as with retail's glow off; the night-vision distortion skips its glow part. Facing the sun the
+   disc gets a small halo, nothing tuned per source.
+5. **Night.** The Falklands' night layer (`gpm_cq 32`, view `w0`) meters −9 EV and sits on the
+   ceiling: at +4 stops its terrain draws at about 25/255 (2.2 encode at 0 stops: 8/255; retail
+   about 30/255, reached at +4.5, where the scene starts to read as an overcast dusk). The toe is
+   not changed. Night particles: not yet looked at there.
 6. **Compressed (Karis) resolve: decided by A/B** (moved here from milestone 10, owner,
    2026-11-20): at a window seen from a dark interior and at foliage against the sky. It pays only
    where an edge's samples straddle the tonemap's shoulder, which auto-exposure makes more common
@@ -728,9 +734,9 @@ bypass all of it: the TIS encode is not a radiance. Under water it all applies.
 7. **Judged by eye** on Muttrah City (street to open ground), Fallujah West (interiors), Saaremaa,
    The Falklands (water glitter, night); GPU cost with the final GPU pass.
 
-Order: 1 alone (small, visible); 2 and 3 together (the meter is only seen through the exposure);
-4; 5 and 6 need 3. A `tools.exposure` dump writes the histogram, the metered and adapted values
-and the exposure per frame, to check 2–3 by.
+`tools.exposure` ([tools.md](tools.md#exposure)) dumps the state, histogram, meter and bloom.
+On acceptance: `renderer.exposure` and `renderer.encodeSrgb` (the A/B switches) and retail's glow
+passes are deleted, with `renderer.bloom` kept only if the owner wants bloom optional.
 
 ### 14. GTAO + lightmap channel ownership
 
@@ -805,7 +811,8 @@ In draw order, for the main world view:
    `RASM` and the atlas are set on them as effect parameters (`rendererBindParticleLighting`).
 10. **Post-production** runs every frame: the colour grade is the frame's only encode from linear
    to display, so it cannot be skipped. Its resolve is skipped when item 7 resolved the scene.
-   Tinnitus blends over the float scene target first.
+   Tinnitus blends over the float scene target first. Just before the grade, the bloom chain, the
+   luminance histogram and the auto-exposure run on the scene ([milestone 13](#13-hdr-bloom--auto-exposure)).
 
 Depth is reversed throughout (near 1, far 0) except in shadow-map depth buffers.
 
@@ -947,6 +954,7 @@ and add its row here.
 | 16 | Cloud shadows and the light under the clouds (render milestone 12, tasks 7–8): pixel registers c189–c190 `RaCloudShadow` (engine-owned, published with `RASM`, zero outside the main world pass) and the cloud shadow map on the reserved sampler s14 (1024² `A16B16G16R16F`, bilinear, clamp; r optical depth toward the sun, g, b the world heights the sun ray enters and leaves cloud); particles get `RaCloudShadow` and `RaCloudShadowMap` (point) as parameters. Layout in the shaders' `RaSunShadow.fxh`. `RaAtmosphere[8]`: w the clouds' mean sun transmittance S, rgb the clouds' light on the air under them ((0, 0, 0, 1) clear). Technique `RaCloudShadow` in `Shaders/RaClouds` (`RaClouds[8]` the map's corner, the reference height, its size); `RaClouds[4].w` the panorama target's height. `RaSkyClouds.z` how far the camera is under the slab |
 | 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along and across the wind, the normalised `WaterScroll.xy` ((1, 0) when zero), b, a their squares, the last cascade's plus the slope variance below its grid) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them. `RaWater[3]`: xy the wind's direction, zw the variance added to b, a |
 | 18 | Water's foam (render milestone 16, task 5): the `Shaders/RaWater` atlas is 1024 × 256 (a fourth block: rg Jxz of cascades 0 + i 1, ba of cascade 2), technique `RaWaterFoam` with parameter `RaWaterHistory` (semantic) and `RaWater[0].w` the fade, `[1].w` the choppiness, `[3].zw` the threshold and 1 / ramp; while the water queue draws with waves, the 87 m and 17.3 m cascades' foam maps on s4–s5 (256² `R16F`, mips, 16x anisotropic, wrap) and pixel register c188 `RaWaterFoam` (x 1 while bound, y the depth waves break at, z the waves' loop seconds), zero otherwise |
+| 19 | Bloom and auto-exposure (render milestone 13): effect `Shaders/RaHdrPost`, techniques `RaBloomDownKaris`, `RaBloomDown`, `RaBloomUp` (blends ONE, ONE), `RaLumMeter`, `RaLumHistogramRows`, `RaLumHistogram`, `RaExposureAdapt`, drawn by the engine (`HdrPost.cpp`) before the grade; parameters by semantic `RaHdrPost` (`float4[4]`, layout in the effect), `RaHdrSource`, `RaHdrHistory`. The FSQuadDrawer effect (pass 0, the grade) gets `RaGrade` (`float4[2]`: auto-exposure on, the bloom's share, sRGB encode, frame mod 64; 1 / the bloom's size, manual exposure in stops, 1 / level count), `RaGradeExposure` (the 1 x 1 state: adapted EV, exposure, metered EV, written) and `RaGradeBloom`; all zero means 0 stops, no bloom, the 2.2 encode. Particle effects get `RaExposureParticle` (`float4`: x 1 auto, y manual stops) and `RaExposureState` (the 1 x 1 state, for a vertex sampler) |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

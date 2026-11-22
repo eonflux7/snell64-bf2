@@ -420,6 +420,20 @@ the debug menu. Fails before the first fit.
 
 The managed tables are locked where they are; the atlas is read back from its render target.
 
+## Exposure
+
+`tools.exposure [NAME]` (render milestone 13; `tools(exposure)`) writes
+`<outputDir>/<map>/exposure/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
+`RendDX9/ToolsAtmosphere.cpp`: the HDR post as the last frame left it. Fails before it has run.
+
+- `[settings]`: the `renderer.exposure*`, `bloom*` and `encodeSrgb` values, the adaptation rates
+  and the key. `[frame]`: frames run, whether the last ran (or thermals skipped it), its dt and
+  whether it snapped, the scene's size.
+- `[state]`: adapted and metered EV (and luminance), the exposure as a multiplier and in stops.
+- `[histogram]`: each non-empty bin's low EV, weight, share and cumulative share.
+- `[meter]`: the 64 x 32 log2 luminances' range and mean, and a sparse grid of them.
+- `[bloom]`: level 0 after the up chain, statistics and `<NAME>-bloom.png`.
+
 ## Clouds
 
 `tools.clouds [NAME]` (render milestone 12, task 2; `tools(clouds)`) writes
