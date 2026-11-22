@@ -86,6 +86,9 @@ const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
 const unsigned int kMultiScatterSize = 32;
 const unsigned int kSkyViewW = 192, kSkyViewH = 108;
 const unsigned int kApTiles = 32, kApSlices = 32;
+// The atlas's last block (contract 20): the haze's light per tile column and elevation, so
+// Ra_GetAerial lights each pixel by its own ray's elevation, not its tile's.
+const unsigned int kApBlocks = kApSlices + 1;
 
 // The sky (task 3): the model's clear sky and the sun disc.
 const double kSunAngularRadius = 0.27;      // degrees, the real sun's
@@ -872,7 +875,7 @@ bool ensureAtlas()
         checkAtlasFormat();
     if (g.atlas)
         return true;
-    const HRESULT hr = device()->CreateTexture(kApTiles * kApSlices, kApTiles, 1, D3DUSAGE_RENDERTARGET,
+    const HRESULT hr = device()->CreateTexture(kApTiles * kApBlocks, kApTiles, 1, D3DUSAGE_RENDERTARGET,
                                                g.atlasFormat, D3DPOOL_DEFAULT, &g.atlas, 0);
     if (hr < 0)
     {
