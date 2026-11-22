@@ -77,8 +77,8 @@ const double kMieAbsorption = 4.40e-3;                               // 1/km at 
 const double kMieG = 0.8;
 const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
 
-// The haze layer: one shape for every level, set by renderer.hazeDepth and renderer.hazeFalloff
-// (tuned at the aerial-perspective A/B, task 4); the density follows fog end. It stays exponential
+// The haze layer: one for every level, set by renderer.hazeVisibility and renderer.hazeFalloff;
+// its density is a visibility's, not fog end's (owner, 2026-11-22: realistic, mostly in the distance). It stays exponential
 // past fog end: the view distance is cut by the radial dither (task 5).
 
 // Sizes, as RaAtmosphere.fx defines them.
@@ -529,13 +529,13 @@ struct State
 };
 
 State g = {};
-float g_hazeDepth = 1.0f;      // renderer.hazeDepth: horizontal optical depth at fog end
-float g_hazeFalloff = 400.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
+float g_hazeVisibility = 8000.0f;  // renderer.hazeVisibility: m, a level ray's 2 % contrast at the reference height
+float g_hazeFalloff = 1200.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
 
 // 1/m at the reference height.
 float hazeDensity()
 {
-    return g.inputs.fogEnd > 0.0f ? g_hazeDepth / g.inputs.fogEnd : 0.0f;
+    return 3.912f / g_hazeVisibility;   // Koschmieder: ln(1 / 0.02)
 }
 
 IDirect3DDevice9* device()
@@ -1019,9 +1019,9 @@ void bindAtlas(IDirect3DTexture9* atlas)
 
 } // anonymous namespace
 
-float& rendererHazeDepth()
+float& rendererHazeVisibility()
 {
-    return g_hazeDepth;
+    return g_hazeVisibility;
 }
 
 float& rendererHazeFalloff()

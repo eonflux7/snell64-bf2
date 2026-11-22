@@ -1386,11 +1386,11 @@ void setSoftParticleDistance(float value)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(softParticleDistance, float, true, getSoftParticleDistance(),
                                  setSoftParticleDistance, 0.1f, 20.0f, kRendererConsoleTag)
 
-// [RENDER] The haze's shape (render milestone 11, tuned at the aerial-perspective A/B).
+// [RENDER] The haze's density and shape (render milestone 11).
 float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
-float getHazeDepth() { return rendererHazeDepth(); }
-void setHazeDepth(float value) { rendererHazeDepth() = clampf(value, 0.0f, 8.0f); }
-BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeDepth, float, true, getHazeDepth(), setHazeDepth, 0.0f, 8.0f,
+float getHazeVisibility() { return rendererHazeVisibility(); }
+void setHazeVisibility(float value) { rendererHazeVisibility() = clampf(value, 500.0f, 200000.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeVisibility, float, true, getHazeVisibility(), setHazeVisibility, 500.0f, 200000.0f,
                                  kRendererConsoleTag)
 float getHazeFalloff() { return rendererHazeFalloff(); }
 void setHazeFalloff(float value) { rendererHazeFalloff() = clampf(value, 25.0f, 5000.0f); }
@@ -1530,7 +1530,7 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowNormalOffset", "Receiver offset along its normal, in cascade texels (against acne)" },
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
-        { "hazeDepth", "Haze: optical depth at fog end on a level ray (higher: hazier near)" },
+        { "hazeVisibility", "Haze: metres at which a level ray at the reference height keeps 2 % contrast (lower: hazier)" },
         { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },

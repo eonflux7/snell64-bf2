@@ -854,9 +854,9 @@ void rendererSunShadowsRelease();
 // sun cascades: fits the sky and haze to the level's authored light when it changes (at load),
 // draws the transmittance, multiple-scattering and sky-view tables after a fit or a device reset
 // and the aerial-perspective atlas every frame, through Shaders/RaAtmosphere (contract 6).
-// The haze's shape (renderer.hazeDepth, renderer.hazeFalloff): its horizontal optical depth at fog
-// end and the height (m) over which its density falls by e.
-float& rendererHazeDepth();
+// The haze (renderer.hazeVisibility, renderer.hazeFalloff): the visibility (m) at the reference
+// height and the height (m) over which its density falls by e.
+float& rendererHazeVisibility();
 float& rendererHazeFalloff();
 // How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
 // against the world view's frustum taken out to here.
