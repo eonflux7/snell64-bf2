@@ -77,7 +77,7 @@ const unsigned int kPanoW = 1024, kPanoH = 512, kPanoBands = 8;             // R
 const double kPlanetRadius = 6360000.0;   // m, the atmosphere's ground radius (Atmosphere.cpp)
 const double kPanoReach = 150000.0;       // m: the march stops here (full haze near the horizon)
 const double kDetailTileM = 1500.0;       // m: the detail noise's tile
-const double kHighStreak = 4.0;           // the high cloud's streaks: length over width
+const double kHighStreak = 10.0;          // the high cloud's streaks: length over width
 
 struct Preset
 {
