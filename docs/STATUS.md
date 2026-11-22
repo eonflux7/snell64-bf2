@@ -23,18 +23,25 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); not started
    analysis gives luminance ratios and cloud statistics per reference. The chosen list goes in
    render.md.
 2. Cloud material include: density as LWC, extinction from droplet radius, the Mie fit phase,
-   octave multiple scattering (ported from Dagor's, with attribution).
+   octave multiple scattering (ported from Dagor's, with attribution); sun and sky light at the
+   cloud's altitude from a small table built from our atmosphere (Dagor's `clouds_light_color`).
 3. Weather map and baked volumes (Dagor's structure, D3D9 form): presets (desert, maritime) to
-   slabs, genera and heights; per-cell life phase; the density field and the sun-transmittance and
-   ambient volume as 2D slice atlases, rendered by pixel shaders over frames; an ⅛ field for empty
-   space; high cloud (Ci/Cc/Cs) as a procedural flat layer at its altitude.
-4. Cloud panorama (about 1024x512, updated over frames) marching the baked atlases with detail
-   noise at sample time, ambient from the sky-view table, aerial perspective; drawn behind the sky.
-   Coverage console variable.
+   slabs, heights and a continuous cloud type (stratus to cumulonimbus: height profile, base
+   rounding, anvil; Dagor's `gen_clouds_lut`); per-cell life phase; the density field and the
+   sun-transmittance and ambient volume as 2D slice atlases, rendered by pixel shaders over frames;
+   an ⅛ field for empty space; high cloud (Ci/Cc/Cs) as a procedural flat layer at its altitude.
+4. Cloud panorama (about 1024x512) marching the baked atlases with detail noise at sample time,
+   ambient from the sky-view table, aerial perspective; drawn behind the sky. Updated over 8
+   frames and crossfaded between two panoramas, blended in a compressed (tonemapped) space so
+   evolution does not pop or flicker (Dagor's `daSkiesPanorama`). Coverage console variable.
 5. Prototype judged on Kashan Desert (ground and air, coverage 0.3/0.7/1.0) against the references.
 6. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
-   overcast reference's SH.
-7. Cloud shadows on the ground and into the sky cube; then the night layers' stars.
+   overcast reference's SH. The haze and sky light are dimmed by the sun ray's length through the
+   cloud slab times coverage (Dagor's `statistical_clouds_shadow`).
+7. Cloud shadows on the ground (Beer shadow maps, Hillaire 2020) and into the sky cube; then the
+   night layers: stars from a catalog with the moon, the sky's rotation from latitude and sidereal
+   time (Dagor's `daStars`, `daSkiesAstronomy`; the catalog's source and licence checked first).
+   PR's sun direction is kept (baked lightmaps follow it); a date is fitted to it.
 8. Sparse 3D particle clouds (its own task, later).
 
 Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`, earlier

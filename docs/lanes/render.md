@@ -364,6 +364,12 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
   themselves and finer than a 128 m field holds: like Dagor's strata layer (`strata_clouds.dshl`),
   they are a procedural layer at their altitude (streaks along the wind and shear), drawn into the
   same panorama with the same phase function and sky light. The volumes carry low and mid cloud.
+- **Also from Dagor:** light colour at the cloud's altitude (high cloud stays lit after ground
+  sunset; tops warmer than bases), a continuous cloud type for the height profiles, the haze dimmed
+  by the sun ray's length through the cloud slab, the panorama crossfaded between two updates and
+  blended in tonemapped space, Beer shadow maps for ground shadows, and stars and moon placed by
+  latitude and sidereal time. Not taken: near-cloud reprojection (no parallax here), the clear-hole
+  logic, the rain map (perhaps with weather later), node-graph generation.
 - **Not done:** a coarse atmospheric simulation at load (Goswami and Neyret 2017; Vimont et al.
   2020) writing the weather map. Its gain is clouds tied to terrain (sea breezes, ridge caps), which
   a sky at infinity does not show; reconsidered only if a mountain level looks wrong. Full cloud
