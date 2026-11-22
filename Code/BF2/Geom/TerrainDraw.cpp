@@ -1238,15 +1238,36 @@ void Terrain::drawWaterRa(float seaLevel)
 // (drawWaterCell) with the surrounding technique. Over each surrounding slot that reaches below the
 // sea, one cell; past the ring, rings of eight cells each three times wider than the last, out past
 // the scenery distance, each cell drawn when the slot in its direction meets it with sea: the
-// median of that slot's outer edge below the sea level. Land past the ring is not drawn yet.
+// median of that slot's outer edge below the sea level. A level without a ring has sea all round
+// when its map's lowest point is under the sea level (render milestone 17): the eight cells around
+// the map, then the rings past them. The far ground (FarGround.h) draws the land.
 void Terrain::drawWaterBeyond(float seaLevel, const Frustum* frustum)
 {
-    if (!m_waterSurroundingTechnique || !m_surroundingBuilt)
+    if (!m_waterSurroundingTechnique)
         return;
     void*& technique = raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters));   // +0x14C
     const float top = seaLevel + 0.1f, bottom = seaLevel - 0.1f;
     float span = 0.0f;
     bool sea[3][3] = {};
+    if (!m_surroundingBuilt)
+    {
+        if (!(m_minHeight < seaLevel))
+            return;
+        span = static_cast<float>(m_patchCount * m_patchSize) * m_primaryWorldScale.x;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+            {
+                sea[i][j] = true;
+                if (i == 1 && j == 1)
+                    continue;
+                const float x0 = (static_cast<float>(i) - 1.5f) * span, z0 = (static_cast<float>(j) - 1.5f) * span;
+                const float box[6] = { x0, bottom, z0, x0 + span, top, z0 + span };
+                if (!terrainFrustumIntersectsBox(frustum, box))
+                    continue;
+                technique = m_waterSurroundingTechnique;
+                drawWaterCell(x0, z0, x0 + span, z0 + span, 0);
+            }
+    }
     for (int s = 0; s < 8; ++s)
     {
         const SurroundingPatch* const ring = m_surrounding[s];

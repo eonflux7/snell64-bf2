@@ -296,6 +296,56 @@ bool buildColor(Terrain* t, float mapHalf)
             ++copied;
         src->Release();
     }
+    // Patches without a colormap (open sea on some levels) take the others' mean, not black.
+    if (dst && copied < count * count)
+    {
+        D3DLOCKED_RECT locked;
+        if (SUCCEEDED(texture->LockRect(0, &locked, 0, 0)))
+        {
+            std::vector<char> filled(static_cast<std::size_t>(count) * count, 0);
+            for (int p = 0; p != count * count; ++p)
+            {
+                QuadPatch* const patch = t->m_patches[p];
+                if (!patch || !d3dTexture(patch->colormap))
+                    continue;
+                int x = p % count, z = p / count;
+                if (patch->gridX + count / 2 >= 0 && patch->gridX + count / 2 < count
+                    && patch->gridZ + count / 2 >= 0 && patch->gridZ + count / 2 < count)
+                {
+                    x = patch->gridX + count / 2;
+                    z = patch->gridZ + count / 2;
+                }
+                filled[static_cast<std::size_t>(z) * count + x] = 1;
+            }
+            double sum[4] = { 0.0, 0.0, 0.0, 0.0 };
+            double texels = 0.0;
+            for (unsigned int y = 0; y != size; ++y)
+            {
+                const unsigned char* row = static_cast<const unsigned char*>(locked.pBits) + y * locked.Pitch;
+                for (unsigned int x = 0; x != size; ++x)
+                    if (filled[(y / cellTexels) * count + x / cellTexels])
+                    {
+                        for (int c = 0; c != 4; ++c)
+                            sum[c] += row[4 * x + c];
+                        texels += 1.0;
+                    }
+            }
+            if (texels > 0.0)
+            {
+                unsigned char mean[4];
+                for (int c = 0; c != 4; ++c)
+                    mean[c] = static_cast<unsigned char>(sum[c] / texels + 0.5);
+                for (unsigned int y = 0; y != size; ++y)
+                {
+                    unsigned char* row = static_cast<unsigned char*>(locked.pBits) + y * locked.Pitch;
+                    for (unsigned int x = 0; x != size; ++x)
+                        if (!filled[(y / cellTexels) * count + x / cellTexels])
+                            std::memcpy(row + 4 * x, mean, 4);
+                }
+            }
+            texture->UnlockRect(0);
+        }
+    }
     if (dst)
         dst->Release();
     D3DXFilterTexture(texture, 0, 0, D3DX_FILTER_BOX);
