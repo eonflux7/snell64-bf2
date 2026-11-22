@@ -145,244 +145,101 @@ path, measured with `GPU=1`.
 
 ### 11. Atmosphere, sky IBL, water reflections
 
-The goal is a visibly more realistic outdoor image. Sky, sun and haze coming from one model is the
-means, not the goal. The owner judges every A/B by eye in game, against milestone 10 at the
-reference views. What should change on screen, and so what to look at:
+Accepted by the owner, 2026-11-22: a more realistic outdoor image, judged by eye at the reference
+views of Muttrah City, Fallujah West and Saaremaa against milestone 10. Sky, sun, haze and sky
+light come from one physical model under the level's authored sun; glossy surfaces and water
+reflect it. No switch is left: the retail dome, fog curve (except where noted), flat sky light and
+environment maps are gone from the lit path.
 
-- **Distance.** Far terrain and buildings lose contrast and take on the sky's colour with distance,
-  so ridges separate into layers. Valleys hold more haze than ridgelines; the haze is brighter and
-  warmer toward the sun, bluer away from it. Retail fog is one colour by distance.
-- **Sky.** The sky comes from the model (clear until milestone 12's clouds), and its horizon meets the haze over the terrain without a
-  seam. The sun has a disc and a forward-scattering glow from the same model.
-- **Sky light.** Surfaces are lit by the sky from its direction: blue from above, darker and
-  ground-tinted from below, brighter toward the sun, instead of one flat colour.
-- **Materials.** Glossy surfaces reflect the sky, most at grazing angles, each material class in its
-  own way: paint and glass sharp, metal tinted, fabric and concrete matte. A surface's sun highlight
-  and its sky reflection agree, since both come from one roughness and F0. Glossy edges do not
-  sparkle in motion.
-- **Water.** It reflects the buildings, terrain and sky around it, and the sky where a reflected ray
-  leaves the screen.
+**One light, physical** (owner, 2026-11-21). The sun at the ground is the one every lit surface
+takes: `Lightmanager.staticSunColor` decoded as the shaders decode it (colour^2.2 x 2^2.2), the
+anchor the lightmaps were baked under. Everything else is physical under it, with no per-level gain:
+the sky, the sun disc, the haze's light, the sky cube and the sky irradiance. The frame grade's
+exposure is 0 stops; auto-exposure is milestone 13's. On test_bootcamp the open sky lights an
+up-facing surface at 0.065 of the sun, a clear day in clean air.
 
-Design:
+**Fit at load** (`Atmosphere.cpp`, about 250 ms). Two layers, since one atmosphere dense enough
+for PR's fog end (0.5–2 km) would turn the sky into haze:
+- *Sky atmosphere:* Earth's air on every level (Rayleigh, Mie, ozone at Earth's densities), clear
+  until milestone 12's clouds. Sunlight above it = the authored sun / the transmittance at the sun's
+  elevation, clamped to at least 0.1 per channel (low suns, night layers).
+- *Ground haze:* density from fog end (`renderer.hazeDepth`, optical depth 1 there), albedo from the
+  authored fog colour, density falling with height (`renderer.hazeFalloff`, 400 m). Exponential in
+  optical depth throughout, past fog end too; retail's fog start is not used.
+- *Tables,* built on the CPU by the code the fit evaluates, in managed textures that survive device
+  resets: transmittance 256x64, multiple scattering 32x32, sky view 192x108 (at the terrain's mean
+  height). D3D9 has no compute and no volume render targets, and pixel-pass versions of these
+  loops came out wrong under DXVK.
+- *Sky cube* (`SkyCube.cpp`, 108 ms on Muttrah City): 128 per face, `A16B16G16R16F`. Above the
+  horizon the model's sky; below it the colormaps' mean albedo lit by the sun and the sky, hazed
+  from 10 m up to the horizon's radiance (sky alone below the horizon made every gloss look
+  chrome). Prefiltered GGX, one mip per perceptual roughness (64 samples per texel), and its
+  irradiance as SH9 (within 1 % sideways, 2–13 % straight up and down). A split-sum BRDF table
+  (64x64).
 
-- **Two layers.** A sky atmosphere (Rayleigh and Mie, Earth's scale heights) drives the sky, the
-  sun disc and the sky cube. A ground haze layer (density falling exponentially with height) drives
-  aerial perspective. One atmosphere dense enough to reach full haze at PR's fog end (0.5–2 km)
-  would turn the whole sky into haze, so they cannot be one.
-- **One light, physical** (owner, 2026-11-21: the authored mood could not be kept; physically
-  correct now, the look adjusted in post). The sun at the ground is the one every lit surface
-  takes: the authored sun decoded as the shaders decode it (colour^2.2 x 2^2.2, gamma and the x2
-  overbright), the anchor the lightmaps were baked under. Everything else is physical under it:
-  the sky, the sun disc, the haze's light, the sky cube and the sky irradiance. No authored sky or
-  fog brightness is applied; the frame grade's exposure (0 stops) sets the image, auto-exposure in
-  milestone 13.
-- **Fit at load.** (1) Sunlight above the atmosphere = that sun / transmittance at the sun's
-  elevation, the transmittance clamped to at least 0.1 per channel (low suns, night layers).
-  (2) The sky: Earth's air on every level (Rayleigh, Mie and ozone at Earth's densities and
-  colour), a clear sky, unscaled. (3) The haze layer: density from fog end, albedo from the authored fog colour, one height
-  falloff for all levels, tuned at the aerial-perspective A/B.
-- **Haze curve.** Exponential in optical depth throughout, continuing past fog end for the scenery
-  there; objects end at fog end by the radial dither, not by full haze (owner, 2026-11-20, at task 5:
-  the steepening to full haze at fog end would also hide the land drawn past the limit; task 4 had
-  steepened it). Retail's fog start is not used: the exponential curve keeps the near range clear.
-- **Tables.** Transmittance (256x64), multiple scattering (32x32) and sky view (192x108, taken at
-  the terrain's mean height) built on the CPU with the fit (the sun does not move), by the same
-  code the fit evaluates, into managed textures that survive device resets. Per frame only the
-  aerial-perspective atlas, a pixel pass, with cascade shadowing per slice for the shafts.
-- **Sky cube.** Upper half: the model's sky (and milestone 12's clouds once they exist). Lower half: the ground, the terrain
-  colormap's mean colour lit by the sun and this sky, under the haze at the horizon (sky alone
-  below the horizon makes every glossy surface look chrome). Prefiltered GGX, one mip per
-  roughness; its irradiance as 9 spherical-harmonic coefficients, taken at load.
-- **Sky light.** Every receiver's sky term is the irradiance at its normal times its occlusion:
-  statics and terrain the lightmap's sky visibility, vehicles and soldiers the hemi map,
-  first-person models the sky visibility under the camera (the terrain lightmap's sky channel
-  copied to memory at load, read under the camera, smoothed over about 0.3 s). The irradiance is the model's, unscaled.
-  On test_bootcamp the sky lights an up-facing surface at 0.065 of the sun (the old flat sky:
-  0.18), about a clear day's in clean air; more aerosol is the lever if shade reads too dark.
-- **Lighting model.** Direct sun specular and ambient specular from the same roughness and F0 (GGX,
-  split sum). Material interpretation without new assets: gloss maps become roughness, and each
-  class (paint, glass, metal, fabric) has its own F0 and roughness range. The engine holds the class
-  index and the table's format; the mapping from PR materials to classes lives with the shaders,
-  outside this tree. Vehicle environment maps stop being blended into albedo and become specular.
-- **Specular anti-aliasing.** Roughness widens with the screen-space rate of change of the normal,
-  and normal-map mips shorten the normal, which is read back as extra roughness (Toksvig). MSAA
-  shades once per pixel, so without this glossy surfaces sparkle.
-- **Water.** Screen-space reflections. The scene is resolved to a texture just before water draws,
-  after the sky, the fog pass, decals and the particles drawn before water (also the source for
-  refraction); water marches against the linear depth and falls back to the prefiltered sky where
-  the ray leaves the screen. No reflections from under the surface: seen from underwater, water
-  stays as it is.
-- **View distance** (owner, 2026-11-20). Each level's view distance (fog end) stays the gameplay
-  limit, so no level is retuned; what changes is how the limit looks and that it is the same in
-  every direction.
-  - **Radial distance.** Geometry is cut off at the distance from the camera, not the flat far
-    plane, as the haze already is (its distance is radial). Today the screen's edges and corners
-    reach up to 30–40 % further than its centre, an advantage for whoever turns a target to the edge.
-  - **Fade to the background.** Objects fade toward the radiance behind them along the ray (the sky,
-    or the hazed terrain), not toward one fog colour, so an aircraft against the sky and a vehicle
-    against terrain vanish at the same distance (retail fades to one fog colour, so the aircraft's
-    silhouette survives against a sky of another colour; task 4's full haze is already the sky's
-    radiance along the ray, to be checked from jets and anti-air). The view distance is the distance at which an object's
-    contrast reaches zero.
-  - **Soft edge.** The last 10–15 % fades by alpha-to-coverage dither (4x MSAA), no popping.
-  - **Scenery past the limit.** The level's low-detail surround terrain drawn out past the view
-    distance, then a far ground ring (or sea on coastal levels) in the surround's mean colour to the
-    horizon, all under aerial perspective. Static meshes go on past it too, at their coarsest LODs,
-    culled by their size on screen (owner, 2026-11-20: a city that dissolves while the hills behind
-    it stay looks wrong); trees and roads too, overgrowth to its own range (owner, 2026-11-20);
-    vehicles, soldiers, particles and decals end at the limit. Aircraft
-    see a landscape to orient by instead of a fogged void. Gameplay effect, accepted by the owner:
-    the land's shape is visible further, targets are not.
-- **Thermals.** Thermal vision keeps its own formula and takes none of this.
-- **Budget.** Target for the whole milestone: at most 1 ms on the benchmark paths at 1920x1080
-  (atlas 32x32 with 32 slices, sky view 192x108, cube 128 per face), measured at acceptance. Above
-  it the regression rule applies.
+**Per frame.** The aerial-perspective atlas (32x32 x 32 depth slices in a 2D atlas, a pixel pass
+after the sun cascades) on s9; every fogged shader reads it per pixel (`Ra_GetAerial`). Retail's fog
+curve stays under water, in first person and in thermals. The sky is one full-screen pass at the
+far plane in the dome's place (`SkyDome.fx` technique `RaSky`): the sky view plus a limb-darkened sun
+disc capped for the MSAA resolve; under water the water's fog colour. The painted dome, its cloud
+layers and the flare sprite are not drawn; the flare's occlusion query still runs (nothing reads it
+now). Nothing draws the sky before the first fit.
 
-Decisions (owner, 2026-11-20):
-- The model draws the whole sky; the painted dome and its cloud layers are not shown (owner,
-  2026-11-20, at task 3: a modern sky, not constrained by the game's approach; faithfulness to
-  each level is not the goal). The sky is clear until volumetric clouds (milestone 12). The sky's air
-  is Earth's on every level, physically correct; overcast comes from the clouds (owner,
-  2026-11-20). Fitting the Rayleigh tint and density to the dome's zenith was tried and dropped:
-  the domes' colours are mostly painted cloud and haze, so Kashan's clear sky read grey and
-  overcast Saaremaa's navy. Earlier decisions kept the painted dome, first
-  down to the horizon, then above 20°, then its cloud layers.
-- The authored sun colour (`Lightmanager.staticSunColor`) stays the sunlight at the ground, and lit
-  surfaces keep using it. The model works backwards from it to the sunlight above the atmosphere,
-  so the sky, the sun disc and the haze agree with it.
-- The authored fog end stays the visibility limit (PR's view distance): objects end there by the
-  radial dither (see View distance); the haze does not reach full there.
-- The sky is physical under the surfaces' sun, with no per-level gain (owner, 2026-11-21; it
-  replaced the partly applied sky gain of tasks 2–7). The authored horizon is brighter than the
-  model's (5.2x on test_bootcamp), shown by the tools but not applied.
-- Bloom stays in milestone 13. The sun's glow and specular glints read fully only then, and are
-  judged here knowing that. (Delegated, 2026-11-20.)
+**View distance** (owner, 2026-11-20). Fog end stays each level's gameplay limit; what changed is how
+it looks and that it is the same in every direction.
+- Objects are cut at the radial distance from the camera, not the flat far plane (retail's corners
+  reached 30–40 % further): the last 15 % dithered out on a 4x4 Bayer threshold
+  (`Ra_ViewDistanceClip`), blended effects faded by alpha. The world projection is unbounded
+  (reversed float depth); objects still cull at the view distance.
+- Past it the land goes on: a scenery frustum to 40 km for terrain, its surrounding ring, static
+  meshes (culled by `renderer.contributionCull`), roads and overgrowth (to its own range); water
+  over the whole map, then sea cells to the horizon wherever the ring ends in open sea. Vehicles,
+  soldiers, particles and decals end at the limit. The land's shape is visible further, targets
+  are not (accepted by the owner).
+- Full haze is the sky's radiance along the ray, so an aircraft against the sky and a vehicle
+  against terrain vanish at the same distance.
 
-Survey (task 1, `tools.survey`, [tools.md](tools.md#survey)), 2026-11-20, at the spawn camera of
-Muttrah City, Saaremaa, Fallujah West, The Falklands (`gpm_cq 32`, night) and test_bootcamp (for its
-vehicles), and at Muttrah City's views `high` and `mountain`:
-- **Sky dome.** One 2048-wide texture with no mips, a painted gradient from zenith (top row) to
-  horizon (bottom row), plus one or two cloud layers; the technique drawn is the sun-flare one on all
-  five. The bottom row sits a little darker and bluer than the authored fog colour (Muttrah City
-  158 186 206 against fog 181 203 206; Saaremaa 172 184 188 against 176 187 189), so the dome
-  already meets the fog roughly; its top row is the zenith input to the fit.
-- **Fog.** End 490–1000 m by day, 2900 m on the night layer; start 0–1 m except at night (1000 m).
-  Fog colours run from near white (Fallujah West 208 211 213) to near black at night (4 8 12).
-- **Sun.** Elevation 23–43°; the night layer's "sun" (the moon) stands at 36° with colour 0.07.
-  Static sun and sky colours differ a lot by level (Fallujah West's static sky 0.79 is brighter
-  than its sun 0.48), which the irradiance scaling to the authored sky luminance keeps.
-- **Terrain.** 512² DXT1 colormaps per patch; their mean colour is read at load in the survey's way
-  (a level at most 16 wide). The Falklands' file heights read 0–0 over 4 patches: the ground term's
-  height cannot come from the file there; take it from the patches or the camera.
-- **Water.** All levels pick the high-end technique; water's env map is the level's
-  `Water/envmap` or `Envmaps/EnvMap0` (the Falklands: a generated cube). Water covers 39 % of the
-  screen at Saaremaa's spawn camera, 10 % on the Falklands; Muttrah City's views show almost none.
-- **Retail environment maps.** Each level has 1–132 placed 128² DXT1 cubes (`Envmaps/*.dds`, read
-  by `EnvironmentMapInfo.emi` at load; generated only in the editor); no env-map templates. Per
-  frame the manager picks the cube nearest the camera, and only bundled-mesh materials whose state
-  has the env flag sample it, through `CubeMap`; water binds its own cube. Both go when the sky cube
-  replaces them (tasks 9 and 12).
-- **Materials.** Bundled states sort by technique name and flags: env-mapped opaque and blended
-  techniques (paint and glass candidates), colour-map gloss (gloss in the colour map's alpha),
-  alpha test, cockpit. Static materials carry only combo bits (base, detail, dirt, crack, normal
-  detail, parallax), no gloss or env source; `SpecularPower`, `StaticGloss` and `Reflectivity` are
-  defaults on almost every material. The class table therefore keys on the technique name and
-  flags.
-- **Normal maps.** 193 of 200 sampled (DXT1 and DXT5) keep |n| ≥ 0.95 down to their smallest mip:
-  the mips were renormalized, so Toksvig has no length to read. Specular anti-aliasing uses the
-  screen-space normal derivatives alone.
-- **Samplers.** The 21 legacy effects use s0–s8 (s8 by one) plus s13 and s15; the 611 Ra effects
-  keep no bytecode (they are created not-cloneable), and their sampler parameters bound them to
-  s0–s7. s9–s12 and s14 are free: the atlas, the sky cube and the split-sum BRDF table each get a
-  reserved slot (no analytic fit needed).
+**Shared lighting model** (contract 11, shaders outside this tree). Every per-pixel lit receiver
+takes the sky as the SH at its normal times its sky visibility: statics and terrain the
+lightmap's, vehicles and soldiers the hemi map's alpha faded out with height over the terrain,
+first-person arms the open sky. Foliage lights the sun per vertex and the sky per pixel at the
+vertex normal; particles read the SH in their vertex shaders (`RaSkyShVertex`): mesh particles at
+their normal, billboards and trails averaged. Undergrowth and roads, which have no normal, take it
+facing up. One perceptual roughness and F0 drive the sun's GGX highlight and the sky's split-sum
+reflection, occluded by the sky visibility (Lagarde); roughness widens with the normal's
+screen-space change (the normal maps' mips are renormalized, so Toksvig has nothing to read).
+Material classes are picked in the shaders, not the engine: bundled meshes by technique and
+flags (paint, glass, matte), soldiers' gear (paint with an environment map, else fabric), static
+meshes by the detail map's gloss (PR's old specular mask: stone and plaster stay matte, metal and
+glass near 1 go glass-sharp). Retail environment maps are no longer sampled or blended into
+albedo; the engine still loads and binds them (the terrain's environment-mapped layer reads its
+manager).
 
-D3D9 limits: there is no compute and no rendering into volume textures. The load-time tables are
-built on the CPU (pixel passes were tried first: loops the game's D3DX compiler leaves as loops
-came out wrong under DXVK, the multiple-scattering table 10x low); per-frame passes unroll their
-loops. The aerial-perspective volume is a 2D atlas of depth slices, blended between
-neighbouring slices by hand; every reader (particles included) samples it per pixel, and
-`A16B16G16R16F` also passes vertex texture fetch. Frame resources read by every lit shader get
-reserved samplers like s13 and s15: the atlas (s9), the sky cube and the split-sum BRDF table (two
-of s10–s12, s14). The water scene texture and the sky's transmittance table are effect
-parameters. Each task that adds to what the shaders may rely on raises the contract version (6 on);
-the shader side of tasks 2–5 is contracts 6–9 in the [shader contract](#shader-contract).
+**Water** (contract 12). Screen-space reflections: just before water draws, above water, the scene
+is copied to a single-sample texture (s12), and water marches against the prepass's linear depth,
+falling back to the sky cube where the ray leaves the screen. Fresnel at water's F0 weighs the
+reflection against the water body, lit by the sun and the sky with the authored water colour as
+albedo. Seen from under water, water stays as it was.
 
-Built so far, engine side (tasks 2–5, 2026-11-20):
-- **Tables** (task 2): the fit and the three tables take about 250 ms at load; `tools.atmosphere`
-  dumps them against the CPU model ([tools.md](tools.md#atmosphere)).
-- **Sky** (task 3): `RaSky` in the dome's place; the dome mesh draws only with
-  `renderer.atmosphere 0`, and is deleted with its techniques at acceptance, when the sky moves to an
-  effect of its own. Not checked yet: under water, thermals. Banding in the dark blue and the
-  sun's glare are milestone 13's (dither, bloom).
-- **Aerial perspective** (task 4): `Ra_ApplyFog` replaced in the 18 effects that fog; retail fog
-  kept under water, in first person and in thermals. Haze shape `renderer.hazeDepth` 1,
-  `renderer.hazeFalloff` 400. The fog queues (`RSMTFogPass`, `RSMTFogTransparentPass`) are deleted:
-  nothing added to slots 14 and 15 (the enqueue router fills 0–7, direct adds 8–11, 16–27 and 31).
-- **View distance** (task 5, A/B `renderer.viewDistance`): the world view's projection is
-  unbounded (reversed float depth); its frustum stays at the view distance, so objects cull as
-  before. With the cut on, a scenery frustum (`rendererSubmitCullFrustum`, built from the current
-  view at each call) reaches 40 km for the terrain culler, the surrounding ring (tested as a box;
-  retail's edge-crossing test missed slots), static meshes (culled by `renderer.contributionCull`),
-  road chunks and overgrowth cells (overgrowth to `Overgrowth.viewDistance`). Water draws over the
-  whole map, then the sea in rings of cells to the horizon in each direction whose surrounding slot
-  ends in open, sunlit sea. Bundled and skinned meshes past the cut are not submitted.
-- **Sky cube** (task 7, `SkyCube.cpp`, contract 10): built on the CPU with the sky view (at the fit
-), 108 ms on Muttrah City, into managed textures (six
-  device resets passed). Below the horizon: the colormaps' mean albedo times (authored sun x sun
-  cosine + the model sky's up irradiance), hazed over the path from 10 m up (`kGroundViewHeight`) to the horizon's
-  radiance. Prefilter: 64 GGX samples per texel, the source mip chosen per sample. SH9 projected
-  from the top mip, unscaled. SH9 against the cosine
-  integral: within 1 % sideways, 2–13 % straight up and down (ringing at the horizon's step).
-  `tools.atmosphere` dumps it ([tools.md](tools.md#atmosphere)).
-- **Shared lighting model** (task 8, contract 11; no A/B, owner 2026-11-21): with the shaders.
-  The sky cube and SH are in the surfaces' units (the fit's sun is theirs), unscaled. Every
-  per-pixel lit shader takes its sky light from the SH at its normal times its sky visibility;
-  foliage and particles light per vertex, cannot read the pixel registers, and keep the old flat
-  sky (0.18 of the sun) until they get the SH as a parameter. Material model (effects opting in;
-  bundled meshes first, with a placeholder class until task 9): one perceptual roughness and F0 per
-  pixel drive the sun's GGX highlight and the sky's (split sum); gloss maps become roughness within
-  the material class's range, metals take F0 from albedo; roughness widened by the normal's
-  screen-space derivatives; sky specular occluded by the sky visibility (Lagarde). The frame
-  grade's exposure went from −1.25 to 0 stops with it (owner: looks better), particle emissives
-  following it. Not yet checked against the new sun: baked and dynamic point lights.
-- **Foliage and particles' sky light** (2026-11-22): leaves and trunks still light per vertex,
-  but their pixel shaders take the sky from the SH at the interpolated vertex normal (one more
-  interpolant); undergrowth already had it through the terrain's light. Particles' vertex
-  shaders read the SH as `RaSkyShVertex` (contract 10): mesh particles at their normal,
-  billboards and trails averaged over every normal. The hemi map's ground tint on particles
-  applies only to the old flat sky.
-- **Soldiers** (task 11, shader side only): the shared material model; the sky occluded by the
-  hemi map's alpha, faded with the height over the terrain, as vehicles. Gear with an environment
-  map is paint, the rest fabric. First-person arms take the open sky (no hemi map).
-- **Terrain** (task 11, shader side only): its sky light is the SH at the patch's normal times the
-  lightmap's sky visibility, as statics (it was the SH facing up). Undergrowth and roads, which
-  have no normal of their own, keep the sky facing up.
-- **Decals** (task 11): their sky is the SH at their normal since task 8; not occluded. The hemi
-  map holds the sky visibility at the ground only, so a decal on a roof could not be told from one
-  under it; no other source exists yet.
-- **Water** (task 12, contract 12): screen-space reflections from a copy of the scene taken just
-  before water draws (`renderer.waterSsr`), the sky cube where the ray finds nothing; Fresnel at
-  water's F0 weighs the reflection against the water body, which takes the sun and the sky with
-  the authored water colour as albedo. Retail's water cube and its blend into the water colour go
-  while the SH is live. The scene copy is one full-screen resolve, only with water queued;
-  survives device resets (Saaremaa, four `renderer.vsync` toggles).
-- **Static meshes** (task 10, shader side only): the shared material model with sky reflections,
-  specular occluded by the lightmap's sky visibility. One technique serves every material, so
-  the class is the detail map's gloss, read as the old specular mask it is: Muttrah City's
-  stone and plaster sit at 0.3 to 0.5 and stay matte, metal and glass near 1 go glass-sharp
-  (dielectric: metal cannot be told apart). Windows there read gloss 0, so they do not reflect;
-  against the build before it the reference views barely change (shots `t10-*`).
-- **Bundled meshes** (task 9, shader side only): the class is picked in the shader from the
-  permutation's flags and the material's `AlphaBlendEnable` (the class mapping lives with the
-  shaders); no engine change, no class index in the engine yet. Paint, glass and matte are keyed;
-  metal is not (no technique tells it apart), nor fabric (canvas under colour-map gloss takes
-  paint). Vehicles' sky light is occluded by the hemi map's alpha, faded with the height over the
-  terrain. Blended surfaces keep their reflection whatever their alpha. Left: first-person models'
-  sky visibility under the camera (engine side), weapons' metal.
-- **Left** (owner's look, 2026-11-20: good on Saaremaa, Kashan Desert, Burning Sands, The Falklands): the far ground ring (land past the ring
-  shows sky); below the horizon the sky repeats its horizon row, flat (seen from the air until the
-  ring exists); vegetation past overgrowth's range (impostors, if wanted); the dither's look; jets
-  and anti-air; device resets with the cut on; the cost of statics, roads and terrain to 40 km.
+**Cost** (1920x1080, 4x MSAA, 2026-11-22, same session against the milestone's switches off; every
+frame CPU-bound): Muttrah City `bench1` 8.07 → 9.20 ms, Fallujah West `bench` 14.55 → 16.00 ms,
+Saaremaa `bench1` 5.13 → 5.78 ms. Over the 1 ms budget on two paths, accepted by the owner
+(2026-11-22). The view distance's scenery is most of it (0.91, 1.24 and 0.43 ms: about 220 more
+draws on Muttrah City); the atmosphere 0.1–0.2 ms, water's reflections 0.04 ms.
+
+Left, outside the milestone:
+- Stars and the night sky: the night layer (The Falklands, `gpm_cq 32`) loads and lights as before,
+  but the painted dome's stars and night clouds are gone (owner, 2026-11-22: fine until milestone
+  12).
+- Light shafts (dropped for now, owner 2026-11-21); thermals and under water keep their own looks.
+- Point lights, baked and dynamic, not checked against the new sun.
+- Decals' sky is not occluded (the hemi map holds only the ground's sky visibility); first-person
+  models take the open sky rather than the visibility under the camera; weapons' metal and fabric
+  under colour-map gloss have no class of their own.
+- View distance: the far ground ring (land past the surrounding ring shows sky; below the horizon
+  the sky repeats its horizon row), vegetation past overgrowth's range, jets and anti-air not
+  checked, the far scenery's cost.
+- Banding in the dark blue and the sun's glare: milestone 13 (dither, bloom).
 
 ### 15. Shader pipeline
 
@@ -443,8 +300,7 @@ Decided from these numbers (2026-11-22):
 Decided by the owner, 2026-11-20: the levels' painted cloud layers are replaced by modern clouds,
 not constrained by the game's approach; the sky is clear until then. Clouds must not change
 gameplay: aircraft have no ceiling the clouds could sit above, so nothing that hides a target is
-placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full when milestone 11
-is accepted:
+placed where aircraft fly. Three layers (owner, 2026-11-20); to be planned in full before it starts:
 
 - **Sky clouds (first).** Overcast decks, high cloud and distant banks drawn into the sky at
   infinity, so they are never reached, flown above or into, and hide nothing. Raymarched per
@@ -466,6 +322,9 @@ is accepted:
   parallax and the feel of flying under weather.
 - Cloud shadows on the ground (a 2D map from the sun, scrolling with the wind) and into the sky
   cube.
+
+- Stars and the night sky (owner, 2026-11-22): the painted dome's stars and night clouds went with
+  milestone 11; the night layers get them back here.
 
 First task: a prototype of the sky clouds and the coverage value alone, judged on Kashan Desert
 from the ground and the air at coverage 0.3, 0.7 and 1.0, before the lighting is coupled. Budget
