@@ -634,6 +634,21 @@ As built:
   the reflection fully (retail's normals keep half). At grazing the reflected fraction falls from
   about 0.7 to 0.3, as Bruneton's mean Fresnel for the ocean does; the retail body colour then
   fills the far sea, green and too bright, until task 4 replaces it.
+- *The water body* (task 4). Above water (the scene copy bound) the surface draws opaque: the
+  scene under it is read from the copy where `refract(-V, N, 1/1.333)` meets the water's
+  thickness (the opaque linear depth minus the surface's, along the ray; unbent where the bent read
+  lands on something in front), through a medium of Beer extinction and single scattering. The
+  level's `WaterColor` is deep water's colour: albedo = its linear value × 8 (deep in-scatter,
+  albedo / 4 of the light, then about the retail body's colour times the light), extinction
+  0.03 / albedo per metre (The Falklands: 0.25, 0.13, 0.25). The bed's light is attenuated on its
+  way down too (along the refracted sun; sky light at 1.2 m per metre); in-scatter of the refracted
+  sun's beam and the sky, each falling off with depth, integrated in closed form; a crest term
+  (the sun through the backs of the waves facing the eye when looking toward a low sun). The
+  copy's air in-scatter is taken off before the water attenuates it and added back once with the
+  surface's. The seabed is drawn only in patches near land; the sky behind the water, and any bed
+  within a pixel of it (the patches' resolved edges are half sky), is deep water. Replaces the
+  retail opacity, the lightmap's water depth and the retail body colour; under water nothing
+  changes.
 - Water's Ra shaders are not rebuilt by `rdev.sh reload`; a level load picks them up.
 
 ### 13. HDR bloom + auto-exposure
