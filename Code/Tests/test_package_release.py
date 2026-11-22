@@ -373,6 +373,14 @@ class PackageReleaseTests(unittest.TestCase):
                     self.assertNotIn("this archive is notarized", readme)
                     self.assertIn("xattr -dr com.apple.quarantine .", readme)
 
+    def test_unsigned_windows_packages_say_so(self):
+        self.populate()
+        self.package()
+        name = "openbf2-windows-x64-server"
+        with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
+            self.assertEqual(json.loads(archive.read(name + "/build-info.json"))["windows_signing"], "not configured")
+            self.assertIn("not code-signed", archive.read(name + "/README.txt").decode())
+
 
 WINDOWS_RUNTIME = {
     "x64": {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll", "BF2Audio.dll",
@@ -428,8 +436,25 @@ class ReleasePackageTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             PACKAGER.package(args)
 
-    def assemble(self, release, allow_missing=False):
-        args = SimpleNamespace(release=release, packages_dir=self.packages, output_dir=self.output,
+    def sign(self, packages=None, output=None, exit_code=0):
+        """Release CI's signing session over the legs' ZIPs, with a stand-in script that marks every file it
+        gets and records one line per call."""
+        script = self.root / "sign.py"
+        script.write_text("import sys\nfrom pathlib import Path\n"
+                          "with open({!r}, 'a') as out:\n"
+                          "    out.write(' '.join(Path(name).name for name in sys.argv[1:]) + '\\n')\n"
+                          "for name in sys.argv[1:]:\n"
+                          "    Path(name).write_bytes(Path(name).read_bytes() + b' [signed]')\n"
+                          "sys.exit({})\n".format(str(self.root / "signed.txt"), exit_code))
+        args = SimpleNamespace(sign_windows="certum", packages_dir=packages or self.packages,
+                               output_dir=output or self.root / "signed", revision="a" * 40,
+                               source_dir=SOURCE, windows_sign_script=script)
+        with contextlib.redirect_stdout(io.StringIO()):
+            PACKAGER.sign_windows(args)
+        return args.output_dir
+
+    def assemble(self, release, allow_missing=False, packages=None):
+        args = SimpleNamespace(release=release, packages_dir=packages or self.packages, output_dir=self.output,
                                allow_missing=allow_missing, revision="a" * 40, repository="kr4uzi/OpenBF2")
         with contextlib.redirect_stdout(io.StringIO()):
             PACKAGER.assemble_release(args)
@@ -535,6 +560,92 @@ class ReleasePackageTests(unittest.TestCase):
             self.assertNotIn(text, readme)
         for entry in WINDOWS_LICENCES:
             self.assertIn(entry.replace("/", "\\"), readme)
+
+    def test_sign_windows(self):
+        # One signing call for every program and DLL of every Windows ZIP; the signed ZIPs keep their entries,
+        # order, dates and modes, and carry new hashes, the signing in build-info and README, and new checksums.
+        self.build("windows-x86")
+        self.build("windows-x64")
+        signed = self.sign()
+        calls = (self.root / "signed.txt").read_text().splitlines()
+        self.assertEqual(len(calls), 1)
+        expected = []
+        for path in self.packages.rglob("openbf2-windows-*.zip"):
+            with zipfile.ZipFile(path) as archive:
+                runtime = json.loads(archive.read(path.stem + "/build-info.json"))["runtime_files"]
+            expected += [entry for entry in runtime if entry.lower().endswith((".exe", ".dll"))]
+        self.assertEqual(sorted(calls[0].split()), sorted(expected))
+        names = sorted(path.name for path in signed.glob("*.zip"))
+        self.assertEqual(names, sorted(path.name for path in self.packages.rglob("*.zip")))
+        for name in names:
+            original = next(self.packages.rglob(name))
+            path = signed / name
+            with self.subTest(package=name):
+                self.assertEqual(path.with_name(name + ".sha256").read_text(encoding="ascii"),
+                                 hashlib.sha256(path.read_bytes()).hexdigest() + "  " + name + "\n")
+                with zipfile.ZipFile(original) as before, zipfile.ZipFile(path) as after:
+                    old, new = before.infolist(), after.infolist()
+                    self.assertEqual([(i.filename, i.date_time, i.external_attr, i.create_system) for i in old],
+                                     [(i.filename, i.date_time, i.external_attr, i.create_system) for i in new])
+                    prefix = name[:-4] + "/"
+                    metadata = json.loads(after.read(prefix + "build-info.json"))
+                    readme = after.read(prefix + "README.txt").decode()
+                    for entry, digest in metadata["runtime_files"].items():
+                        data = after.read(prefix + entry)
+                        self.assertEqual(hashlib.sha256(data).hexdigest(), digest)
+                        program = entry.lower().endswith((".exe", ".dll"))
+                        self.assertEqual(data.endswith(b" [signed]"), program, entry)
+                    for info in old:
+                        entry = info.filename[len(prefix):]
+                        if entry not in metadata["runtime_files"] and entry not in ("build-info.json", "README.txt"):
+                            self.assertEqual(after.read(info.filename), before.read(info), entry)
+                self.assertEqual(metadata["windows_signing"], "certum")
+                self.assertIn("code-signed (Authenticode, Certum code signing certificate)", readme)
+                self.assertNotIn("not code-signed", readme)
+        tarball = signed / "openal-soft-0.0.0.tar.bz2"
+        self.assertEqual(tarball.read_bytes(), b"synthetic source tarball")
+        self.assertTrue(tarball.with_name(tarball.name + ".sha256").is_file())
+        # the release assembled from the signed ZIPs says so
+        self.assemble("windows", packages=signed)
+        _, metadata, readme = self.read("openbf2-windows")
+        self.assertEqual(metadata["windows_signing"], "certum")
+        self.assertIn("- These Windows binaries are code-signed (Authenticode, Certum code signing certificate).",
+                      readme)
+        self.assertNotIn("not code-signed", readme)
+
+    def test_sign_windows_failure_writes_nothing(self):
+        self.build("windows-x86")
+        with self.assertRaisesRegex(ValueError, "Signing failed with exit code 3"):
+            self.sign(exit_code=3)
+        self.assertFalse((self.root / "signed").exists())
+
+    def test_sign_windows_checks_its_inputs(self):
+        self.build("windows-x86")
+        with self.assertRaisesRegex(ValueError, "outside --packages-dir"):
+            self.sign(output=self.packages / "signed")
+        signed = self.sign()
+        with self.assertRaisesRegex(ValueError, "already signed"):
+            self.sign(packages=signed, output=self.root / "twice")
+        with self.assertRaisesRegex(ValueError, "No Windows per-role ZIPs"):
+            self.sign(packages=self.root / "release-empty")
+        zip_path = next(self.packages.rglob("openbf2-windows-x86-server.zip"))
+        zip_path.write_bytes(zip_path.read_bytes() + b"tampered")
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.sign(output=self.root / "tampered")
+
+    def test_windows_release_signing(self):
+        # a mix of signed and unsigned components is refused
+        self.build("windows-x86")
+        self.build("windows-x64")
+        signed = self.sign()
+        mixed = self.root / "mixed"
+        mixed.mkdir()
+        for path in signed.glob("openbf2-windows-x86-*"):
+            (mixed / path.name).write_bytes(path.read_bytes())
+        for path in (self.packages / "packages-windows-x64").iterdir():
+            (mixed / path.name).write_bytes(path.read_bytes())
+        with self.assertRaisesRegex(ValueError, "differ in windows_signing"):
+            self.assemble("windows", packages=mixed)
 
     def test_windows_release_without_d3dx(self):
         # Without a usable D3DX source the legs package their servers only.

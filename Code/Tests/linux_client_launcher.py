@@ -25,9 +25,12 @@ if mode == 'descendant':
     descendant = subprocess.Popen([sys.executable, '-c',
         'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])
     time.sleep(0.1)
-record.write_text(json.dumps({'pid': os.getpid(), 'pgid': os.getpgrp(),
-                             'descendant': descendant.pid if descendant else None,
-                             'argv': sys.argv[1:]}))
+# Written beside the record and renamed, so the test never reads a half-written record.
+pending = record.with_name(record.name + '.tmp')
+pending.write_text(json.dumps({'pid': os.getpid(), 'pgid': os.getpgrp(),
+                              'descendant': descendant.pid if descendant else None,
+                              'argv': sys.argv[1:]}))
+os.replace(pending, record)
 if mode == 'metadata':
     video = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'OpenBF2/Profiles/Default/Video.con'
     video.write_text('VideoSettings.setAntialiasing 8Samples\nLocalProfile.setPassword secret-child-value\n')
