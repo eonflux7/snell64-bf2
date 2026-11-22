@@ -310,7 +310,9 @@ later (owner); until then it is measured, not capped.
   ambient, aerial perspective. Near clouds are marched from the camera per screen pixel at reduced
   resolution with temporal reprojection, stopped at the scene's depth; far ones come from a
   cloud panorama (about 1024x512; the 192x108 sky-view table is too coarse for cloud edges),
-  updated over several frames, drifting with the wind. The marches are real loops: unrolled, the
+  updated over several frames, drifting with the wind. Each panorama is blended into the previous
+  one (weight 0.25) with a march offset that moves per panorama, so its jitter averages out
+  instead of showing as grain about five screen pixels across, changing every 8 frames. The marches are real loops: unrolled, the
   panorama compiled for 17 s on the main thread, and the loop draws the same under DXVK (the
   load-time tables' loops did not).
 - **Coverage drives the lighting.** One coverage value per level (0 clear, 1 storm; picked per
@@ -380,27 +382,12 @@ Planned (owner, 2026-11-22), from a survey of the literature (below):
   fluid simulation (Stormscapes 2020, Weatherscapes 2021, Nubis³ 2023) is out of reach of D3D9 and
   wasted without parallax.
 
-**Reference set.** Poly Haven's outdoor HDRIs (CC0; 647, 454 with an open sky: 225 partly cloudy,
-173 clear, 47 overcast, 7 fog; 285 from southern Africa, 225 from Europe, 120 without coordinates),
-fetched at 2k–4k by a script and not stored in the repo; about 8 hand-picked ones, chosen just
-before the prototype is judged. The sun's position comes from each one's
-coordinates and date (or its brightest pixel), and the script checks its sun peak is unclipped. No
-skies from the Middle East: the dry southern African ones stand in for the desert preset. Uses, in
-order of value:
-1. Side-by-side panoramas: our cloud panorama (same equirectangular layout) rendered at a reference's
-   sun position, preset and coverage.
-2. Luminance ratios within one image (sunlit cumulus against the sky beside it, cloud base against
-   the horizon, overcast against clear zenith), measured in the reference and in ours. Where no
-   cloud covers the sun, the sun disc against our atmosphere's scales the reference to absolute
-   luminance.
-3. The coverage-driven lighting, checked before the clouds exist: the scene lit from a real
-   overcast reference's SH against what our coverage value gives.
-4. Cloud statistics (coverage, size distribution) from a red/blue segmentation, masking about 5°
-   around the sun for flare; only if the prototype's clouds look wrong (Dagor's noise is tuned).
+**Tuned by eye** (owner, 2026-11-22): the planned reference set (about 8 Poly Haven HDRIs, their
+luminance ratios and cloud statistics) is dropped; the clouds are tweaked by eye in game.
 
 The prototype (the two presets, the coverage value, the Mie phase and multiple scattering, before
 the lighting is coupled) is judged on Kashan Desert from the ground, the air and inside a cloud at
-coverage 0.3, 0.7 and 1.0, against the reference set by uses 1, 2 and 4. Its GPU time at
+coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
 1920x1080 is measured on the benchmark paths; the budget is the owner's to set (the first plan's
 0.3–0.6 ms was for the panorama alone).
 

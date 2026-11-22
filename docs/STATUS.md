@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–4 built; task 5 (reference set) next | [render.md](lanes/render.md#12-clouds) |
+| `render` | Milestones 1–11 and 15 accepted | Milestone 12 (clouds): tasks 1–4 built; task 5 (far noise, by eye) built | [render.md](lanes/render.md#12-clouds) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -28,12 +28,11 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
 4. Reachable clouds (contract 15; `renderer.cloudNear`): built (agent: Kashan Desert from the
    ground, 3, 4.5 and 8 km, coverage 0.4 and 1.0; views `m12t4-*`). The GPU budget is set later
    (owner); the cost is measured in task 6.
-5. Reference set: a script fetches about 8 hand-picked Poly Haven outdoor HDRIs (desert-like and
-   maritime, coverage about 0.3/0.7/1.0, 2 sunsets; open sky) with each one's sun position and an
-   unclipped-sun check; a second script measures the luminance ratios. The list goes in render.md.
-   Cloud statistics only if the prototype looks wrong.
-6. Prototype judged on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0) against the
-   references; its GPU time measured.
+5. Far cloud noise and shimmer, tweaked by eye (owner, 2026-11-22, in place of the reference set):
+   the panorama accumulated over panoramas: built (agent: Kashan Desert `m12-up90`, the grain
+   gone and steady between shots).
+6. Prototype judged by eye on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0);
+   its GPU time measured.
 7. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real
    overcast reference's SH. The haze and sky light are dimmed by the sun ray's length through the
    cloud slab times coverage (Dagor's `statistical_clouds_shadow`).
@@ -63,6 +62,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Reachable clouds (render milestone 12, task 4): Kashan Desert, views `m12t4-base` (3 km),
   `m12t4-in` (4.5 km; `renderer.cloudCoverage 1` puts the camera in the deck), `m12t4-above`,
   `m12t4-above2` (8 km), `m12-up`; `renderer.cloudNear 0` for the panorama alone.
+- Far clouds without grain or shimmer (render milestone 12, task 5): Kashan Desert, `m12-up90`
+  (the horizon band).
 
 ## Open issues
 
