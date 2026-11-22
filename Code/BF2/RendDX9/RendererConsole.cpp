@@ -1484,6 +1484,11 @@ void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
                                  kRendererConsoleTag)
 
+// [RENDER] The far ground (render milestone 17, Geom/FarGround.cpp); 0 draws the retail ring.
+bool getFarGround() { return rendererFarGround(); }
+void setFarGround(bool value) { rendererFarGround() = value; }
+BF2_CONSOLE_PROPERTY_FN(farGround, bool, true, getFarGround(), setFarGround, kRendererConsoleTag)
+
 // [RENDER] Bloom and auto-exposure (render milestone 13, HdrPost.cpp).
 bool getBloom() { return rendererBloomEnabled(); }
 void setBloom(bool value) { rendererBloomEnabled() = value; }
@@ -1545,6 +1550,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudMidDensity", "Sky clouds' mid layer: density against the low layer's; -1 the preset's (desert 0.6, maritime 0.35)" },
         { "cloudMidCoverage", "Sky clouds' mid layer: coverage, 0 clear to 1 overcast; -1 the preset's (cloudCoverage times 0.8 desert, 0.6 maritime)" },
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
+        { "farGround", "Far ground: land past the map to about 32 km in place of the surrounding ring (0: the ring)" },
         { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
         { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
         { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },

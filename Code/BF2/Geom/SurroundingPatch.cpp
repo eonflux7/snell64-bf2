@@ -21,6 +21,7 @@
 #include "../Math/Mat4.h"
 #include "../Core/StringUtil.h"         // formatString (sub_10074AB0)
 #include "../RendDX9/RendDX9Base.h"
+#include "FarGround.h"
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendMisc/IRenderView.h"
 
@@ -195,16 +196,20 @@ void SurroundingPatch::measureHeights(const float* heights, unsigned int vertexC
     const float outer = 1.5f * static_cast<float>(span) - 0.5f * static_cast<float>(secondaryScaleX);
     float lowest = FLT_MAX;
     std::vector<float> edge;
+    std::vector<float> xs(vertexCount), zs(vertexCount), ys(vertexCount);   // the far ground's heights
     for (unsigned int i = 0; i < vertexCount; ++i)
     {
         const float gx = grid[2 * i], gz = grid[2 * i + 1];
         const float x = gx * m[0] + gz * m[4] + m[12];
         const float z = gx * m[1] + gz * m[5] + m[13];
         const float y = heights[3 * i] * t->m_secondaryWorldScale.y;
+        xs[i] = x; zs[i] = z; ys[i] = y;
         lowest = (std::min)(lowest, y);
         if ((std::max)(std::fabs(x), std::fabs(z)) >= outer)
             edge.push_back(y);
     }
+    farGroundAddRing(xs.data(), zs.data(), ys.data(), vertexCount, static_cast<float>(span),
+                     static_cast<float>(secondaryScaleX));   // render milestone 17, FarGround.h
     t->m_surroundLowest[slot] = lowest;
     if (!edge.empty())
     {

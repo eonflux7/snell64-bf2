@@ -15,6 +15,7 @@
 #include "Terrain.h"
 #include "QuadPatch.h"
 #include "TerrainAtlas.h"
+#include "FarGround.h"
 #include "XpLightManager.h"
 #include "StaticMesh.h"
 #include "../Game/Objects/Visual/LightSource.h"   // the mask-light pass's lights
@@ -179,6 +180,8 @@ void Terrain::update()
     m_culler->update();
     updateWaterConstants();                                               // vslot +0xE0
     terrainAtlasUpdate();                                                 // [RENDER] TerrainAtlas.h, once after a load
+    if (terrainAtlases())
+        farGroundUpdate(this);                                            // [RENDER] FarGround.h, once, after the atlases
 }
 
 // the first arm: push, update, the constants, the main draw, the water, pop.
@@ -194,13 +197,14 @@ void Terrain::renderWorldPassBegin()
     dx9rend::stateManagerPop();
 }
 
-// the closing arm: the diffuse passes, then the ring.
+// the closing arm: the diffuse passes, then the ring. [RENDER] The far ground in the ring's place
+// (render milestone 17, FarGround.h); the ring only with renderer.farGround 0.
 void Terrain::renderWorldPassEnd()
 {
     dx9rend::stateManagerPush();
     if (m_drawMain)
         drawFinal();
-    if (m_flag359 && m_surroundingBuilt)
+    if (m_flag359 && !farGroundDraw(this) && m_surroundingBuilt)
         drawSurrounding();
     dx9rend::stateManagerPop();
 }

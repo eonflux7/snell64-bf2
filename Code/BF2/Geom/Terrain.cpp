@@ -15,6 +15,7 @@
 #include <cfloat>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "Terrain.h"
+#include "FarGround.h"   // [RENDER] render milestone 17
 #include "QuadPatch.h"
 #include "../Math/Mat4.h"
 #include "XpLightManager.h"
@@ -979,6 +980,7 @@ void Terrain::load(const std::string& path)
 
     setupWater();                                                                 // vslot +0xD4
     terrainAtlasLoad(this);    // [RENDER] the one-pass terrain's atlases, built on the first update (TerrainAtlas.h)
+    farGroundLoad(this);       // [RENDER] the far ground, built after them (FarGround.h)
 
     // [RENDER] Retail created the dynamic shadow-range index buffer (+0x368) here; nothing draws
     // shadow ranges.
@@ -2275,6 +2277,7 @@ Terrain::~Terrain()
     // (1) The water resources - slot +0xDC, called directly (call 0x100DA120).
     Terrain::releaseWater();
     terrainAtlasRelease();     // [RENDER] TerrainAtlas.h
+    farGroundRelease();        // [RENDER] FarGround.h
 
     // Destroy the water-parameter array in reverse order, then free its allocation header.
     // The member remains unchanged.
