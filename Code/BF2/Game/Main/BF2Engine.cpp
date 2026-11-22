@@ -2623,14 +2623,17 @@ BF2Engine::~BF2Engine()
 }
 
 // The main-loop control accessors - 0x8136F10 / 0x8131140-0x8131180.
-// setLockFPS refuses non-positive values (`test edx,edx; jle` skips the store) - a clamp the
-// header's console binding notes never mentioned. Reproduced.
 void BF2Engine::quitNextFrame()  { quitNextFrameFlag = true; }
 
+// setLockFPS - BF2.exe 0x403100 / ELF 0x8136F10. A positive value is stored. A non-positive value
+// stores 0 (no lock) on a client and is ignored on a dedicated server. The ELF folds isDedicated()
+// to true, so only its guard survives there.
 void BF2Engine::setLockFPS(int fps)
 {
-    if (fps > 0)                                // the guard IS the function
+    if (fps > 0)
         lockFPS = fps;
+    else if (!isDedicated())
+        lockFPS = 0;
 }
 
 int  BF2Engine::getLockFPS() const   { return lockFPS; }
