@@ -163,9 +163,12 @@ for PR's fog end (0.5–2 km) would turn the sky into haze:
 - *Sky atmosphere:* Earth's air on every level (Rayleigh, Mie, ozone at Earth's densities), clear
   until milestone 12's clouds. Sunlight above it = the authored sun / the transmittance at the sun's
   elevation, clamped to at least 0.1 per channel (low suns, night layers).
-- *Ground haze:* density from fog end (`renderer.hazeDepth`, optical depth 1 there), albedo from the
-  authored fog colour, density falling with height (`renderer.hazeFalloff`, 400 m). Exponential in
-  optical depth throughout, past fog end too; retail's fog start is not used.
+- *Ground haze:* density from a visibility, the same on every level (`renderer.hazeVisibility`,
+  8 km: a level ray at the reference height keeps 2 % contrast there, 3.912 / V per metre), albedo
+  from the authored fog colour, density falling with height (`renderer.hazeFalloff`, 1200 m).
+  Realistic, mostly in the distance (owner, 2026-11-22); it was optical depth 1 at fog end (400 m
+  falloff), 2.7 km of visibility on Muttrah City's 700 m. Exponential in optical depth throughout,
+  past fog end too; retail's fog start is not used.
 - *Tables,* built on the CPU by the code the fit evaluates, in managed textures that survive device
   resets: transmittance 256x64, multiple scattering 32x32, sky view 192x108 (at the terrain's mean
   height). D3D9 has no compute and no volume render targets, and pixel-pass versions of these
@@ -178,7 +181,13 @@ for PR's fog end (0.5–2 km) would turn the sky into haze:
   (64x64).
 
 **Per frame.** The aerial-perspective atlas (32x32 x 32 depth slices in a 2D atlas, a pixel pass
-after the sun cascades) on s9; every fogged shader reads it per pixel (`Ra_GetAerial`). Retail's fog
+after the sun cascades) on s9; every fogged shader reads it per pixel (`Ra_GetAerial`). The haze's
+transmittance comes from the tile; its light from a 33rd block, per tile column and elevation
+(contract 20), by each pixel's own ray: in full haze far land takes the sky's colour right behind
+it, so the sky's quick change just above the horizon no longer shows as a band across the mountains
+a tile off the horizon. View- and clip-space callers (particles, decals) keep the tile's light
+(`Ra_GetAerialView`). The sky and the clouds are not hazed: at any realistic visibility the haze
+along a ray out of its layer hides the clouds 10–30° up (tried, 2026-11-22). Retail's fog
 curve stays under water, in first person and in thermals. The sky is one full-screen pass at the
 far plane in the dome's place (`SkyDome.fx` technique `RaSky`): the sky view plus a limb-darkened sun
 disc capped for the MSAA resolve; under water the water's fog colour. The painted dome, its cloud
@@ -196,8 +205,8 @@ it looks and that it is the same in every direction.
   over the whole map, then sea cells to the horizon wherever the ring ends in open sea. Vehicles,
   soldiers, particles and decals end at the limit. The land's shape is visible further, targets
   are not (accepted by the owner).
-- Full haze is the sky's radiance along the ray, so an aircraft against the sky and a vehicle
-  against terrain vanish at the same distance.
+- Full haze is the sky's radiance along the ray. With the realistic haze, the haze no longer hides
+  the cut: at Muttrah City's 700 m a level ray keeps about 70 % of its contrast.
 
 **Shared lighting model** (contract 11, shaders outside this tree). Every per-pixel lit receiver
 takes the sky as the SH at its normal times its sky visibility: statics and terrain the
@@ -952,6 +961,7 @@ and add its row here.
 | 17 | Water's waves (render milestone 16, task 2): effect `Shaders/RaWater`, techniques `RaWaterSpectrum`, `RaWaterFft`, `RaWaterSlopes`, drawn by the engine (`Water.cpp`) each frame before the depth prepass; parameters by semantic `RaWater` (`float4[4]`, layout in the effect) and `RaWaterInput`. While the water queue draws, the three cascades' slope maps are on the reserved samplers s6–s8 (256² `A16B16G16R16F`, full mips, 16x anisotropic, wrap; r, g the slopes along and across the wind, the normalised `WaterScroll.xy` ((1, 0) when zero), b, a their squares, the last cascade's plus the slope variance below its grid) over patches of 503, 87 and 17.3 m, and `RaWaterSsr.w` is 1; zero without them. `RaWater[3]`: xy the wind's direction, zw the variance added to b, a |
 | 18 | Water's foam (render milestone 16, task 5): the `Shaders/RaWater` atlas is 1024 × 256 (a fourth block: rg Jxz of cascades 0 + i 1, ba of cascade 2), technique `RaWaterFoam` with parameter `RaWaterHistory` (semantic) and `RaWater[0].w` the fade, `[1].w` the choppiness, `[3].zw` the threshold and 1 / ramp; while the water queue draws with waves, the 87 m and 17.3 m cascades' foam maps on s4–s5 (256² `R16F`, mips, 16x anisotropic, wrap) and pixel register c188 `RaWaterFoam` (x 1 while bound, y the depth waves break at, z the waves' loop seconds), zero otherwise |
 | 19 | Bloom and auto-exposure (render milestone 13): effect `Shaders/RaHdrPost`, techniques `RaBloomDownKaris`, `RaBloomDown`, `RaBloomUp` (blends ONE, ONE), `RaLumMeter`, `RaLumHistogramRows`, `RaLumHistogram`, `RaExposureAdapt`, drawn by the engine (`HdrPost.cpp`) before the grade; parameters by semantic `RaHdrPost` (`float4[4]`, layout in the effect), `RaHdrSource`, `RaHdrHistory`. The FSQuadDrawer effect (pass 0, the grade) gets `RaGrade` (`float4[2]`: auto-exposure on, the bloom's share, sRGB encode, frame mod 64; 1 / the bloom's size, manual exposure in stops, 1 / level count), `RaGradeExposure` (the 1 x 1 state: adapted EV, exposure, metered EV, written) and `RaGradeBloom`; all zero means 0 stops, no bloom, the 2.2 encode. Particle effects get `RaExposureParticle` (`float4`: x 1 auto, y manual stops) and `RaExposureState` (the 1 x 1 state, for a vertex sampler) |
+| 20 | The haze's light per pixel: the aerial-perspective atlas is 1056 x 32, its 33rd block (x 1024 + column, row r) the haze's light (rgb, a 1) toward the azimuth where tile column x's rays meet the horizon, at sin(elevation) = (r / 31)^2 (rays below the horizon read row 0); `Ra_GetAerial` lights a pixel by its own ray's elevation, its in-scatter that light times one minus the transmittance. |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
@@ -970,7 +980,7 @@ directory no longer carries it (`_3153_0`).
 |---|---|---|---|
 | s4–s5 | Water's foam maps, the two finer wave cascades (contract 18) | `R16F`, mipmapped | During the water queue only, while `RaWaterFoam.x` > 0 |
 | s6–s8 | Water's slope maps, one per wave cascade (contract 17) | `A16B16G16R16F`, mipmapped | During the water queue only, while `RaWaterSsr.w` > 0 |
-| s9 | Aerial-perspective atlas (1024x32: 32 distance slices of 32x32 screen tiles) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
+| s9 | Aerial-perspective atlas (1056x32: 32 distance slices of 32x32 screen tiles, then the light block, contract 20) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`), mipmapped | During the water queue only, while `RaWaterSsr.x` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
 | s14 | Cloud shadow map (contract 16) | `A16B16G16R16F` | From the clouds' frame step (before the prepass), rest of the frame; read while `RaCloudShadow[0].w` > 0 |

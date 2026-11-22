@@ -48,6 +48,13 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   halo); The Falklands `gpm_cq 32` view `w0` (night: `renderer.exposureMax` 4 now, 4.5 matches
   retail's brightness). Bloom strength `renderer.bloomStrength` (0.04).
 
+- Haze (render milestone 11 follow-up, 2026-11-22): realistic visibility `renderer.hazeVisibility`
+  (8 km, was 2.7 km on Muttrah City) with `renderer.hazeFalloff` 1200 m, and the haze's light per
+  pixel (contract 20: no band across far mountains at the horizon). Muttrah City `street`, `ridges`;
+  A/B `renderer.hazeVisibility 2700`, `renderer.hazeFalloff 400` (the old look). Things now dissolve
+  at fog end in clearer air (about 70 % contrast left at 700 m): judge in play. The final defaults
+  were tuned live on the previous build; not yet seen on this one (the GPU driver needs a reboot).
+
 ## Open issues
 
 - The default video profile picks 8x antialiasing while the scene runs 4x. Settle on fixed 4x (a
