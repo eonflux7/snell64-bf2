@@ -414,5 +414,8 @@ the debug menu. Fails before the first fit.
   `<NAME>-skycube.png` (faces +x −x +y −y +z −z across, mips down, upscaled, rgb scaled to its
   maximum); irradiance / pi at 8 normals from `RaSkySH` against a cosine integral of the top mip,
   with their ratio. `[brdf]`: the split-sum table's statistics, `<NAME>-brdf.png` and a grid.
+- `[cloudlight]` (render milestone 12, task 1): the clouds' light table's statistics and
+  `<NAME>-cloudlight.png`; per altitude (0.75–11.25 km), at x −245, −35 and +245 km, the sun's
+  irradiance, the sky's radiance from above and the ground's from below.
 
 The managed tables are locked where they are; the atlas is read back from its render target.

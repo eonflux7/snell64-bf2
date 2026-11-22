@@ -867,6 +867,7 @@ struct AtmosphereInfo
     IDirect3DTexture9* transmittance;   // 256 x 64
     IDirect3DTexture9* multiScatter;    // 32 x 32
     IDirect3DTexture9* skyView;         // 192 x 108
+    IDirect3DTexture9* cloudLight;      // 64 x 24: 8 altitudes x (sun, sky, ground) tiles of 8 x 8
     IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
     float fitMs, refHeight, fogEnd, hazeDensity;
     float skyGain;                      // the authored horizon over the model's (not applied)

@@ -389,6 +389,81 @@ void buildSkyView(const SkyParams& p, const CpuTables& c, double r, const V3& su
     }
 }
 
+// ---- cloud light (render milestone 12, task 1) ----
+// The light a cloud receives at its altitude and position, from this model (after Gaijin's Dagor
+// daSkies2, `clouds_light_color`; BSD-3-Clause): the clouds' include (RaCloud.fxh) reads it per
+// sample. One 2D texture of kCloudLightLayers tiles across (altitudes above the reference height,
+// layer i at (i + 0.5) / layers of kCloudLightTopKm) by three rows of tiles down: the sun's
+// irradiance there, the sky's mean radiance from above (its irradiance / pi), and the ground's
+// radiance from below. A tile's texel (x, z) sits at world x, z = ((i + 0.5) / tile * 2 - 1) times
+// kCloudLightRangeKm from the level's origin: the planet's curvature lowers the sun far away
+// (sunset on the distant deck first). The haze is left out (its density at 1.5 km is e^-4 of the
+// ground's), and the ground everywhere has the level's albedo.
+const int kCloudLightLayers = 8, kCloudLightTile = 8, kCloudLightRows = 3;
+const double kCloudLightTopKm = 12.0, kCloudLightRangeKm = 280.0;
+const int kCloudLightMuS = 33;   // sun cosines -0.32 .. 1 for the irradiance
+
+// The sky's irradiance from the upper hemisphere at radius r, for unit sunlight above the
+// atmosphere: cosine-weighted rings, half the azimuths (the sky is symmetric about the sun's plane).
+V3 skyIrradiance(const SkyParams& p, const CpuTables& c, double r, double muS)
+{
+    const int rings = 8, azimuths = 8;
+    const V3 sun = v3(std::sqrt(std::max(0.0, 1.0 - muS * muS)), muS, 0.0);
+    V3 sum = v3(0, 0, 0);
+    for (int i = 0; i < rings; ++i)
+    {
+        const double ct = std::sqrt((i + 0.5) / rings), st = std::sqrt(1.0 - ct * ct);
+        for (int j = 0; j < azimuths; ++j)
+        {
+            const double a = kPi * (j + 0.5) / azimuths;
+            sum = sum + skyInScatter(p, c, r, v3(st * std::cos(a), ct, st * std::sin(a)), sun, 20);
+        }
+    }
+    return sum * (kPi / (rings * azimuths));
+}
+
+double cloudLightMuS(int i) { return -0.32 + 1.32 * i / (kCloudLightMuS - 1); }
+
+V3 lookupMuS(const std::vector<V3>& t, double muS)
+{
+    const double f = std::min(std::max((muS + 0.32) / 1.32, 0.0), 1.0) * (kCloudLightMuS - 1);
+    const int i = std::min(static_cast<int>(f), kCloudLightMuS - 2);
+    return t[i] * (1.0 - (f - i)) + t[i + 1] * (f - i);
+}
+
+void buildCloudLight(const SkyParams& p, const CpuTables& c, double refHeightM, const V3& toSun,
+                     const V3& sunTop, std::vector<V3>& out)
+{
+    const int w = kCloudLightLayers * kCloudLightTile, h = kCloudLightRows * kCloudLightTile;
+    out.assign(w * h, v3(0, 0, 0));
+    const double rg = kGroundRadius + std::max(refHeightM, 1.0) / 1000.0;
+    std::vector<V3> groundSky(kCloudLightMuS), layerSky(kCloudLightMuS);
+    for (int i = 0; i < kCloudLightMuS; ++i)
+        groundSky[i] = skyIrradiance(p, c, rg, cloudLightMuS(i));
+    for (int l = 0; l < kCloudLightLayers; ++l)
+    {
+        const double r = rg + kCloudLightTopKm * (l + 0.5) / kCloudLightLayers;
+        for (int i = 0; i < kCloudLightMuS; ++i)
+            layerSky[i] = skyIrradiance(p, c, r, cloudLightMuS(i));
+        // The air between the ground and this altitude, straight up.
+        const V3 airUp = transmittance(c, rg, 1.0) / vmax(transmittance(c, r, 1.0), 1e-9);
+        for (int tz = 0; tz < kCloudLightTile; ++tz)
+            for (int tx = 0; tx < kCloudLightTile; ++tx)
+            {
+                const double x = ((tx + 0.5) / kCloudLightTile * 2.0 - 1.0) * kCloudLightRangeKm;
+                const double z = ((tz + 0.5) / kCloudLightTile * 2.0 - 1.0) * kCloudLightRangeKm;
+                const V3 up = v3(x, rg, z) * (1.0 / length(v3(x, rg, z)));
+                const double muS = std::min(std::max(dot(up, toSun), -1.0), 1.0);
+                const V3 sunGround = sunTop * transmittance(c, rg, muS);
+                const V3 groundIrr = sunGround * std::max(muS, 0.0) + lookupMuS(groundSky, muS) * sunTop;
+                const int x0 = l * kCloudLightTile + tx;
+                out[(0 * kCloudLightTile + tz) * w + x0] = sunTop * transmittance(c, r, muS);
+                out[(1 * kCloudLightTile + tz) * w + x0] = lookupMuS(layerSky, muS) * sunTop * (1.0 / kPi);
+                out[(2 * kCloudLightTile + tz) * w + x0] = p.groundAlbedo * groundIrr * airUp * (1.0 / kPi);
+            }
+    }
+}
+
 // ---- inputs and the fit ----
 
 struct Inputs
@@ -425,11 +500,13 @@ struct State
     V3 zenithModel, horizonModel, horizonTarget;
     double skyGain;          // horizon luminance: authored over the model's
     CpuTables tables;        // full size, for the textures
+    std::vector<V3> cloudLightData;   // buildCloudLight
     double fitMs;
     // GPU.
     IDirect3DTexture9* trans;
     IDirect3DTexture9* ms;
     IDirect3DTexture9* skyView;
+    IDirect3DTexture9* cloudLightTexture;
     IDirect3DTexture9* atlas;
     D3DFORMAT atlasFormat;
     bool formatChecked;
@@ -437,6 +514,7 @@ struct State
     bool atlasVertexFilter;
     bool tablesDirty;        // the fit changed: upload the transmittance and multiple scattering
     bool skyViewDirty;       // the fit or the blend changed: rebuild and upload the sky view
+    bool cloudLightDirty;    // the fit changed: upload the cloud light
     bool effectMissing;
     bool atlasLive;          // this frame's atlas is drawn and bound to s9
     float cutRange;          // rendererViewDistanceCutRange
@@ -612,12 +690,15 @@ void fit()
     // The frame's tables at full size (the sky view follows in rendererAtmosphereFrame).
     buildTransmittance(g.sky, g.tables, kTransmittanceW, kTransmittanceH);
     buildMultiScatter(g.sky, g.tables, kMultiScatterSize);
+    buildCloudLight(g.sky, g.tables, g.refHeight,
+                    v3(in.toSun[0], in.toSun[1], in.toSun[2]), g.sunTop, g.cloudLightData);
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&freq);
     g.fitMs = freq.QuadPart ? 1000.0 * static_cast<double>(t1.QuadPart - t0.QuadPart) / freq.QuadPart : 0.0;
     g.fitted = true;
     g.tablesDirty = true;
     g.skyViewDirty = true;
+    g.cloudLightDirty = true;
 
     std::fprintf(stderr,
         "[ATMOS] fit and tables %.0f ms: sun elevation %.1f deg, reference height %.1f m, fog end %.0f m\n"
@@ -734,6 +815,9 @@ void updateTables()
         g.tablesDirty = !(uploadTable(g.trans, g.tables.trans, kTransmittanceW, kTransmittanceH)
                           && uploadTable(g.ms, g.tables.ms, kMultiScatterSize, kMultiScatterSize));
     }
+    if (g.cloudLightDirty)
+        g.cloudLightDirty = !uploadTable(g.cloudLightTexture, g.cloudLightData,
+                                         kCloudLightLayers * kCloudLightTile, kCloudLightRows * kCloudLightTile);
     if (g.skyViewDirty)
     {
         const double elevation = std::asin(std::min(std::max(static_cast<double>(g.inputs.toSun[1]), -1.0), 1.0));
@@ -1021,6 +1105,7 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.transmittance = g.trans;
     i.multiScatter = g.ms;
     i.skyView = g.skyView;
+    i.cloudLight = g.cloudLightTexture;
     i.perspective = g.atlas;
     i.fitMs = static_cast<float>(g.fitMs);
     i.refHeight = static_cast<float>(g.refHeight);
