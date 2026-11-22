@@ -31,6 +31,8 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#12-clouds)); as built so
 5. Far cloud noise and shimmer, tweaked by eye (owner, 2026-11-22, in place of the reference set):
    the panorama accumulated over panoramas, then 2048x1024 read with Catmull-Rom: built (agent:
    Kashan Desert `m12-up90`, the grain gone, sharper, steady between shots; cost not measured).
+   Desert slab lowered to 2–8 km (was 3.5–9.5; owner, by eye); `renderer.cloudBase`/`cloudTop`
+   override it.
 6. Prototype judged by eye on Kashan Desert (ground, air, inside a cloud; coverage 0.3/0.7/1.0);
    its GPU time measured.
 7. Coverage drives the lighting (sun, shadows, sky light, haze), checked first against a real

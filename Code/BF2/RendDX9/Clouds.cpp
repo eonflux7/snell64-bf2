@@ -104,13 +104,13 @@ struct Preset
     double windX, windZ, windMs;   // the wind at cloud level: direction (world x, z), speed
     double highM, highCoverage, highTau;   // the high cloud: height, coverage, vertical optical depth
 };
-// Desert: a hot dry afternoon (T 35 C, dew point 7 C: base ~125 m x 28 = 3.5 km), deep dry
-// convection to ~8 km; continental air, many small droplets. Maritime: a moist boundary layer
+// Desert: a hot dry afternoon (T 35 C, dew point 19 C: base ~125 m x 16 = 2 km; owner, 2026-11-22:
+// 3.5 km sat too high for 4 km maps), deep dry convection 6 km above it; continental air, many small droplets. Maritime: a moist boundary layer
 // (T - Td ~ 4 C: base ~500 m) under an inversion, stratus to stratocumulus; few, large droplets.
 // Both carry thin cirrus above the slab (vertical optical depth 0.3-0.4 where densest, the
 // common range of 0.03-1), streaked along the wind.
 const Preset kPresets[2] = {
-    { "desert", 3500.0, 9500.0, 0.25, 0.55, 0.6, 12.0, 0.25, 0.94, 0.34, 8.0, 11000.0, 0.35, 0.3 },
+    { "desert", 2000.0, 8000.0, 0.25, 0.55, 0.6, 12.0, 0.25, 0.94, 0.34, 8.0, 11000.0, 0.35, 0.3 },
     { "maritime", 500.0, 5500.0, 0.0, 0.3, 0.35, 20.0, 0.35, 0.6, -0.8, 12.0, 8000.0, 0.5, 0.4 },
 };
 

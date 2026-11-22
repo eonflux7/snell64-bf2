@@ -436,8 +436,8 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
     octave's extinction (32 steps, quadratic, to the slab's top or 30 km), and the octave-weighted
     visibility straight up and straight down (8 steps each), which weigh the sky's and the
     ground's light in `Ra_CloudAmbient`.
-  Presets (`renderer.cloudPreset`): *desert* slab 3.5–9.5 km above the reference height (hot,
-  dry: base 125 m × (T − Td) ≈ 3.5 km), cloud type 0.25–0.55, LWC 0.6 g/m³, droplets 12 µm
+  Presets (`renderer.cloudPreset`): *desert* slab 2–8 km above the reference height (hot,
+  dry: base 125 m × (T − Td) ≈ 2 km; 3.5 km until 2026-11-22, too high for 4 km maps by eye), cloud type 0.25–0.55, LWC 0.6 g/m³, droplets 12 µm
   (continental); *maritime* 0.5–5.5 km, type 0–0.3 (stratus to stratocumulus), 0.35 g/m³,
   20 µm. `renderer.cloudCoverage` (default 0.4) feeds Dagor's coverage curve; the mid layer
   takes 0.6 of it. `renderer.cloudBase` and `renderer.cloudTop` (m above the reference height, 0
