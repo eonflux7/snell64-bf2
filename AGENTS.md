@@ -73,7 +73,8 @@ its section in the lane's document is rewritten as built, its row in `PLAN.md` s
   which map, which flags.
 - Checks per milestone task: a visual A/B on the map already loaded, at a view that exercises the
   change (draw stats show the new path drawing). No GPU timer runs or thermals A/B unless asked.
-  Three maps (Muttrah City, Fallujah West, Saaremaa) and recorded benches only at acceptance.
+  A milestone is accepted on the owner's look; GPU timers and recorded benches (Muttrah City,
+  Fallujah West, Saaremaa) wait for one pass once the planned milestones are in (owner, 2026-11-22).
 
 ## Commits
 

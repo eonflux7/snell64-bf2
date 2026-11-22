@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11 and 15 accepted; 12 (clouds) paused | Milestone 16 (water): tasks 1–5 built | [render.md](lanes/render.md#16-water) |
+| `render` | Milestones 1–11 and 15 accepted; 12 (clouds) paused | Milestone 16 (water): tasks done; acceptance cleanup | [render.md](lanes/render.md#16-water) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -34,12 +34,13 @@ Planned (owner, 2026-11-22; [render.md](lanes/render.md#16-water)); as built the
    (the small island zoomed), `whigh`, `wy316`; `renderer.waterFoam` 0 for none); reworked after
    the owner's look for tiling and aliasing.
 6. Geometry: normals only for now (owner, 2026-11-22).
-7. Judged by eye on The Falklands and Saaremaa; GPU cost measured.
+7. Judged by eye on The Falklands and Saaremaa: done (owner, 2026-11-22). GPU cost with the final
+   GPU pass. Left for acceptance: delete `renderer.waterWaves 0` (retail's normals) and its path.
 
 ## Paused: `render` milestone 12, clouds
 
-Tasks 1–5 and 7–8 built ([render.md](lanes/render.md#12-clouds)). Open: 6 (the prototype judged on
-Kashan Desert, its GPU time measured); 8's night layers (stars from a catalog with the moon, the
+Tasks 1–7 and 8's day sky done, 6 judged by the owner (2026-11-22; GPU time with the final GPU pass)
+([render.md](lanes/render.md#12-clouds)). Open: 8's night layers (stars from a catalog with the moon, the
 sky's rotation; the Yale Bright Star Catalogue has no stated licence, so it waits on the owner: a
 catalog read from outside the tree, or another source); 9 (low scud, perhaps).
 
@@ -50,41 +51,8 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 ## Awaiting the owner's look
 
-Built and checked by an agent; an entry goes when the owner has seen it.
-
-- Device reset crash in the first frame (stale `RaShadowViewProj` handle): fixed in `717b2671`,
-  24 resets without a crash (agent, Muttrah City).
-- Sun shadows: far overgrowth cells cast (`980b32aa`), blend to baked by camera distance; loaded on
-  Saaremaa.
-- `tools` milestone 1 tasks 4–5 (Views tab, `view.shot`).
-- Sky clouds (render milestone 12, tasks 1–3): Kashan Desert, views `m12-up`, `m12-up90`,
-  `m12-up180`, `m12-up270`, `kas_high`; `renderer.cloudCoverage` 0.3/0.4/1.0, `renderer.cloudPreset`
-  0/1, `renderer.clouds 0` for the clear sky.
-- Reachable clouds (render milestone 12, task 4): Kashan Desert, views `m12t4-base` (3 km),
-  `m12t4-in` (4.5 km; `renderer.cloudCoverage 1` puts the camera in the deck), `m12t4-above`,
-  `m12t4-above2` (8 km), `m12-up`; `renderer.cloudNear 0` for the panorama alone.
-- Far clouds without grain or shimmer, sharper (render milestone 12, task 5): Kashan Desert,
-  `m12-up90` (the horizon band).
-- Two cloud layers, desert base 2 km (task 5): Kashan Desert `m12-up180`; `renderer.cloudCoverage 0`
-  with `renderer.cloudMidCoverage 0.5` shows the mid layer alone.
-- Cloud shadows and coverage-driven light (tasks 7–8): Kashan Desert `kas_high` (shadows on the
-  ground), `kas_here` and `m12-up` at `renderer.cloudCoverage` 0.3, 0.7 and 1.0 (1.0 a grey storm
-  deck); `renderer.clouds 0` for the clear sky's light. `tools.clouds` writes `-shadow.png`.
-
-- Water's foam (render milestone 16, task 5), after the owner's first look (whitecaps tiled, shore
-  foam aliased): The Falklands `whigh` (shores from 400 m), `wy316` at `renderer.waterWind 15`
-  (whitecaps over the open sea), `wshore` (the small island zoomed); `renderer.waterFoam` 0–4
-  scales the crest foam.
-- Water's body (render milestone 16, task 4): The Falklands `wy136` (deep water the level's
-  grey-green, the seabed fading in toward the shores), `wlow`; `renderer.waterColor` sets the deep
-  colour and with it how murky the water is.
-- Water's sun path and rough reflections (render milestone 16, task 3): The Falklands `wlow`
-  (close, toward the sun), `wy316` (the path to the horizon), `wy136` (the islands' reflections,
-  blurred with distance); `renderer.waterWind` 3–15 widens and narrows both.
-- Water's waves (render milestone 16, task 2): The Falklands `wy316`, `wlow` (close, open sea);
-  `renderer.waterWaves 0` for retail's normals, `renderer.waterWind` 3–15 for calmer or rougher sea.
-- Water's ring and reflection streaks (render milestone 16, task 1): The Falklands, views `wy316`
-  (toward the sun, the glint now reaches the horizon) and `wy136` (the islands' reflections).
+Built and checked by an agent; an entry goes when the owner has seen it. Empty: everything up to
+water's foam was ticked (owner, 2026-11-22).
 
 ## Open issues
 

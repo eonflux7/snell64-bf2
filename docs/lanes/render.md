@@ -500,7 +500,7 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
     real ones (the octaves' energy, judged against the references), the low-coverage clouds still
     bunch in one weather region, and the horizon under overcast keeps the clear sky's colour
     (rays below about 1.2° meet the slab past 150 km, where the air hides it; task 6 greys the
-    sky). Not measured: its GPU cost (at acceptance).
+    sky). Not measured: its GPU cost (the final GPU pass).
 - *Near clouds* (`Clouds.cpp`, `rendererCloudsNear`; `RaClouds.fx` techniques `RaCloudNear`,
   `RaCloudNearResolve`, `RaCloudNearComposite`; contract 15). After the sky, before the world's
   transparents (Frame item 5; GPU span `clouds`), three passes:
@@ -528,7 +528,7 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   sits in fog with cloud walls around. Open: the world's transparents (particles, smoke) still draw
   over clouds in front of them; the ground from altitude is the haze's flat colour past fog end
   and the map a dark slab (milestone 11's view distance, not the clouds); close up the 128 m field
-  reads as soft fog. Not measured: the GPU cost (task 6).
+  reads as soft fog. Not measured: the GPU cost (the final GPU pass).
 - *Coverage drives the lighting* (task 7; `SkyCube.cpp`, `Atmosphere.cpp`, `Clouds.cpp`; contract 16).
   A 256x128 panorama of the clouds from the level's origin, 2 m over the reference height
   (`RaCloudPanorama` into a small target, no history), is drawn about every 30 s and when a set
@@ -592,8 +592,8 @@ become inputs: the colour an absorption hint, the scroll the wind's direction an
 - **Geometry: normals only** (owner, 2026-11-22). Displacing a camera-centred grid by the spectrum
   would give real wave shapes, but boats, physics and the shore are on a flat plane; left for later.
 
-Tasks (in [STATUS.md](../STATUS.md)) close with the owner's look at The Falklands and Saaremaa and
-the GPU cost measured.
+Tasks (in [STATUS.md](../STATUS.md)) closed with the owner's look at The Falklands and Saaremaa
+(2026-11-22); the GPU cost waits for the final GPU pass.
 
 As built:
 - *The ring* (task 1). Past the sun cascades water took the terrain lightmap's g as its sun

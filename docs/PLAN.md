@@ -27,12 +27,11 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 13. HDR bloom + auto-exposure | Not started | — |
 | 14. GTAO + lightmap channel ownership | Not started | — |
 
-The owner accepts each milestone in game before the next starts. From milestone 9 on that is done
-against the `tools` lane's reference views and benchmark paths ([tools.md](lanes/tools.md)), with the GPU
-pass timers ([render.md](lanes/render.md#gpu-pass-timers)) and the debug overlay
-([ui.md](lanes/ui.md)). Each milestone from 9 on also states its frame-time change on the benchmark paths
-against the previous milestone's baseline; a regression stands only if the owner accepts it
-explicitly, and is recorded with the milestone in [render.md](lanes/render.md).
+The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
+([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,
+2026-11-22): the GPU pass timers ([render.md](lanes/render.md#gpu-pass-timers)) and the benchmark
+paths, each milestone's cost stated against milestone 11's baseline; a regression stands only if
+the owner accepts it explicitly, and is recorded with the milestone in [render.md](lanes/render.md).
 
 Bloom and auto-exposure depend only on the HDR scene and can move earlier if night layers need
 them sooner.
