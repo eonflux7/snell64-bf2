@@ -211,7 +211,7 @@ void SurroundingPatch::measureHeights(unsigned int vertexCount)
         if ((std::max)(std::fabs(x), std::fabs(z)) >= outer)
             edge.push_back(y);
     }
-    farGroundAddRing(xs.data(), zs.data(), ys.data(), vertexCount, static_cast<float>(span),
+    farGroundAddRing(slot, xs.data(), zs.data(), ys.data(), vertexCount, static_cast<float>(span),
                      static_cast<float>(secondaryScaleX));   // render milestone 17, FarGround.h
     t->m_surroundLowest[slot] = lowest;
     if (!edge.empty())

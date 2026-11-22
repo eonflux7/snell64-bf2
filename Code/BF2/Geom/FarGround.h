@@ -8,15 +8,27 @@
 // level's grid, so neighbouring levels meet without cracks; they overlap by one coarse cell.
 //
 // What is built at load (on the terrain's first update, after the atlases):
-// - Heights: one R32F texture over the surrounding ring's square (three map spans a side) at the
-//   ring's own cell, filled from the ring's vertices (captured as each surrounding slot loads; its
-//   grid gets coarser away from the map) and pull-push filled between them. Past the ring the
-//   height falls off to the level's base height (the median of the ring's outer edge).
-// - Colour: the playable map's colormaps shrunk into one sRGB texture with mips; past the map the
-//   shader reads it at the map's edge, blurred (a coarser mip) the further out it is.
+// - Known ground: the playable map (the heightmap cluster's heights) and each surrounding sector
+//   that is data. A sector that is flat or byte-identical to another (placeholder files) is
+//   unknown, as are ring nodes under the sea deeper than the map's lowest point (filler), and
+//   everything past the ring.
+// - Heights, two R32F textures: a fine one over the ring's square (three map spans a side, at the
+//   ring's cell) and a coarse one out past the mesh's reach. Known ground is kept; elsewhere a
+//   placeholder until the level's bake fills it (render milestone 17 task 5): the known heights
+//   pulled out (pull-push), falling off to the level's base height.
+// - The sea: a sea only when its level lies near the map's height range (levels set -50, -10000
+//   and the like for none). Water cells past the map draw only where the heights are under it
+//   (farGroundSeaIn).
+// - Colour: the map's colormaps shrunk into one sRGB texture with mips, each patch's cell scaled by
+//   the mean albedo of its detail layers (the map's colour is the colormap times them). Past the
+//   map the shader reads it at the map's edge, blurred with the distance. Near the camera the
+//   map's dominant edge layer's detail texture fades in (low passes).
 //
-// The ring's draw is the old path, kept selectable by renderer.farGround 0 while the milestone is
-// in development. Shader side: technique RaFarGround on the terrain effect (contract 21).
+// Where it draws: renderer.farGround 1 (the default) on levels with a bake, the retail ring
+// elsewhere; 0 the ring everywhere; 2 the far ground everywhere (placeholder heights without a
+// bake). Procedurally generated ground past the ring was tried and dropped (owner, 2026-11-23):
+// levels are baked from real terrain, fictional ones from a real place that fits their region.
+// Shader side: technique RaFarGround on the terrain effect (contract 22).
 #ifndef BF2_GEOM_FARGROUND_H
 #define BF2_GEOM_FARGROUND_H
 
@@ -28,15 +40,21 @@ class Terrain;
 
 // A terrain is loading: drops what was built for the last one.
 void farGroundLoad(Terrain* terrain);
-// A surrounding slot's vertices as it loads: world x, z and height, `count` of each, the ring's
-// span (m, one map side) and cell (m).
-void farGroundAddRing(const float* x, const float* z, const float* y, unsigned int count, float span, float cell);
+// Surrounding slot `slot`'s vertices as it loads: world x, z and height, `count` of each, the
+// ring's span (m, one map side) and cell (m).
+void farGroundAddRing(int slot, const float* x, const float* z, const float* y, unsigned int count, float span,
+                      float cell);
 // The terrain's first update after its load, once its textures exist: builds the textures and the
 // mesh. Later calls do nothing.
 void farGroundUpdate(Terrain* terrain);
 // Draws the far ground; false when it is off (renderer.farGround 0) or not built, so the caller
 // draws the ring instead.
 bool farGroundDraw(Terrain* terrain);
+// Whether the far ground is built and on; then the sea past the map follows farGroundSeaIn.
+bool farGroundActive();
+// Whether the far ground's heights fall under the sea anywhere in the world xz box (the box is
+// clamped to the heights' extent, past which they hold their edge). False without a sea.
+bool farGroundSeaIn(float x0, float z0, float x1, float z1);
 void farGroundRelease();
 
 } // namespace geom

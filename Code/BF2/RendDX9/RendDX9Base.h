@@ -840,7 +840,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 21
+#define RA_CONTRACT_VERSION 22
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -967,8 +967,9 @@ void rendererHdrPostBindParticles(void* effect);
 bool rendererBloomReplacesGlow();
 void rendererHdrPostRelease();
 bool& rendererBloomEnabled();
-// renderer.farGround (render milestone 17, Geom/FarGround.cpp): the far ground, or the retail ring.
-bool& rendererFarGround();
+// renderer.farGround (render milestone 17, Geom/FarGround.cpp): 0 the retail ring, 1 the far ground
+// where the level has a bake, 2 the far ground everywhere.
+int& rendererFarGround();
 float& rendererBloomStrength();
 bool& rendererExposureAuto();
 float& rendererExposureBias();

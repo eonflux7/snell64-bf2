@@ -10,8 +10,10 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
 #include "../RendMisc/IRenderView.h"
+#include "../Physics/HeightmapCluster.h"
 #include "FarGround.h"
 #include "Terrain.h"
+#include "TerrainAtlas.h"
 #include "QuadPatch.h"
 
 #include <algorithm>
@@ -43,9 +45,10 @@ void  rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, in
                                    unsigned int minIndex, unsigned int numVertices,
                                    unsigned int startIndex);
 
-// renderer.farGround: the far ground (1) or the retail surrounding ring (0).
-bool g_farGround = true;
-bool& rendererFarGround() { return g_farGround; }
+// renderer.farGround: 0 the retail surrounding ring; 1 the far ground on levels with a bake, the
+// ring elsewhere; 2 the far ground everywhere (without a bake, its placeholder heights).
+int g_farGround = 1;
+int& rendererFarGround() { return g_farGround; }
 } // namespace dx9rend
 
 namespace geom {
@@ -62,33 +65,61 @@ const float kCell0 = 16.0f;
 const int   kSide = kCells + 1;                                    // vertices a side
 const float kMorphStart = 16.0f;                                   // cells from the camera
 const float kMorphRange = 10.0f;                                   // complete 26 cells out
-const float kFade = 3000.0f;                                       // m past the ring to the base height
 const float kEarthRadius = 6371000.0f;
 const unsigned int kColorTexels = 512;                             // the map's colour, texels a side (at most)
+
+// The heights past the map.
+const int   kFarNodes = 1024;                                      // the coarse heights, nodes a side
+const float kFarReach = 34000.0f;                                  // m past the map's half side
+const float kFineBlend = 1500.0f;                                  // m inside the fine square's edge: fine to coarse
+const float kBaseFall = 6000.0f;                                   // m past known ground: at the base height
+const float kSeaNear = 10.0f;                                      // m: a sea level under the map's lowest by more is none
+const float kFillerDepth = 5.0f;                                   // m under the map's lowest: ring filler
+const float kFlatSector = 1.0f;                                    // m: a sector with less relief is a placeholder
+const float kDetailFadeEnd = 1500.0f;                              // m from the camera: the detail texture gone
+const float kDetailFadeRange = 1000.0f;
+
 
 struct Params
 {
     void* levels;    // RaFarGroundLevels (float4[8]: origin x, z, cell, morphs)
-    void* constants; // RaFarGround (float4[4], layout below)
-    void* height;    // RaFarGroundHeight (texture)
+    void* constants; // RaFarGround (float4[8], layout in the shader)
+    void* height;    // RaFarGroundHeight (texture, fine)
+    void* heightFar; // RaFarGroundHeightFar (texture, coarse)
     void* color;     // RaFarGroundColor (texture)
+};
+
+// A square grid of nodes: node (i, j) at (origin + i * cell, origin + j * cell).
+struct Grid
+{
+    int   n;
+    float origin;
+    float cell;
+    float x(int i) const { return origin + static_cast<float>(i) * cell; }
 };
 
 struct State
 {
-    // The ring's heights as the slots load: a grid over the ring's square, node (i, j) at
-    // (origin + i * cell, origin + j * cell).
+    // The ring's heights as the slots load, over the ring's square; the slot each node came from.
     float              ringSpan;
     float              ringCell;
     int                ringNodes;
     std::vector<float> ringSum;
     std::vector<float> ringCount;
+    std::vector<signed char> ringSlot;
+    float              slotMin[8];
+    float              slotMax[8];
+    unsigned int       slotHash[8];
+    bool               slotSeen[8];
 
     Terrain*           pending;
     bool               built;
+    bool               baked;     // the level has a bake (task 5: none has yet)
     IDirect3DTexture9* heightTexture;
+    IDirect3DTexture9* heightFarTexture;
     IDirect3DTexture9* colorTexture;
     dx9rend::EngineTexture heightValue;
+    dx9rend::EngineTexture heightFarValue;
     dx9rend::EngineTexture colorValue;
     void*              vertexBuffer;
     void*              indexBuffer;
@@ -96,7 +127,13 @@ struct State
     unsigned int       vertexCount;
     unsigned int       primCount;
     Params             params;
-    float              constants[4][4];
+    float              constants[8][4];
+
+    // The coarse heights on the CPU (the sea test) and the sea level, when it is a sea.
+    Grid               coarse;
+    std::vector<float> farHeight;
+    bool               seaValid;
+    float              seaLevel;
 };
 
 State g;
@@ -117,11 +154,25 @@ IDirect3DTexture9* d3dTexture(const void* engineTexture)
 
 inline dx9rend::ShaderParameter* param(void* handle) { return static_cast<dx9rend::ShaderParameter*>(handle); }
 
+world::IHeightmapCluster* heightmapCluster()
+{
+    IBase* const found = ::dice::hfe::classManager->getSingleton(::renddx9abi::HostString("HeightmapCluster"));
+    return static_cast<world::IHeightmapCluster*>(static_cast<void*>(found));
+}
+
 void releaseParam(void*& handle)
 {
     if (handle)
         param(handle)->release();
     handle = 0;
+}
+
+void releaseTexture(IDirect3DTexture9*& texture, dx9rend::EngineTexture& value)
+{
+    if (texture)
+        texture->Release();
+    texture = 0;
+    value.baseTexture = 0;
 }
 
 void clearRing()
@@ -131,6 +182,33 @@ void clearRing()
     g.ringNodes = 0;
     std::vector<float>().swap(g.ringSum);
     std::vector<float>().swap(g.ringCount);
+    std::vector<signed char>().swap(g.ringSlot);
+    for (int s = 0; s != 8; ++s)
+    {
+        g.slotMin[s] = FLT_MAX;
+        g.slotMax[s] = -FLT_MAX;
+        g.slotHash[s] = 0u;
+        g.slotSeen[s] = false;
+    }
+}
+
+inline float clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
+
+inline float smoothstep(float a, float b, float v)
+{
+    const float t = clamp01((v - a) / (b - a));
+    return t * t * (3.0f - 2.0f * t);
+}
+
+inline float srgbToLinear(float c)
+{
+    return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+}
+
+inline float linearToSrgb(float c)
+{
+    c = clamp01(c);
+    return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
 }
 
 // Fills the grid's empty nodes by pull-push: each coarser level averages the nodes under it, then
@@ -179,78 +257,373 @@ void pullPush(std::vector<float>& value, std::vector<float>& weight, int n)
         }
 }
 
-// The base height: the median of the ring's outer edge over the slots the level has, else the
-// map's lowest height.
-float baseHeight(const Terrain* t)
+// Bilinear lookup in a grid, clamped to its extent.
+float sampleGrid(const std::vector<float>& value, const Grid& grid, float x, float z)
 {
-    std::vector<float> edges;
-    for (int s = 0; s != 8; ++s)
-        if (t->m_surrounding[s] && t->m_surroundOuterEdge[s] < 0.5f * FLT_MAX)
-            edges.push_back(t->m_surroundOuterEdge[s]);
-    if (edges.empty())
-        return t->m_minHeight;
-    std::sort(edges.begin(), edges.end());
-    return edges[edges.size() / 2];
+    const float last = static_cast<float>(grid.n - 1);
+    const float fx = (std::min)((std::max)((x - grid.origin) / grid.cell, 0.0f), last);
+    const float fz = (std::min)((std::max)((z - grid.origin) / grid.cell, 0.0f), last);
+    const int x0 = (std::min)(static_cast<int>(fx), grid.n - 2), z0 = (std::min)(static_cast<int>(fz), grid.n - 2);
+    if (grid.n < 2)
+        return value[0];
+    const float tx = fx - x0, tz = fz - z0;
+    const std::size_t k = static_cast<std::size_t>(z0) * grid.n + x0;
+    const float a = value[k] + (value[k + 1] - value[k]) * tx;
+    const float b = value[k + grid.n] + (value[k + grid.n + 1] - value[k + grid.n]) * tx;
+    return a + (b - a) * tz;
 }
 
-bool buildHeight(Terrain* t, float base, float mapHalf)
+// A box of known ground (world xz).
+struct Box
 {
-    int n = g.ringNodes;
-    std::vector<float> value, weight;
-    if (n > 1)
+    float x0, z0, x1, z1;
+};
+
+float distanceToKnown(const std::vector<Box>& known, float x, float z)
+{
+    float best = FLT_MAX;
+    for (std::size_t b = 0; b != known.size(); ++b)
     {
-        value.resize(g.ringSum.size());
-        weight.resize(g.ringSum.size());
-        int known = 0;
-        for (std::size_t k = 0; k != value.size(); ++k)
-        {
-            weight[k] = g.ringCount[k] > 0.0f ? 1.0f : 0.0f;
-            value[k] = g.ringCount[k] > 0.0f ? g.ringSum[k] / g.ringCount[k] : 0.0f;
-            known += g.ringCount[k] > 0.0f;
-        }
-        pullPush(value, weight, n);
-        ::renddx9abi::logf("[farground] ring heights: %dx%d nodes of %.1f m, %d from the ring's vertices",
-                           n, n, g.ringCell, known);
+        const float dx = (std::max)((std::max)(known[b].x0 - x, x - known[b].x1), 0.0f);
+        const float dz = (std::max)((std::max)(known[b].z0 - z, z - known[b].z1), 0.0f);
+        best = (std::min)(best, std::sqrt(dx * dx + dz * dz));
     }
-    else
-    {
-        n = 1;
-        value.assign(1, base);
-        ::renddx9abi::logf("[farground] no surrounding ring: flat at %.1f m", base);
-    }
-    IDirect3DTexture9* texture = 0;
+    return best;
+}
+
+struct Field
+{
+    std::vector<Box> known;
+    float            base;
+    bool             seaValid;
+    float            seaLevel;
+};
+
+// A node past known ground, until the level's bake fills it (render milestone 17 task 5): the
+// pulled-out known height `e` falling to the base height over kBaseFall.
+float placeholder(const Field& f, float e, float d)
+{
+    return e + (f.base - e) * smoothstep(0.0f, kBaseFall, d);
+}
+
+bool uploadHeights(const std::vector<float>& value, int n, IDirect3DTexture9*& texture, dx9rend::EngineTexture& engineValue)
+{
     if (FAILED(device()->CreateTexture(n, n, 1, 0, D3DFMT_R32F, D3DPOOL_MANAGED, &texture, 0)))
     {
         ::renddx9abi::logf("[farground] could not create the %dx%d height texture", n, n);
+        texture = 0;
         return false;
     }
     D3DLOCKED_RECT rect;
     if (FAILED(texture->LockRect(0, &rect, 0, 0)))
-    {
-        texture->Release();
         return false;
-    }
     for (int j = 0; j != n; ++j)
         std::memcpy(static_cast<unsigned char*>(rect.pBits) + j * rect.Pitch, &value[static_cast<std::size_t>(j) * n],
                     sizeof(float) * n);
     texture->UnlockRect(0);
-    g.heightTexture = texture;
-    g.heightValue.baseTexture = texture;
-
-    // [1]: height uv = xz * x + y; z the ring's half side (m); w 1 / the fade past it.
-    const float cell = n > 1 ? g.ringCell : 1.0f;
-    const float half = n > 1 ? 1.5f * g.ringSpan : mapHalf;
-    const float origin = n > 1 ? -half : 0.0f;
-    g.constants[1][0] = 1.0f / (n * cell);
-    g.constants[1][1] = (-origin / cell + 0.5f) / n;
-    g.constants[1][2] = half;
-    g.constants[1][3] = 1.0f / kFade;
-    g.constants[3][2] = n > 1 ? cell : 16.0f;
+    engineValue.baseTexture = texture;
     return true;
 }
 
+// A slot is data unless it is flat or byte-identical to another (placeholder files).
+bool slotUsable(const Terrain* t, int s)
+{
+    if (!t->m_surrounding[s] || !g.slotSeen[s] || g.slotMax[s] - g.slotMin[s] < kFlatSector)
+        return false;
+    for (int o = 0; o != 8; ++o)
+        if (o != s && g.slotSeen[o] && g.slotHash[o] == g.slotHash[s])
+            return false;
+    return true;
+}
+
+inline float percentile(std::vector<float>& v, float p)
+{
+    const std::size_t k = static_cast<std::size_t>(p * static_cast<float>(v.size() - 1));
+    std::nth_element(v.begin(), v.begin() + k, v.end());
+    return v[k];
+}
+
+// The heights: known ground, the fine and coarse grids filled and uploaded.
+bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
+{
+    Field f;
+    f.known.push_back({ -mapHalf, -mapHalf, mapHalf, mapHalf });
+    int usable = 0;
+    for (int s = 0; s != 8; ++s)
+        if (slotUsable(t, s))
+        {
+            const SurroundingPatch* const r = t->m_surrounding[s];
+            f.known.push_back({ static_cast<float>(r->originX), static_cast<float>(r->originZ),
+                                static_cast<float>(r->endX), static_cast<float>(r->endZ) });
+            ++usable;
+        }
+
+    // The fine grid over the ring's square, at its cell (16 m a node without a ring).
+    Grid fine;
+    const float span = g.ringNodes > 1 ? g.ringSpan : 2.0f * mapHalf;
+    fine.cell = g.ringNodes > 1 ? g.ringCell : span / 256.0f;
+    fine.n = g.ringNodes > 1 ? g.ringNodes : static_cast<int>(std::floor(3.0f * span / fine.cell + 0.5f)) + 1;
+    fine.origin = -1.5f * span;
+    const std::size_t fineCount = static_cast<std::size_t>(fine.n) * fine.n;
+    std::vector<float> fineValue(fineCount, 0.0f), fineWeight(fineCount, 0.0f);
+    std::vector<float> mapHeights, knownHeights;
+    std::vector<std::size_t> ringKnown;
+    for (int j = 0; j != fine.n; ++j)
+        for (int i = 0; i != fine.n; ++i)
+        {
+            const float x = fine.x(i), z = fine.x(j);
+            const std::size_t k = static_cast<std::size_t>(j) * fine.n + i;
+            if (std::fabs(x) <= mapHalf && std::fabs(z) <= mapHalf)
+            {
+                const float inside = mapHalf - 0.01f;   // the cluster's last row and column
+                fineValue[k] = cluster->getHeightInWorldCoords((std::max)(-inside, (std::min)(x, inside)),
+                                                               (std::max)(-inside, (std::min)(z, inside)));
+                fineWeight[k] = 1.0f;
+                mapHeights.push_back(fineValue[k]);
+            }
+            else if (g.ringNodes == fine.n && g.ringCount[k] > 0.0f && g.ringSlot[k] >= 0
+                     && slotUsable(t, g.ringSlot[k]))
+                ringKnown.push_back(k);
+        }
+    if (mapHeights.empty())
+        return false;
+    // Ring nodes under the sea and deeper than the map's own lowest point are filler (Fallujah
+    // West's ring lies at 0 m under its river's 22.5 m), not sea bed.
+    const float seaLevel = cluster->getSeaWaterLevel();
+    const float mapLowest = *std::min_element(mapHeights.begin(), mapHeights.end());
+    const float mapHighest = *std::max_element(mapHeights.begin(), mapHeights.end());
+    int filler = 0;
+    for (std::size_t r = 0; r != ringKnown.size(); ++r)
+    {
+        const std::size_t k = ringKnown[r];
+        const float h = g.ringSum[k] / g.ringCount[k];
+        if (h < seaLevel && h < mapLowest - kFillerDepth)
+        {
+            ++filler;
+            continue;
+        }
+        fineValue[k] = h;
+        fineWeight[k] = 1.0f;
+        knownHeights.push_back(h);
+    }
+    knownHeights.insert(knownHeights.end(), mapHeights.begin(), mapHeights.end());
+
+    // The base height: the median of the known ground (above the sea, when there is one).
+    std::vector<float> scratch(knownHeights);
+    f.base = percentile(scratch, 0.5f);
+
+    // A sea only near the map's height range (levels set -50, -10000 and the like for none).
+    f.seaLevel = seaLevel;
+    f.seaValid = f.seaLevel >= mapLowest - kSeaNear && f.seaLevel <= mapHighest;
+    if (f.seaValid)
+    {
+        // The base stays on land: the median of the known ground above the sea.
+        std::vector<float> land;
+        for (std::size_t k = 0; k != knownHeights.size(); ++k)
+            if (knownHeights[k] > f.seaLevel)
+                land.push_back(knownHeights[k]);
+        if (!land.empty())
+            f.base = (std::max)(percentile(land, 0.5f), f.seaLevel + 2.0f);
+    }
+
+    // The coarse grid: past the mesh's reach from anywhere on the map.
+    Grid coarse;
+    coarse.n = kFarNodes;
+    coarse.origin = -(mapHalf + kFarReach);
+    coarse.cell = 2.0f * (mapHalf + kFarReach) / static_cast<float>(coarse.n - 1);
+    const std::size_t farCount = static_cast<std::size_t>(coarse.n) * coarse.n;
+
+    // Pull the known heights out on both grids; the coarse one's known nodes from the fine grid.
+    std::vector<float> fineE(fineValue);
+    pullPush(fineE, fineWeight, fine.n);
+    std::vector<float> farE(farCount, 0.0f), farWeight(farCount, 0.0f);
+    std::vector<float> farDist(farCount, 0.0f);
+    for (int j = 0; j != coarse.n; ++j)
+        for (int i = 0; i != coarse.n; ++i)
+        {
+            const std::size_t k = static_cast<std::size_t>(j) * coarse.n + i;
+            const float x = coarse.x(i), z = coarse.x(j);
+            farDist[k] = distanceToKnown(f.known, x, z);
+            if (farDist[k] > 0.0f)
+                continue;
+            farE[k] = sampleGrid(fineE, fine, x, z);
+            farWeight[k] = 1.0f;
+        }
+    std::vector<float> farKnown(farWeight);
+    pullPush(farE, farWeight, coarse.n);
+
+    // The unknown nodes.
+    g.farHeight.assign(farCount, 0.0f);
+    int farWater = 0;
+    for (int j = 0; j != coarse.n; ++j)
+        for (int i = 0; i != coarse.n; ++i)
+        {
+            const std::size_t k = static_cast<std::size_t>(j) * coarse.n + i;
+            g.farHeight[k] = farKnown[k] > 0.0f ? farE[k] : placeholder(f, farE[k], farDist[k]);
+            farWater += f.seaValid && g.farHeight[k] < f.seaLevel;
+        }
+    std::vector<float> fineHeight(fineCount, 0.0f);
+    for (int j = 0; j != fine.n; ++j)
+        for (int i = 0; i != fine.n; ++i)
+        {
+            const std::size_t k = static_cast<std::size_t>(j) * fine.n + i;
+            const float x = fine.x(i), z = fine.x(j);
+            const float d = distanceToKnown(f.known, x, z);
+            fineHeight[k] = d <= 0.0f ? fineE[k] : placeholder(f, fineE[k], d);
+        }
+
+    if (!uploadHeights(fineHeight, fine.n, g.heightTexture, g.heightValue)
+        || !uploadHeights(g.farHeight, coarse.n, g.heightFarTexture, g.heightFarValue))
+        return false;
+    g.coarse = coarse;
+    g.seaValid = f.seaValid && farWater > 0;
+    g.seaLevel = f.seaLevel;
+
+    // [1]: fine uv = xz * x + y; z its half side (m); w 1 / the blend to the coarse grid.
+    // [3].z the fine cell (m); [4]: coarse uv = xz * x + y.
+    g.constants[1][0] = 1.0f / (static_cast<float>(fine.n) * fine.cell);
+    g.constants[1][1] = (-fine.origin / fine.cell + 0.5f) / static_cast<float>(fine.n);
+    g.constants[1][2] = -fine.origin;
+    g.constants[1][3] = 1.0f / kFineBlend;
+    g.constants[3][2] = fine.cell;
+    g.constants[4][0] = 1.0f / (static_cast<float>(coarse.n) * coarse.cell);
+    g.constants[4][1] = (-coarse.origin / coarse.cell + 0.5f) / static_cast<float>(coarse.n);
+
+    ::renddx9abi::logf("[farground] heights: fine %dx%d of %.1f m, coarse %dx%d of %.1f m; %d of 8 sectors data; "
+                       "base %.1f m; "
+                       "sea %.1f m %s (map %.1f..%.1f m, %d ring nodes filler), %d coarse nodes under it",
+                       fine.n, fine.n, fine.cell, coarse.n, coarse.n, coarse.cell, usable, f.base,
+                       f.seaLevel, f.seaValid ? "is a sea" : "is none", mapLowest, mapHighest, filler, farWater);
+    return true;
+}
+
+// The mean of a texture's sub-rectangle (uv), read at the mip where it is about 16 texels wide:
+// linear rgb of the texels as sRGB (`colour`), of pow(2 x texel, 2.2) (`detail`, the terrain's
+// detail decode), or raw (weights).
+enum MeanMode { kMeanRaw, kMeanDetail };
+
+bool textureMean(IDirect3DTexture9* texture, float u0, float v0, float u1, float v1, MeanMode mode, float out[3])
+{
+    if (!texture)
+        return false;
+    D3DSURFACE_DESC desc;
+    unsigned int level = 0;
+    while (level + 1 < texture->GetLevelCount() && SUCCEEDED(texture->GetLevelDesc(level + 1, &desc))
+           && (u1 - u0) * desc.Width >= 16.0f && (v1 - v0) * desc.Height >= 16.0f)
+        ++level;
+    if (FAILED(texture->GetLevelDesc(level, &desc)))
+        return false;
+    RECT rect = { static_cast<LONG>(u0 * desc.Width), static_cast<LONG>(v0 * desc.Height),
+                  static_cast<LONG>(u1 * desc.Width + 0.5f), static_cast<LONG>(v1 * desc.Height + 0.5f) };
+    rect.right = (std::max)(rect.right, rect.left + 1);
+    rect.bottom = (std::max)(rect.bottom, rect.top + 1);
+    // Compressed sources read whole blocks.
+    if (desc.Format == D3DFMT_DXT1 || desc.Format == D3DFMT_DXT3 || desc.Format == D3DFMT_DXT5)
+    {
+        rect.left &= ~3L;
+        rect.top &= ~3L;
+        rect.right = (std::min)(static_cast<LONG>(desc.Width), (rect.right + 3L) & ~3L);
+        rect.bottom = (std::min)(static_cast<LONG>(desc.Height), (rect.bottom + 3L) & ~3L);
+    }
+    const unsigned int w = static_cast<unsigned int>(rect.right - rect.left), h = static_cast<unsigned int>(rect.bottom - rect.top);
+    IDirect3DSurface9* src = 0;
+    IDirect3DSurface9* dst = 0;
+    bool ok = false;
+    if (SUCCEEDED(texture->GetSurfaceLevel(level, &src))
+        && SUCCEEDED(device()->CreateOffscreenPlainSurface(w, h, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &dst, 0))
+        && SUCCEEDED(D3DXLoadSurfaceFromSurface(dst, 0, 0, src, 0, &rect, D3DX_FILTER_NONE, 0)))
+    {
+        D3DLOCKED_RECT locked;
+        if (SUCCEEDED(dst->LockRect(&locked, 0, D3DLOCK_READONLY)))
+        {
+            double sum[3] = { 0.0, 0.0, 0.0 };
+            for (unsigned int y = 0; y != h; ++y)
+            {
+                const unsigned char* row = static_cast<const unsigned char*>(locked.pBits) + y * locked.Pitch;
+                for (unsigned int x = 0; x != w; ++x)
+                    for (int c = 0; c != 3; ++c)
+                    {
+                        const float v = row[4 * x + 2 - c] / 255.0f;   // B, G, R in memory
+                        sum[c] += mode == kMeanDetail ? std::pow(2.0f * v, 2.2f) : v;
+                    }
+            }
+            dst->UnlockRect();
+            for (int c = 0; c != 3; ++c)
+                out[c] = static_cast<float>(sum[c] / (static_cast<double>(w) * h));
+            ok = true;
+        }
+    }
+    if (dst)
+        dst->Release();
+    if (src)
+        src->Release();
+    return ok;
+}
+
+// What the map's detail layers do to its colour: per detail record, the mean of its decoded
+// texture (the terrain multiplies the colormap by it); per patch, those weighted by the patch's
+// mean weights. Also the record that weighs most along the map's edge (the detail fade's).
+struct DetailMeans
+{
+    std::vector<float> mean;    // 3 per record
+    std::vector<char>  valid;
+    std::vector<float> edgeWeight;
+};
+
+const float* detailMean(Terrain* t, const TerrainAtlases& atlases, DetailMeans& m, int index)
+{
+    if (index < 0 || index >= static_cast<int>(atlases.top.size()) || index >= static_cast<int>(m.valid.size()))
+        return 0;
+    if (m.valid[index] == 0)
+    {
+        m.valid[index] = -1;
+        const TerrainAtlasEntry& e = atlases.top[index];
+        if (e.atlas >= 0 && e.atlas < static_cast<int>(atlases.detail.size())
+            && textureMean(atlases.detail[e.atlas], e.offsetU, e.offsetV, e.offsetU + e.scaleU, e.offsetV + e.scaleV,
+                           kMeanDetail, &m.mean[3 * index]))
+            m.valid[index] = 1;
+    }
+    return m.valid[index] > 0 ? &m.mean[3 * index] : 0;
+}
+
+// The patch's albedo factor (rgb, linear): the sum of its layers' weights times their means.
+bool patchDetailFactor(Terrain* t, QuadPatch* patch, const TerrainAtlases& atlases, DetailMeans& m, bool edge,
+                       float factor[3])
+{
+    float weights[2][3];
+    bool haveWeights[2] = { false, false };
+    for (int k = 0; k != 2; ++k)
+        haveWeights[k] = textureMean(d3dTexture(patch->detailMap[k] ? patch->detailMap[k] : patch->detailMap[0]),
+                                     0.0f, 0.0f, 1.0f, 1.0f, kMeanRaw, weights[k]);
+    factor[0] = factor[1] = factor[2] = 0.0f;
+    bool any = false;
+    const int layers = static_cast<int>(patch->detailLayers.size());
+    for (int layer = 0; layer < 6 && layer < layers; ++layer)
+    {
+        const QuadPatchDetailLayer* const detail = patch->detailLayers[layer];
+        if (!detail)
+            continue;
+        const int index = detail->detailIndex;
+        if (index < 0 || index / 3 > 1 || !haveWeights[index / 3])
+            continue;
+        const float* const mean = detailMean(t, atlases, m, index);
+        if (!mean)
+            continue;
+        // The shader's dot(weights.xyz, selector): x, y, z the weight texture's r, g, b.
+        const float* const w3 = weights[index / 3];
+        const float w = w3[0] * detail->selectorX + w3[1] * detail->selectorY + w3[2] * detail->selectorZ;
+        for (int c = 0; c != 3; ++c)
+            factor[c] += w * mean[c];
+        if (edge)
+            m.edgeWeight[index] += w;
+        any = true;
+    }
+    return any;
+}
+
 // The playable map's colour: each patch's colormap, at the smallest level that still covers its
-// cell, scaled into the patch's cell (column = patch x, row = patch z, as the lightmap atlas).
+// cell, scaled into the patch's cell (column = patch x, row = patch z, as the lightmap atlas), its
+// detail layers' mean folded in. Also the detail fade's layer.
 bool buildColor(Terrain* t, float mapHalf)
 {
     const int count = t->m_patchCount;
@@ -266,14 +639,24 @@ bool buildColor(Terrain* t, float mapHalf)
         ::renddx9abi::logf("[farground] could not create the %ux%u colour texture", size, size);
         return false;
     }
-    IDirect3DSurface9* dst = 0;
-    texture->GetSurfaceLevel(0, &dst);
-    int copied = 0;
-    for (int p = 0; dst && p != count * count; ++p)
+    g.colorTexture = texture;
+    g.colorValue.baseTexture = texture;
+    const TerrainAtlases* const atlases = terrainAtlases();
+    DetailMeans means;
+    if (atlases)
+    {
+        means.mean.assign(3 * atlases->top.size(), 1.0f);
+        means.valid.assign(atlases->top.size(), 0);
+        means.edgeWeight.assign(atlases->top.size(), 0.0f);
+    }
+
+    // Each cell's patch and its detail factor (1 without atlases).
+    std::vector<QuadPatch*> cells(static_cast<std::size_t>(count) * count, static_cast<QuadPatch*>(0));
+    std::vector<float> factors(3 * cells.size(), 1.0f);
+    for (int p = 0; p != count * count; ++p)
     {
         QuadPatch* const patch = t->m_patches[p];
-        IDirect3DTexture9* const source = patch ? d3dTexture(patch->colormap) : 0;
-        if (!source)
+        if (!patch || !d3dTexture(patch->colormap))
             continue;
         int x = p % count, z = p / count;
         if (patch->gridX + count / 2 >= 0 && patch->gridX + count / 2 < count
@@ -282,6 +665,23 @@ bool buildColor(Terrain* t, float mapHalf)
             x = patch->gridX + count / 2;
             z = patch->gridZ + count / 2;
         }
+        const std::size_t c = static_cast<std::size_t>(z) * count + x;
+        cells[c] = patch;
+        const bool edge = x == 0 || z == 0 || x == count - 1 || z == count - 1;
+        float factor[3];
+        if (atlases && patchDetailFactor(t, patch, *atlases, means, edge, factor))
+            std::memcpy(&factors[3 * c], factor, sizeof(factor));
+    }
+
+    IDirect3DSurface9* dst = 0;
+    texture->GetSurfaceLevel(0, &dst);
+    int copied = 0;
+    for (std::size_t c = 0; dst && c != cells.size(); ++c)
+    {
+        IDirect3DTexture9* const source = cells[c] ? d3dTexture(cells[c]->colormap) : 0;
+        if (!source)
+            continue;
+        const unsigned int x = static_cast<unsigned int>(c % count), z = static_cast<unsigned int>(c / count);
         unsigned int level = 0;
         D3DSURFACE_DESC desc = {};
         while (level + 1 < source->GetLevelCount()
@@ -289,74 +689,99 @@ bool buildColor(Terrain* t, float mapHalf)
             ++level;
         IDirect3DSurface9* src = 0;
         if (FAILED(source->GetSurfaceLevel(level, &src)))
+        {
+            cells[c] = 0;
             continue;
+        }
         RECT rect = { static_cast<LONG>(x * cellTexels), static_cast<LONG>(z * cellTexels),
                       static_cast<LONG>((x + 1) * cellTexels), static_cast<LONG>((z + 1) * cellTexels) };
         if (SUCCEEDED(D3DXLoadSurfaceFromSurface(dst, 0, &rect, src, 0, 0, D3DX_FILTER_TRIANGLE, 0)))
             ++copied;
+        else
+            cells[c] = 0;
         src->Release();
-    }
-    // Patches without a colormap (open sea on some levels) take the others' mean, not black.
-    if (dst && copied < count * count)
-    {
-        D3DLOCKED_RECT locked;
-        if (SUCCEEDED(texture->LockRect(0, &locked, 0, 0)))
-        {
-            std::vector<char> filled(static_cast<std::size_t>(count) * count, 0);
-            for (int p = 0; p != count * count; ++p)
-            {
-                QuadPatch* const patch = t->m_patches[p];
-                if (!patch || !d3dTexture(patch->colormap))
-                    continue;
-                int x = p % count, z = p / count;
-                if (patch->gridX + count / 2 >= 0 && patch->gridX + count / 2 < count
-                    && patch->gridZ + count / 2 >= 0 && patch->gridZ + count / 2 < count)
-                {
-                    x = patch->gridX + count / 2;
-                    z = patch->gridZ + count / 2;
-                }
-                filled[static_cast<std::size_t>(z) * count + x] = 1;
-            }
-            double sum[4] = { 0.0, 0.0, 0.0, 0.0 };
-            double texels = 0.0;
-            for (unsigned int y = 0; y != size; ++y)
-            {
-                const unsigned char* row = static_cast<const unsigned char*>(locked.pBits) + y * locked.Pitch;
-                for (unsigned int x = 0; x != size; ++x)
-                    if (filled[(y / cellTexels) * count + x / cellTexels])
-                    {
-                        for (int c = 0; c != 4; ++c)
-                            sum[c] += row[4 * x + c];
-                        texels += 1.0;
-                    }
-            }
-            if (texels > 0.0)
-            {
-                unsigned char mean[4];
-                for (int c = 0; c != 4; ++c)
-                    mean[c] = static_cast<unsigned char>(sum[c] / texels + 0.5);
-                for (unsigned int y = 0; y != size; ++y)
-                {
-                    unsigned char* row = static_cast<unsigned char*>(locked.pBits) + y * locked.Pitch;
-                    for (unsigned int x = 0; x != size; ++x)
-                        if (!filled[(y / cellTexels) * count + x / cellTexels])
-                            std::memcpy(row + 4 * x, mean, 4);
-                }
-            }
-            texture->UnlockRect(0);
-        }
     }
     if (dst)
         dst->Release();
-    D3DXFilterTexture(texture, 0, 0, D3DX_FILTER_BOX);
-    g.colorTexture = texture;
-    g.colorValue.baseTexture = texture;
-    ::renddx9abi::logf("[farground] map colour: %ux%u, %d of %d patches", size, size, copied, count * count);
 
-    // [2]: x the map's half side (m); y colour uv per m; z colour texels per m; w the base height.
+    // In linear: the detail factor per cell, and the cells without a colormap (open sea on some
+    // levels) filled with the others' mean, not black.
+    float mean[3] = { 0.5f, 0.5f, 0.5f };
+    D3DLOCKED_RECT locked;
+    if (FAILED(texture->LockRect(0, &locked, 0, 0)))
+        return false;
+    double sum[3] = { 0.0, 0.0, 0.0 };
+    double texels = 0.0;
+    for (unsigned int y = 0; y != size; ++y)
+    {
+        unsigned char* row = static_cast<unsigned char*>(locked.pBits) + y * locked.Pitch;
+        for (unsigned int x = 0; x != size; ++x)
+        {
+            const std::size_t c = static_cast<std::size_t>(y / cellTexels) * count + x / cellTexels;
+            if (!cells[c])
+                continue;
+            float rgb[3];
+            for (int k = 0; k != 3; ++k)
+            {
+                rgb[k] = srgbToLinear(row[4 * x + 2 - k] / 255.0f) * factors[3 * c + k];
+                row[4 * x + 2 - k] = static_cast<unsigned char>(linearToSrgb(rgb[k]) * 255.0f + 0.5f);
+                sum[k] += rgb[k];
+            }
+            texels += 1.0;
+        }
+    }
+    if (texels > 0.0)
+        for (int k = 0; k != 3; ++k)
+            mean[k] = static_cast<float>(sum[k] / texels);
+    if (copied < count * count)
+    {
+        unsigned char fill[4] = { 0, 0, 0, 255 };
+        for (int k = 0; k != 3; ++k)
+            fill[2 - k] = static_cast<unsigned char>(linearToSrgb(mean[k]) * 255.0f + 0.5f);
+        for (unsigned int y = 0; y != size; ++y)
+        {
+            unsigned char* row = static_cast<unsigned char*>(locked.pBits) + y * locked.Pitch;
+            for (unsigned int x = 0; x != size; ++x)
+                if (!cells[static_cast<std::size_t>(y / cellTexels) * count + x / cellTexels])
+                    std::memcpy(row + 4 * x, fill, 4);
+        }
+    }
+    texture->UnlockRect(0);
+    D3DXFilterTexture(texture, 0, 0, D3DX_FILTER_BOX);
+
+    // The detail fade's layer: the record weighing most along the map's edge.
+    int fade = -1;
+    float fadeWeight = 0.0f;
+    for (std::size_t i = 0; i != means.edgeWeight.size(); ++i)
+        if (means.edgeWeight[i] > fadeWeight && means.valid[i] > 0)
+        {
+            fadeWeight = means.edgeWeight[i];
+            fade = static_cast<int>(i);
+        }
+    g.constants[6][0] = -1.0f;
+    if (fade >= 0 && fade < static_cast<int>(t->m_detailTextures.size()) && t->m_detailTextures[fade])
+    {
+        const TerrainAtlasEntry& e = atlases->top[fade];
+        g.constants[5][0] = e.scaleU;
+        g.constants[5][1] = e.scaleV;
+        g.constants[5][2] = e.offsetU;
+        g.constants[5][3] = e.offsetV;
+        // The terrain's detail space is the patch grid (one unit a patch), times the top tiling.
+        g.constants[6][0] = static_cast<float>(e.atlas);
+        g.constants[6][1] = t->m_detailTextures[fade]->topTiling
+                            / (static_cast<float>(t->m_patchSize) * t->m_primaryWorldScale.x);
+        g.constants[6][2] = kDetailFadeEnd;
+        g.constants[6][3] = 1.0f / kDetailFadeRange;
+        for (int k = 0; k != 3; ++k)
+            g.constants[7][k] = 1.0f / (std::max)(means.mean[3 * fade + k], 1e-3f);
+    }
+
+    // [2]: x the map's half side (m); y colour uv per m; z colour texels per m.
     g.constants[2][0] = mapHalf;
     g.constants[2][1] = 1.0f / (2.0f * mapHalf);
     g.constants[2][2] = static_cast<float>(size) / (2.0f * mapHalf);
+    ::renddx9abi::logf("[farground] map colour: %ux%u, %d of %d patches, mean linear %.3f %.3f %.3f; detail fade: record %d",
+                       size, size, copied, count * count, mean[0], mean[1], mean[2], fade);
     return true;
 }
 
@@ -424,9 +849,10 @@ void farGroundLoad(Terrain* terrain)
     g.pending = terrain;
 }
 
-void farGroundAddRing(const float* x, const float* z, const float* y, unsigned int count, float span, float cell)
+void farGroundAddRing(int slot, const float* x, const float* z, const float* y, unsigned int count, float span,
+                      float cell)
 {
-    if (cell <= 0.0f || span <= 0.0f)
+    if (cell <= 0.0f || span <= 0.0f || slot < 0 || slot >= 8)
         return;
     if (g.ringNodes == 0)
     {
@@ -436,7 +862,27 @@ void farGroundAddRing(const float* x, const float* z, const float* y, unsigned i
         const std::size_t nodes = static_cast<std::size_t>(g.ringNodes) * g.ringNodes;
         g.ringSum.assign(nodes, 0.0f);
         g.ringCount.assign(nodes, 0.0f);
+        g.ringSlot.assign(nodes, static_cast<signed char>(-1));
+        for (int s = 0; s != 8; ++s)
+        {
+            g.slotMin[s] = FLT_MAX;
+            g.slotMax[s] = -FLT_MAX;
+            g.slotHash[s] = 0u;
+            g.slotSeen[s] = false;
+        }
     }
+    // The slot's relief and a hash of its heights in stream order (identical files hash equal).
+    unsigned int hash = 2166136261u;
+    for (unsigned int k = 0; k != count; ++k)
+    {
+        g.slotMin[slot] = (std::min)(g.slotMin[slot], y[k]);
+        g.slotMax[slot] = (std::max)(g.slotMax[slot], y[k]);
+        unsigned int bits;
+        std::memcpy(&bits, &y[k], sizeof(bits));
+        hash = (hash ^ bits) * 16777619u;
+    }
+    g.slotHash[slot] = hash ^ count;
+    g.slotSeen[slot] = count > 0;
     const float origin = -1.5f * g.ringSpan;
     const int n = g.ringNodes;
     for (unsigned int k = 0; k != count; ++k)
@@ -445,8 +891,10 @@ void farGroundAddRing(const float* x, const float* z, const float* y, unsigned i
         const int j = static_cast<int>(std::floor((z[k] - origin) / g.ringCell + 0.5f));
         if (i < 0 || j < 0 || i >= n || j >= n)
             continue;
-        g.ringSum[static_cast<std::size_t>(j) * n + i] += y[k];
-        g.ringCount[static_cast<std::size_t>(j) * n + i] += 1.0f;
+        const std::size_t node = static_cast<std::size_t>(j) * n + i;
+        g.ringSum[node] += y[k];
+        g.ringCount[node] += 1.0f;
+        g.ringSlot[node] = static_cast<signed char>(slot);
     }
 }
 
@@ -456,36 +904,58 @@ void farGroundUpdate(Terrain* terrain)
         return;
     g.pending = 0;
     dx9rend::Effect* const fx = static_cast<dx9rend::Effect*>(terrain->m_effect);
-    if (!fx)
+    world::IHeightmapCluster* const cluster = heightmapCluster();
+    if (!fx || !cluster)
         return;
     std::memset(g.constants, 0, sizeof(g.constants));
     const float mapHalf = 0.5f * static_cast<float>(terrain->m_patchCount * terrain->m_patchSize)
                           * terrain->m_primaryWorldScale.x;
-    const float base = baseHeight(terrain);
-    const bool ok = buildHeight(terrain, base, mapHalf) && buildColor(terrain, mapHalf) && buildMesh();
+    const bool ok = buildHeights(terrain, cluster, mapHalf) && buildColor(terrain, mapHalf) && buildMesh();
     clearRing();
     if (!ok)
     {
+        releaseBuilt();
         ::renddx9abi::logf("[farground] not built; the surrounding ring draws");
         return;
     }
-    g.constants[2][3] = base;
     g.constants[0][3] = 0.5f / kEarthRadius;
     g.constants[3][0] = kMorphStart;
     g.constants[3][1] = 1.0f / kMorphRange;
     g.params.levels = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundLevels"));
     g.params.constants = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGround"));
     g.params.height = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeight"));
+    g.params.heightFar = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeightFar"));
     g.params.color = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundColor"));
     g.built = true;
-    ::renddx9abi::logf("[farground] built: map half side %.0f m, base height %.1f m, %u triangles, "
-                       "%d levels to %.0f m",
-                       mapHalf, base, g.primCount, kLevels, 0.5f * kCells * kCell0 * static_cast<float>(1 << (kLevels - 1)));
+    ::renddx9abi::logf("[farground] built: map half side %.0f m, %u triangles, %d levels to %.0f m",
+                       mapHalf, g.primCount, kLevels, 0.5f * kCells * kCell0 * static_cast<float>(1 << (kLevels - 1)));
+}
+
+bool farGroundActive()
+{
+    const int mode = dx9rend::rendererFarGround();
+    return g.built && (mode == 2 || (mode == 1 && g.baked));
+}
+
+bool farGroundSeaIn(float x0, float z0, float x1, float z1)
+{
+    if (!g.built || !g.seaValid || g.farHeight.empty())
+        return false;
+    const int last = g.coarse.n - 1;
+    const auto node = [&](float v) {
+        return (std::min)((std::max)(static_cast<int>(std::floor((v - g.coarse.origin) / g.coarse.cell + 0.5f)), 0), last);
+    };
+    const int i0 = node(x0), i1 = node(x1), j0 = node(z0), j1 = node(z1);
+    for (int j = j0; j <= j1; ++j)
+        for (int i = i0; i <= i1; ++i)
+            if (g.farHeight[static_cast<std::size_t>(j) * g.coarse.n + i] < g.seaLevel)
+                return true;
+    return false;
 }
 
 bool farGroundDraw(Terrain* terrain)
 {
-    if (!dx9rend::rendererFarGround() || !g.built || !terrain->m_effect
+    if (!farGroundActive() || !terrain->m_effect
         || !dx9rend::effectHasTechnique(terrain->m_effect, techniqueName()))
         return false;
 
@@ -510,7 +980,13 @@ bool farGroundDraw(Terrain* terrain)
     param(g.params.levels)->setValue(levels, 0);
     param(g.params.constants)->setValue(g.constants, 0);
     param(g.params.height)->setValue(&g.heightValue, 0);
+    param(g.params.heightFar)->setValue(&g.heightFarValue, 0);
     param(g.params.color)->setValue(&g.colorValue, 0);
+    // The detail fade reads the terrain's atlases, as drawFinal binds them.
+    const TerrainAtlases* const atlases = terrainAtlases();
+    const int atlasCount = atlases ? static_cast<int>(atlases->detail.size()) : 0;
+    for (int i = 0; atlasCount && i < 3; ++i)
+        param(terrain->m_raTerrain.atlas[i])->setValue(terrainAtlasDetailValue(i < atlasCount ? i : 0), 0);
 
     dx9rend::effectSetTechniqueByName(terrain->m_effect, techniqueName());
     dx9rend::effectBegin(terrain->m_effect);
@@ -534,14 +1010,9 @@ namespace {
 
 void releaseBuilt()
 {
-    if (g.heightTexture)
-        g.heightTexture->Release();
-    if (g.colorTexture)
-        g.colorTexture->Release();
-    g.heightTexture = 0;
-    g.colorTexture = 0;
-    g.heightValue.baseTexture = 0;
-    g.colorValue.baseTexture = 0;
+    releaseTexture(g.heightTexture, g.heightValue);
+    releaseTexture(g.heightFarTexture, g.heightFarValue);
+    releaseTexture(g.colorTexture, g.colorValue);
     if (g.vertexBuffer)
         dx9rend::vertexBufferRelease(g.vertexBuffer);
     if (g.indexBuffer)
@@ -554,7 +1025,10 @@ void releaseBuilt()
     releaseParam(g.params.levels);
     releaseParam(g.params.constants);
     releaseParam(g.params.height);
+    releaseParam(g.params.heightFar);
     releaseParam(g.params.color);
+    std::vector<float>().swap(g.farHeight);
+    g.seaValid = false;
     g.built = false;
 }
 

@@ -198,7 +198,7 @@ void Terrain::renderWorldPassBegin()
 }
 
 // the closing arm: the diffuse passes, then the ring. [RENDER] The far ground in the ring's place
-// (render milestone 17, FarGround.h); the ring only with renderer.farGround 0.
+// (render milestone 17, FarGround.h); the ring wherever it does not draw (renderer.farGround).
 void Terrain::renderWorldPassEnd()
 {
     dx9rend::stateManagerPush();
@@ -1240,13 +1240,37 @@ void Terrain::drawWaterRa(float seaLevel)
 // the scenery distance, each cell drawn when the slot in its direction meets it with sea: the
 // median of that slot's outer edge below the sea level. A level without a ring has sea all round
 // when its map's lowest point is under the sea level (render milestone 17): the eight cells around
-// the map, then the rings past them. The far ground (FarGround.h) draws the land.
+// the map, then the rings past them. With the far ground on (FarGround.h, render milestone 17),
+// its heights decide instead, and the surrounding technique lowers the cells by the Earth's
+// curvature as the far ground is.
 void Terrain::drawWaterBeyond(float seaLevel, const Frustum* frustum)
 {
     if (!m_waterSurroundingTechnique)
         return;
     void*& technique = raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters));   // +0x14C
     const float top = seaLevel + 0.1f, bottom = seaLevel - 0.1f;
+    if (farGroundActive())
+    {
+        // The far ground's heights say where the sea is (render milestone 17 task 3): the eight
+        // map-sized cells around the map, then rings of cells three times larger, each drawn
+        // where those heights fall under the sea (past their extent, where its edge does).
+        const float mapSpan = static_cast<float>(m_patchCount * m_patchSize) * m_primaryWorldScale.x;
+        const float reach = frustum->getFarDist() + 1.5f * mapSpan;
+        for (float cell = mapSpan; 0.5f * cell < reach; cell *= 3.0f)
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                {
+                    if (i == 1 && j == 1)
+                        continue;
+                    const float x0 = (static_cast<float>(i) - 1.5f) * cell, z0 = (static_cast<float>(j) - 1.5f) * cell;
+                    const float box[6] = { x0, bottom, z0, x0 + cell, top, z0 + cell };
+                    if (!terrainFrustumIntersectsBox(frustum, box) || !farGroundSeaIn(x0, z0, x0 + cell, z0 + cell))
+                        continue;
+                    technique = m_waterSurroundingTechnique;
+                    drawWaterCell(x0, z0, x0 + cell, z0 + cell, 0);
+                }
+        return;
+    }
     float span = 0.0f;
     bool sea[3][3] = {};
     if (!m_surroundingBuilt)

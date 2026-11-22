@@ -781,18 +781,18 @@ only: no collision or gameplay out there.
   (or the primary map, on levels without one) covers, and its heights are pinned to the ring's edge
   there. Shaded like the ring, by the shared lighting model, with normals from the height texture
   per pixel.
-- **Generated per level, no hand work.** From the level's own data at load (or cached): the
-  heightmaps' height range and roughness drive fBm/ridged noise with the same character, falling
-  off from the ring's edge to a per-level base height. Colours come from the level's colour map
-  along its border, binned by height and slope, spread by histogram-preserving stochastic tiling (no
-  mirroring or repeats visible from the air). Each edge is classed land, water or nothing, so a
-  coast continues as a coast and open sea stays sea.
-- **Real terrain as an override** (content, later, per level). A level that is a real place can ship
-  a baked texture in the same slot: elevation from Copernicus GLO-30/90, coloured by ESA WorldCover
+- **Baked per level, not generated** (owner, 2026-11-23). Procedural ground (the known heights
+  pulled out under fBm/ridged noise sized from the map's relief, land and water carried out from
+  the map's edges, colour from a height-and-slope palette under stochastic tiling) was built and
+  dropped after the first look: from altitude it read as invented (strips of land extruded from the
+  map's edges, uniform blobs), and no tuning makes it a place. Every level gets a baked file
+  instead; until it has one it keeps the retail ring.
+- **Real terrain, per level.** Each level ships a baked file: elevation from Copernicus GLO-30/90, coloured by ESA WorldCover
   land classes, each class taking a colour from the level's own colour map (satellite colours would
   clash with the art). Levels are artistic takes on their places, so the bake blends to them over a
-  few km. The bake tool and the per-level files live outside this tree; the engine only reads the
-  file if it is there. Placement is fitted, not hand-set: the tool searches GLO-90 around the
+  few km. A fictional level is baked from a real place that fits its region (owner, 2026-11-23),
+  chosen per level. The bake tool and the per-level files live outside this tree; the engine only
+  reads the file if it is there, and without one draws the retail ring. Placement is fitted, not hand-set: the tool searches GLO-90 around the
   named place for the primary heightmap over position, rotation and scale; the fit gives the
   level's latitude, longitude, heading, scale, height offset (a level's 0 m is not sea level) and
   vertical ratio, and a poor fit means the name is borrowed and the level stays generated.
@@ -837,17 +837,32 @@ Tasks:
    shows streaks, Fallujah West's sea.
 2. The grid, its texture slot and the curvature, drawn over the ring's area too, with a flat ground
    at the base height and the playable map's edge colour: the void gone on every level.
-3. Generated heights and colours, edge classes (land, water, nothing); a flat or duplicated ring
-   sector counts as unknown, not flat land (growing noise from it builds terraces), and without a
-   usable ring the noise grows from the primary's edge; a sea level is only a sea when it lies
-   near the level's height range (-50, -10000, -9982 and -2222220000 mean no sea); sea cells only where the
-   class says sea (fixes Fallujah West's sea).
-4. Shading: per-pixel normals, cloud shadows, the detail fade.
-5. The override file, the placement fit, and one real-place bake as the test: the Falklands
-   (jets; its playable area is the islands, which the generated path would leave a flat plain),
-   else Kashan or Khamisiyah (jets, low relief); the two variants compared where they differ, on a
-   mountain level with jets (Kunar Province).
-6. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
+3. Known ground and the sea, as built (2026-11-23; `renderer.farGround`: 0 the retail ring, 1 the far
+   ground on levels with a bake, the ring elsewhere (default: no level has one yet), 2 the far
+   ground everywhere, a placeholder past known ground: the known heights pulled out, falling to the
+   base height over 6 km). Known ground: the map, sampled from the heightmap cluster, and each ring
+   sector that is data; a sector with under 1 m of relief, or whose height stream hashes equal to
+   another's, is a placeholder, and ring nodes under the sea deeper than 5 m below the map's
+   lowest point are filler (Fallujah West: 2 of 8 sectors placeholders, 512 filler nodes; Muttrah
+   City 7 of 8 data). Heights in two R32F textures, fine over the ring's square at its cell (769
+   a side), coarse 1024 a side out to the map's half side plus 34 km (about 68 m), blended over
+   1.5 km inside the fine square's edge; the bake fills the coarse one. A sea level counts only
+   within 10 m under the map's lowest point to its highest (-50, -10000, ... mean none); with the
+   far ground drawing, sea cells past the map draw only where its heights are under it (Fallujah
+   West: the river's mouth, 14 coarse nodes, no sea to the horizon). Colour: each patch's
+   colormap times its detail layers' mean albedo (pow(2 x texel, 2.2) over the atlas cell,
+   weighted by the patch's mean weights), which was missing from the far colour (darker and
+   greyer than the map); not yet judged on a bake.
+4. Shading: per-pixel normals and cloud shadows (task 2); the detail fade as built: the detail
+   record weighing most along the map's edge, decoded as the terrain does, divided by its mean,
+   fading out from 500 to 1500 m from the camera. Not yet judged.
+5. The bake file and its reader, the placement fit, and one real-place bake as the test: the
+   Falklands (jets; its playable area is the islands), else Kashan or Khamisiyah (jets, low
+   relief); the two variants compared where they differ, on a mountain level with jets (Kunar
+   Province). The sea past the map then gets the far ground's curvature drop (the surrounding
+   water technique's vertex shader), so the two meet at their coasts to the horizon.
+6. Bakes for the other levels, fictional ones from a real place that fits their region.
+7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
 
 ## Frame
@@ -1062,6 +1077,7 @@ and add its row here.
 | 19 | Bloom and auto-exposure (render milestone 13): effect `Shaders/RaHdrPost`, techniques `RaBloomDownKaris`, `RaBloomDown`, `RaBloomUp` (blends ONE, ONE), `RaLumMeter`, `RaLumHistogramRows`, `RaLumHistogram`, `RaExposureAdapt`, drawn by the engine (`HdrPost.cpp`) before the grade; parameters by semantic `RaHdrPost` (`float4[4]`, layout in the effect), `RaHdrSource`, `RaHdrHistory`. The FSQuadDrawer effect (pass 0, the grade) gets `RaGrade` (`float4[2]`: auto-exposure on, the bloom's share, sRGB encode, frame mod 64; 1 / the bloom's size, manual exposure in stops, 1 / level count), `RaGradeExposure` (the 1 x 1 state: adapted EV, exposure, metered EV, written) and `RaGradeBloom`; all zero means 0 stops, no bloom, the 2.2 encode. Particle effects get `RaExposureParticle` (`float4`: x 1 auto, y manual stops) and `RaExposureState` (the 1 x 1 state, for a vertex sampler) |
 | 20 | The haze's light per pixel: the aerial-perspective atlas is 1056 x 32, its 33rd block (x 1024 + column, row r) the haze's light (rgb, a 1) toward the azimuth where tile column x's rays meet the horizon, at sin(elevation) = (r / 31)^2 (rays below the horizon read row 0); `Ra_GetAerial` lights a pixel by its own ray's elevation, its in-scatter that light times one minus the transmittance. |
 | 21 | The far ground (render milestone 17): technique `RaFarGround` (pass 0, depth LESSEQUAL and written, no blend) on the terrain effect, drawn in the surrounding ring's place; its vertex stream one `SHORT4` POSITION0 (grid x, z in cells, level). Parameters by semantic `RaFarGroundLevels` (`float4[8]`: the level's origin x, z, cell, 1 when it morphs), `RaFarGround` (`float4[4]`: camera, 1 / 2R; the height texture's uv scale and offset, the ring's half side, 1 / the fade; the map's half side, colour uv per m, colour texels per m, the base height; the morph's start and 1 / range in cells, the height texel), textures `RaFarGroundHeight` (R32F, read in the vertex and pixel shaders) and `RaFarGroundColor` (A8R8G8B8, sRGB, mips). Layout in the engine's `FarGround.cpp` |
+| 22 | The far ground's heights in two textures and its detail fade (render milestone 17, tasks 3–4): `RaFarGround` grows to `float4[8]` ([1] the fine heights' uv scale and offset, the fine square's half side, 1 / the blend to the coarse; [2] the map's half side, colour uv per m, colour texels per m; [3].z the fine cell; [4].xy the coarse heights' uv scale and offset; [5] the detail fade's atlas cell; [6] its atlas (-1 none), uv per m, the distance it is gone at, 1 / its range; [7].rgb 1 / its decoded mean), texture `RaFarGroundHeightFar` (R32F, vertex and pixel shaders); `RaFarGroundColor` carries the detail layers' mean; the terrain's `RaTerrainAtlas0`–`2` are bound while it draws. Layout in the shaders' `TerrainShader_FarGround.fxh` |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
