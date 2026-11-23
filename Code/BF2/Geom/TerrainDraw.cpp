@@ -1066,7 +1066,7 @@ void setRaTerrainPatch(Terrain* t, QuadPatch* patch, const TerrainAtlases& atlas
         atlas[count][0] = static_cast<float>(topEntry.atlas);
         atlas[count][1] = static_cast<float>(sideEntry.atlas);
         atlas[count][2] = planar ? 1.0f : 0.0f;
-        atlas[count][3] = dx9rend::rendererHexTiling() ? 1.0f : 0.0f;   // contract 30
+        atlas[count][3] = (dx9rend::rendererHexTiling() && !atlases.grid[index]) ? 1.0f : 0.0f;   // contract 30
         ++count;
     }
     const Terrain::RaTerrainHandles& h = t->m_raTerrain;

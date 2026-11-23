@@ -990,7 +990,23 @@ three (the gradients are passed in, so the branch is safe). Retail's low-detail 
 top as the large-scale variation. Chosen over histogram-preserving stochastic texturing (needs a
 preprocessed texture and LUT per layer, at odds with the atlases) and over two-tap noise variation
 (blends show on contrasty textures). `renderer.hexTiling` (1) switches it; 0 tiles as retail.
-Shaders' `Ra_SampleTerrainAtlasHex`, contract 30.
+The lattice is the shaders' `RaHex.fxh`, shared by the terrain and static meshes; contract 30.
+
+- **Which textures.** A shift breaks a pattern laid on a grid and a lookup in a strip atlas, and
+  which textures those are is PR's content, so a list outside the tree says
+  (`<mod>/settings/eon64-hextiling.txt`, `Geom/HexTilingList.h`, read at each level load):
+  `[terrain grid]` names terrain layers kept on the square grid (Muttrah City's octagon slabs,
+  tiles, cobbles, crop rows; every other layer is hex-tiled); `[static hex]` names the static mesh
+  detail textures hex-tiled (every other stays on the grid). There a name alone is a whole sheet;
+  with V ranges, only those strips of a strip atlas (most of PR's building textures: plaster,
+  bricks, tiles and signs stacked in strips that tile along U), shifted along U only so a lookup
+  never leaves its strip. `/N` marks a sheet or strip laid on a grid of N tiles (roof slabs,
+  concrete panels): its shifts step by 1 / N tile, so the joints stay continuous and only which
+  slab shows varies.
+- **Static meshes.** `RaShaderSTM`'s detail map and detail normal map read the same taps; the
+  luminance steering comes from the colour. The material's `RaHexDetail` is set when its textures
+  bind and applied with the mode zeroed while `renderer.hexTiling` is 0. Bundled meshes have no
+  detail layer (one diffuse map on unique uv), so they are not touched.
 
 - **No turn.** The reference turns each hexagon too; on PR's rock and sand that points their
   streaks every way (Muttrah City `mountain`: hairy, blotchy), so hexagons are only shifted, top
@@ -1001,8 +1017,10 @@ Tasks:
 1. Terrain and far ground (built 2026-11-23): every detail layer's planes in `RaTerrain`, and the
    far ground's detail fade (which carried the lattice: Muttrah City `valley`, the hills behind
    the mountain, A/B with `renderer.hexTiling 0`).
-2. Static meshes where a texture tiles (owner, 2026-11-23: rooftops): the detail layers of the
-   static and bundled mesh shaders; not where a texture maps once (atlased or unique uv).
+2. Static meshes (built 2026-11-23; owner: rooftops) and the list: Muttrah City's city tiles on
+   the terrain kept on the grid (owner, 2026-11-23); `RaShaderSTM`'s detail by whole sheet, by
+   strip, and in grid steps. Muttrah City `roofs` (city_paving_de and mecity_01_de's panels on the
+   roofs, its plaster on the walls), `market`.
 3. Judged by eye; GPU cost with the final GPU pass.
 
 ## Frame
@@ -1225,7 +1243,7 @@ and add its row here.
 | 27 | The aerial-perspective atlas from the model (render milestone 18): 2080 x 32, 65 blocks of 32 x 32 tiles; slice i at 40 km x ((i + 1) / 32)^3: blocks 0–31 the in-scatter over the sky block's light toward the tile ray's elevation, 32–63 the transmittance (rgb), 64 the sky block (contract 20's layout, the clear sky's radiance). `Ra_GetAerial` returns `Ra_Air` (in-scatter and transmittance, rgb), its in-scatter times the sky block at the pixel's own elevation. The atlas pass reads `RaCloudShadow` and `RaCloudShadowMap` as parameters |
 | 28 | The clouds through the one atmosphere (render milestone 18): `RaCloudNear` reads the atlas on s9 and `RaAerial` (c223) as the lit passes do (the shaders' `RaAerial.fxh`); `RaClouds[18].zw` unused (contract 25 removed); the panorama's air from `RaAtmosphere` rows 0, 2 and 7; the panorama's rgb compressed by its luminance per unit opacity, rgb / (1 + Y / (1 − a)) (`Ra_CloudCompress`; the engine's read-back of the ground panorama decodes the same) |
 | 29 | The far ground's colour past the map (render milestone 17 task 5): `RaFarGround` grows to `float4[9]` ([8] the far colour's uv scale and offset, 1 / the blend from the edge colour in m past the map, 1 when drawn); texture `RaFarGroundColorFar` (sRGB, mips) over the bake's square, the bake's land classes coloured from the map's; bound to the map's colour when the level has no classes |
-| 30 | Hex-tiled detail (render milestone 19): `RaTerrainLayerAtlas[i].w` 1 hex-tiles the layer's planes; `RaFarGroundC[2].w` 1 hex-tiles the far ground's detail fade; both set from `renderer.hexTiling` |
+| 30 | Hex-tiled detail (render milestone 19): `RaTerrainLayerAtlas[i].w` 1 hex-tiles the layer's planes; `RaFarGroundC[2].w` 1 hex-tiles the far ground's detail fade; both 1 while `renderer.hexTiling` is on and the layer's texture is not in the list's `[terrain grid]`. `RaShaderSTM`'s `RaHexDetail` (float4[4], a template parameter of the detail literals): [0].x 1 the whole detail sheet, 2 only the strips whose frac(V) lies in [1].xy, [1].zw, [2].xy, [2].zw (shifted along U only), 0 none (and while `renderer.hexTiling` is 0); shift steps a tile, 0 any shift, [0].y for the sheet, [3] per strip |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

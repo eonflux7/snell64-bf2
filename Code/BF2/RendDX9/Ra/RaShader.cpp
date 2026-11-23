@@ -247,6 +247,18 @@ int RD9_THUNK raApplyFloat(void* self RD9_THUNK_EDX, void* effect, void* handle)
         ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<const float*>(holderPayload(self))));
 }
 
+// [RENDER] render milestone 19: RaHexDetail, the material's mode and strips gated by
+// renderer.hexTiling, so the switch applies at once without rebinding the materials.
+int RD9_THUNK raApplyHexDetail(void* self RD9_THUNK_EDX, void* effect, void* handle)
+{
+    float value[16];
+    memcpy(value, holderPayload(self), sizeof(value));
+    if (!rendererHexTiling())
+        value[0] = 0.0f;
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVectorArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(value), 4u));
+}
+
 // off_101E1494 slot 0 - sub_1003A1A0: SetFloatArray(handle, value, 3).
 int RD9_THUNK raApplyVec3(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
@@ -378,6 +390,7 @@ RD9_RA_HOLDER_TABLE(kRaHolderVec2Vtable,               raApplyVec2,             
 RD9_RA_HOLDER_TABLE(kRaHolderIntVtable,                raApplyInt,                raDeleteInt);
 RD9_RA_HOLDER_TABLE(kRaHolderBoolVtable,               raApplyBool,               raDeleteBool);
 RD9_RA_HOLDER_TABLE(kRaHolderFloatSplatVtable,         raApplyFloatSplat,         raDeleteFloatSplat);
+RD9_RA_HOLDER_TABLE(kRaHolderHexDetailVtable,          raApplyHexDetail,          raDeleteHexDetail);
 RD9_RA_HOLDER_TABLE(kRaHolderMatrixPointerArrayVtable, raApplyMatrixPointerArray, raDeleteMatrixPointerArray);
 RD9_RA_HOLDER_TABLE(kRaHolderMat4Vtable,               raApplyMat4,               raDeleteMat4);
 RD9_RA_HOLDER_TABLE(kRaHolderBytesVtable,              raApplyBytes,              raDeleteBytes);
@@ -419,6 +432,7 @@ RD9_RA_SCALAR_DTOR(raDeleteInt, kRaHolderIntVtable)
 RD9_RA_SCALAR_DTOR(raDeleteBool, kRaHolderBoolVtable)
 // PE 0x100464B0
 RD9_RA_SCALAR_DTOR(raDeleteFloatSplat, kRaHolderFloatSplatVtable)
+RD9_RA_SCALAR_DTOR(raDeleteHexDetail, kRaHolderHexDetailVtable)   // [RENDER] render milestone 19
 // PE 0x100464E0
 RD9_RA_SCALAR_DTOR(raDeleteMatrixPointerArray, kRaHolderMatrixPointerArrayVtable)
 // PE 0x10046510
@@ -458,6 +472,7 @@ void* raHolderInt()                 { return holderTable(kRaHolderIntVtable); }
 void* raHolderEngineTexture()       { return holderTable(kRaHolderEngineTextureVtable); }
 void* raHolderBool()                { return holderTable(kRaHolderBoolVtable); }
 void* raHolderFloatSplat()          { return holderTable(kRaHolderFloatSplatVtable); }
+void* raHolderHexDetail()           { return holderTable(kRaHolderHexDetailVtable); }
 void* raHolderLightRecordResolved() { return holderTable(kRaHolderLightRecordResolvedVtable); }
 void* raHolderMatrixPointerArray()  { return holderTable(kRaHolderMatrixPointerArrayVtable); }
 void* raHolderMat4()                { return holderTable(kRaHolderMat4Vtable); }

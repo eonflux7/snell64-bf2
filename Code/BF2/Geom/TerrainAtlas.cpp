@@ -9,6 +9,7 @@
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/Texture.h"
 #include "TerrainAtlas.h"
+#include "HexTilingList.h"
 #include "Terrain.h"
 #include "QuadPatch.h"
 
@@ -25,7 +26,7 @@ namespace geom {
 namespace {
 
 TerrainAtlases g_atlases = { std::vector<IDirect3DTexture9*>(), std::vector<TerrainAtlasEntry>(),
-                             std::vector<TerrainAtlasEntry>(), 0, 0, 0 };
+                             std::vector<TerrainAtlasEntry>(), std::vector<unsigned char>(), 0, 0, 0 };
 // Engine texture records wrapping the detail atlases: effect parameters take a texture as one.
 std::vector<dx9rend::EngineTexture*> g_detailValues;
 dx9rend::EngineTexture g_lightmapValue;   // the lightmap atlas as an effect texture value
@@ -210,6 +211,15 @@ void buildDetailAtlases(Terrain* terrain)
     const TerrainAtlasEntry none = { -1, 0.0f, 0.0f, 0.0f, 0.0f };
     g_atlases.top.assign(records, none);
     g_atlases.side.assign(records, none);
+    g_atlases.grid.assign(records, 0);
+    for (int r = 0; r != records; ++r)
+    {
+        const TerrainDetailTexture* const record = terrain->m_detailTextures[r];
+        const dx9rend::EngineTexture* const texture =
+            record ? static_cast<const dx9rend::EngineTexture*>(record->texture) : 0;
+        if (texture && hexTilingListed(kHexTerrainGrid, texture->name))
+            g_atlases.grid[r] = 1;
+    }
 
     // Distinct source textures, grouped by format and size; slot[k] = (group, index in group).
     std::vector<DetailGroup> groups;
@@ -413,6 +423,7 @@ void terrainAtlasRelease()
     g_detailValues.clear();
     g_atlases.top.clear();
     g_atlases.side.clear();
+    g_atlases.grid.clear();
     if (g_atlases.lightmap)
         g_atlases.lightmap->Release();
     g_atlases.lightmap = 0;
@@ -426,6 +437,7 @@ void terrainAtlasRelease()
 void terrainAtlasLoad(Terrain* terrain)
 {
     terrainAtlasRelease();
+    hexTilingListLoad();   // [RENDER] render milestone 19: the list as it is now, for this level
     g_pending = terrain;
 }
 

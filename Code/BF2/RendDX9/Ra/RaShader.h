@@ -316,6 +316,9 @@ RaLightRecord* raLightRecordConstruct(void* storage);
 void* raHolderVec4();                 // off_101E1480  SetVector
 void* raHolderTexture();              // off_101E1488  SetTexture of a raw base texture
 void* raHolderFloat();                // off_101E148C  SetFloat
+// [RENDER] render milestone 19: SetVectorArray of the 4 float4s after the table (the material block's
+// RaHexDetail, x64 only), the first's x zeroed while renderer.hexTiling is off.
+void* raHolderHexDetail();
 void* raHolderVec3();                 // off_101E1494  SetFloatArray(3)
 void* raHolderVec2();                 // off_101E149C  SetFloatArray(2)
 void* raHolderInt();                  // off_101E14A8  SetInt

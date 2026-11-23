@@ -48,6 +48,8 @@ struct TerrainAtlases
     std::vector<IDirect3DTexture9*>  detail;         // one per (format, size)
     std::vector<TerrainAtlasEntry>   top;            // per detail record (Terrain::m_detailTextures)
     std::vector<TerrainAtlasEntry>   side;           // per detail record; equal to top when shared
+    std::vector<unsigned char>       grid;           // per detail record: 1 tiled on the square grid, not
+                                                     // hex-tiled (render milestone 19, HexTilingList.h)
     IDirect3DTexture9*               lightmap;       // patchCount x patchCount cells, or 0
     int                              lightmapCell;   // texels per patch side at level 0
     // World position to the lightmap grid, for world-space lookups (roads): (1 / patch width in x,

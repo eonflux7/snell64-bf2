@@ -130,6 +130,7 @@ struct State
     Terrain*           pending;
     bool               built;
     bool               baked;     // the level has a bake file
+    bool               fadeGrid;  // the detail fade's layer stays on the square grid (render milestone 19)
     IDirect3DTexture9* heightTexture;
     IDirect3DTexture9* heightFarTexture;
     IDirect3DTexture9* heightEdgeTexture;
@@ -1106,6 +1107,7 @@ bool buildColor(Terrain* t, float mapHalf)
         g.constants[5][3] = e.offsetV;
         // The terrain's detail space is the patch grid (one unit a patch), times the top tiling.
         g.constants[6][0] = static_cast<float>(e.atlas);
+        g.fadeGrid = fade < static_cast<int>(atlases->grid.size()) && atlases->grid[fade] != 0;   // render milestone 19
         g.constants[6][1] = t->m_detailTextures[fade]->topTiling
                             / (static_cast<float>(t->m_patchSize) * t->m_primaryWorldScale.x);
         g.constants[6][2] = kDetailFadeEnd;
@@ -1508,7 +1510,7 @@ bool drawWith(Terrain* terrain, const std::string& technique)
     g.constants[0][0] = camera[0];
     g.constants[0][1] = camera[1];
     g.constants[0][2] = camera[2];
-    g.constants[2][3] = dx9rend::rendererHexTiling() ? 1.0f : 0.0f;   // contract 30
+    g.constants[2][3] = (dx9rend::rendererHexTiling() && !g.fadeGrid) ? 1.0f : 0.0f;   // contract 30
 
     // Each level snapped to twice its cell, so its odd vertices sit on the next level's grid.
     float levels[10][4];
@@ -1610,6 +1612,7 @@ void releaseBuilt()
     std::vector<float>().swap(g.mapLinear);
     g.seaValid = false;
     g.baked = false;
+    g.fadeGrid = false;
     g.built = false;
 }
 

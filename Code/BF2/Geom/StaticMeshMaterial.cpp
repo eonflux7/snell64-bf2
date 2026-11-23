@@ -17,6 +17,7 @@
 #include "../RendDX9/Texture.h"
 #include "../RendDX9/Ra/RaShader.h"   // the twenty vertex-element descriptors
 #include "StaticMeshTemplate.h"
+#include "HexTilingList.h"   // [RENDER] render milestone 19
 #include "../Game/Main/IVideoOptions.h"   // setupTechnique reads getQuality(2)
 #include "../GeomMisc/Debug.h"
 
@@ -126,7 +127,7 @@ struct RaParameterName { const char* name; int offset; };
 
 // Each entry is its holder's offset in the native block; the x86 values are the shipped ones.
 #define RA_MATERIAL_OFFSET(member) static_cast<int>(offsetof(RaMaterialParameters, member))
-const RaParameterName kRaParameterNames[31] =
+const RaParameterName kRaParameterNames[] =
 {
     { "AlphaBlendEnable",       RA_MATERIAL_OFFSET(alphaBlendEnable)       },
     { "SrcBlend",               RA_MATERIAL_OFFSET(srcBlend)               },
@@ -158,8 +159,12 @@ const RaParameterName kRaParameterNames[31] =
     { "InvHemiHeightScale",     RA_MATERIAL_OFFSET(invHemiHeightScale)     },
     { "PosUnpack",              RA_MATERIAL_OFFSET(posUnpack)              },
     { "TexUnpack",              RA_MATERIAL_OFFSET(texUnpack)              },
-    { "NormalUnpack",           RA_MATERIAL_OFFSET(normalUnpack)           }
+    { "NormalUnpack",           RA_MATERIAL_OFFSET(normalUnpack)           },
+#if !defined(_M_IX86)
+    { "RaHexDetail",            RA_MATERIAL_OFFSET(hexDetail)              }   // [RENDER] render milestone 19
+#endif
 };
+const int kRaParameterCount = static_cast<int>(sizeof(kRaParameterNames) / sizeof(kRaParameterNames[0]));
 
 #if defined(_M_IX86)
 static_assert(RA_MATERIAL_OFFSET(alphaBlendEnable) == 8 && RA_MATERIAL_OFFSET(srcBlend) == 168 &&
@@ -188,7 +193,7 @@ void raRegisterParameterNames()
     if (!g_raParameterOffsets.empty())
         return;
 
-    for (int i = 0; i < 31; ++i)
+    for (int i = 0; i < kRaParameterCount; ++i)
     {
         std::string name(kRaParameterNames[i].name);
         g_raParameterNames.push_back(name);
@@ -270,6 +275,8 @@ void raParametersConstruct(void* storage)
     p->normalUnpack.value[2] = 0.0f;
 #if !defined(_M_IX86)
     p->shader = 0;                       // x86 clears it with value[2] above
+    p->hexDetail.vptr = dx9rend::Ra::raHolderHexDetail();
+    memset(p->hexDetail.value, 0, sizeof(p->hexDetail.value));
 #endif
 
     raRegisterParameterNames();
@@ -297,6 +304,9 @@ void raParametersDestroy(void* storage)
     void* const holder = const_cast<void*>(static_cast<const void*>(raHolderVtable()));
 
     p->vptr = holder;
+#if !defined(_M_IX86)
+    p->hexDetail.vptr = dx9rend::Ra::raHolderHexDetail();
+#endif
     p->normalUnpack.vptr = dx9rend::Ra::raHolderVec2();
     p->texUnpack.vptr    = dx9rend::Ra::raHolderFloat();
     p->posUnpack.vptr    = dx9rend::Ra::raHolderVec4();
@@ -398,6 +408,8 @@ void raParametersCopyConstruct(void* storage, const void* source)
     p->normalUnpack.value[2] = s->normalUnpack.value[2];
 #if !defined(_M_IX86)
     p->shader = s->shader;               // x86 copies it with value[2] above
+    p->hexDetail.vptr = dx9rend::Ra::raHolderHexDetail();
+    memcpy(p->hexDetail.value, s->hexDetail.value, sizeof(p->hexDetail.value));
 #endif
 }
 
@@ -472,6 +484,7 @@ void raParametersAssign(void* storage, const void* source)
     p->normalUnpack.value[2] = s->normalUnpack.value[2];
 #if !defined(_M_IX86)
     p->shader = s->shader;               // x86 copies it with value[2] above
+    memcpy(p->hexDetail.value, s->hexDetail.value, sizeof(p->hexDetail.value));
 #endif
 }
 
@@ -1804,6 +1817,14 @@ void staticMeshMaterialBindTextures(StaticMeshMaterial* material, int geom, int 
         if (shader->textures[2 + i])
             raAssignTextureValue(*holders[i], shader->textures[2 + i]);
     }
+#if !defined(_M_IX86)
+    // [RENDER] render milestone 19: the detail map, or its listed strips, hex-tiled.
+    {
+        const ::dice::hfe::dx9rend::EngineTexture* const detail =
+            static_cast<const ::dice::hfe::dx9rend::EngineTexture*>(p.detailMap.value);
+        hexTilingStatic(detail ? detail->name : std::string(), p.hexDetail.value);
+    }
+#endif
 
     p.alphaTest.value =
         static_cast<unsigned char>(material->m_alphaMode == 2 || material->m_alphaMode == 1);

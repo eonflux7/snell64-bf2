@@ -1575,7 +1575,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "farGround", "Far ground past the map, to about 32 km: 0 the surrounding ring, 1 on levels with a baked terrain file (the ring elsewhere), 2 on every level" },
         { "farGroundScaled", "Far ground's baked real terrain: its heights scaled to the map's relief (about the sea, or the map's median height); off, real heights" },
-        { "hexTiling", "Terrain detail textures hex-tiled (each hexagon turned and shifted at random): no repeating grid; off, tiled on a square grid as retail" },
+        { "hexTiling", "Detail textures hex-tiled (each hexagon shifted at random), terrain and the static meshes the list names: no repeating grid; off, tiled on a square grid as retail" },
         { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
         { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
         { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },

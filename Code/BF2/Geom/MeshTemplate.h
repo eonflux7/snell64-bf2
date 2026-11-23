@@ -104,6 +104,12 @@ struct RaMaterialParameters
     // [CHOSEN, not recovered] (https://github.com/B2BF/OpenBF2/issues/7) A technique pointer does
     // not fit the four-byte value[2] on x64, so the native block gives it its own slot.
     void*         shader;
+    // [RENDER] "RaHexDetail" (render milestone 19, contract 30): float4[4], [0].x 1 to hex-tile the
+    // whole detail map, 2 only its strips [1].xy, [1].zw, [2].xy, [2].zw (V ranges), 0 not; [0].y the
+    // whole sheet's shift steps a tile, [3] each strip's (0 any shift); from HexTilingList.h's
+    // [static hex]. Applied with [0].x 0 while renderer.hexTiling is off (raHolderHexDetail).
+    struct HexDetail { void* vptr; float value[16]; };
+    HexDetail     hexDetail;
 #endif
 };
 
