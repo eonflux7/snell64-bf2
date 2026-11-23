@@ -31,7 +31,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 19. Hex-tiled detail textures | Accepted | `git log --grep 'milestone 19'` |
 | 20. GTAO (split out of 14) | Not planned | — |
 | 21. Tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 deferred | `git log --grep 'milestone 21'` |
-| 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | In progress: test seen by the owner (2026-11-23); task 1 next | `git log --grep 'milestone 22'` |
+| 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | In progress: task 1 built (the whole map, one cell per patch) | `git log --grep 'milestone 22'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,

@@ -984,10 +984,17 @@ cell buffers (the densest patch: 48k leaf, 12k trunk vertices). Seen by the owne
 
 Tasks:
 
-1. **Whole-map cells:** one cell per patch, placed once (`baseUpdateCells` stops re-seating), built
-   at load; each cell's streams sized to its patch. `renderer.overgrowthRange` goes.
-2. **Fade:** far cells end at the view distance (the scenery frustum), not at a fraction of the
-   level's overgrowth range.
+1. **Whole-map cells:** built. One cell per patch (slot (x, z) is patch (x, z), `baseUpdateCells`),
+   all built on the first frame and never re-seated, every cell in range and unfaded; each cell's
+   streams sized to its patch's placed `_lod` geometry (`createOverGrowthCell(counts)`; retail's
+   coverage estimate only where the editor generates). `renderer.overgrowthRange` gone. The load logs
+   `[OVERGROWTH]` (grid, buffers, largest stream). Kunar: 16 x 16 cells of 256 m, 32.7 MB (the test:
+   769 MB), largest stream 38.7k vertices; trees to the map's edge (`edge-e`); `og-sw` 5.83 ms GPU /
+   171 fps, `ft-1500` 6.02 ms / 166 fps (retail range: 5.73 / 174, 6.00 / 166). Saaremaa: 12.2 MB,
+   largest 9.5k. Load time unchanged (in game after 17 s, as before).
+2. **Fade:** with task 1 the far cells end only at the scenery frustum (the view distance, past the
+   map on the levels seen); a dissolve there is needed only where a level's view distance is
+   shorter than its map.
 3. **Shadows:** far cells past the dynamic cascades' reach cast nothing; overgrowth in the static
    cascade (milestone 14's open item) once it no longer streams.
 4. **Index range:** a patch over 65535 vertices (a dense level with a long overgrowth range) is
