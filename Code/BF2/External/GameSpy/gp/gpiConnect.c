@@ -69,29 +69,24 @@ gpiStartConnect(
 
 	if (!gsUdpEngineIsInitialized())
 	{
-		unsigned short peerPort = GPI_PEER_PORT;
-		gsDebugFormat(GSIDebugCat_GP, GSIDebugType_Network, GSIDebugLevel_Notice, 
+		// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md, issue #56): bind the UDP
+		// layer to an ephemeral port instead of GPI_PEER_PORT (6500, then up to 6599). An explicit
+		// bind to a fixed port on all interfaces raises the Windows Firewall prompt; a port-0 bind
+		// does not. Battlefield 2 uses no peer messaging, and its own GP revision listened on an
+		// ephemeral port as well. The port the system chose is reported as before.
+		gsDebugFormat(GSIDebugCat_GP, GSIDebugType_Network, GSIDebugLevel_Notice,
 			"Initializing UDP Layer\n");
-		anError = gsUdpEngineInitialize(peerPort, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+		anError = gsUdpEngineInitialize(0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 		if (anError != GS_UDP_NO_ERROR)
 		{
-			while (anError != GS_UDP_NO_ERROR && peerPort < GPI_PEER_PORT + 100)
-			{
-				gsDebugFormat(GSIDebugCat_GP, GSIDebugType_Network, GSIDebugLevel_Comment, 
-					"Port %d failed, trying next port\n", peerPort);
-				anError = gsUdpEngineInitialize(++peerPort, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-			}
-			if (anError != GS_UDP_NO_ERROR)
-			{
-				gsDebugFormat(GSIDebugCat_GP, GSIDebugType_Network, GSIDebugLevel_HotError, 
-					"Tryed all 100 ports after default port, giving up.\n");
-				CallbackFatalError(connection, GP_NETWORK_ERROR, GP_UDP_LAYER, 
-					"There was error starting the UDP layer.");
-			}
-		}	
+			gsDebugFormat(GSIDebugCat_GP, GSIDebugType_Network, GSIDebugLevel_HotError,
+				"Could not bind the UDP layer to an ephemeral port.\n");
+			CallbackFatalError(connection, GP_NETWORK_ERROR, GP_UDP_LAYER,
+				"There was error starting the UDP layer.");
+		}
 		if (!iconnection->firewall)
 		{
-			iconnection->peerPort = peerPort;
+			iconnection->peerPort = gsUdpEngineGetLocalPort();
 		}
 	}
 	else
