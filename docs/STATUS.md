@@ -39,7 +39,9 @@ altitude) in place of the ground-haze layer; weather per level. Design, as built
 3. Clouds through the same air (contract 28: near clouds by the atlas, the panorama's air from the
    model): built.
 4. Weather per level (the level's file, defaults otherwise; first picks for the three baked
-   levels): built. 5 next, then 6.
+   levels): built.
+5. Sky cube, SH, water and night against the new sky: checked (Muttrah City, The Falklands
+   `gpm_cq 32`); the sun's aureole open for the owner (below). 6 next: the owner's look.
 
 Open for the owner: above the mixing layer the aerosol falls at 1.2 km (the design's), so 1 km
 over the layer's top it keeps 43 %: from a jet (Kunar Province `jet`) the ground 20 km off is
@@ -47,6 +49,12 @@ under an optical depth of about 2, washed to the horizon's blue, and at 5 km vis
 surfaces' sun drops to 0.15 / 0.09 / 0.04 (Muttrah City, sun at 43°). A sharper top (a real
 inversion) would thin both. It also hides the clouds aloft at 8 km (Kunar Province `horizon`, shot
 `m18t3-horizon-8k`): even at 30° they lie under an optical depth of about 1.5.
+
+Also open: the sun's aureole (Muttrah City `sunup`, shots `m18t5-muttrah-sunup`, `-sunup-fair`)
+is a broad white disc about 10° across, even at 25 km. A one-lobe phase at g 0.75–0.8 keeps 60 %
+of its peak at 10°; real aerosol falls about 100x from 1° to 10°. A two-lobe phase (a sharp
+forward peak plus the broad lobe) would fix it. Dust leaves the surfaces' sun neutral (α 0.2,
+bluer than the continental reference); smoke reddens it (0.28 / 0.15 / 0.05 at 5 km).
 
 ## Paused: `render` milestone 12, clouds
 

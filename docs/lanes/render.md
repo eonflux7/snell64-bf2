@@ -1022,6 +1022,13 @@ As built for tasks 1 and 2 (2026-11-23):
   variables' ranges; other names are logged and skipped. `tools.atmosphere` prints the file and
   lines applied (`[weather] file`).
 
+- Task 5 (checks, no code): the sky cube and SH rebuild with the weather (5 km dust: irradiance
+  up 1.06 / 1.02 / 0.75, the cube within 2 % of its SH looking up); water reflects them;
+  The Falklands' night layer (`w0`, defaults) stays dark with a pale horizon band, and at 6 km
+  maritime greys out. The surfaces' sun factor at 5 km: dust 0.14 / 0.15 / 0.16 (neutral:
+  α 0.2 against the reference's 1.3), smoke 0.28 / 0.15 / 0.05 (red). The sun's aureole is
+  too broad (STATUS.md).
+
 Tasks (1 and 2 land in one build: the old haze is deleted, not kept beside the new):
 1. The model: aerosol from visibility, type, Ångström exponent and mixing height; altitude (bake
    header version 2, `farbake` writes it); the sun against the reference air and the surfaces'
