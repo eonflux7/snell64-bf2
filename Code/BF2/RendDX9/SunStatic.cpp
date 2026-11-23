@@ -263,7 +263,9 @@ bool drawStaticCascade(geom::Terrain* terrain, const V3& forward, float time)
     c[8] = forward.x / zr; c[9] = forward.y / zr; c[10] = forward.z / zr; c[11] = -minZ / zr;
     c[12] = static_cast<float>(size);
     c[13] = texel;
-    g_depthPerTexel = texel / zr;                 // [3].zw: the offsets, set per frame
+    // [3].zw: the offsets, set per frame. The slope's depth runs along the light's up axis (the
+    // ground recedes along it), whose texels are the finer ones at a low sun.
+    g_depthPerTexel = (2.0f * (std::min)(hx, hy) / static_cast<float>(size)) / zr;
     c[22] = 1.0f;                                 // [5].z: drawn
 
     const double ms = std::chrono::duration<double, std::milli>(
@@ -297,9 +299,13 @@ bool drawShadowHeight(geom::Terrain* terrain, const V3& towardSun)
                      * terrain->m_primaryWorldScale.x;
     const float dx = towardSun.x / horizontal, dz = towardSun.z / horizontal;
     const float rise = towardSun.y / horizontal;   // metres up per metre toward the sun
-    float top = -1e30f;
+    float top = -1e30f, bottom = 1e30f;
     for (int k = 0; k < n * n; ++k)
+    {
         top = (std::max)(top, heights[k]);
+        bottom = (std::min)(bottom, heights[k]);
+    }
+    const float none = bottom - 1000.0f;   // nothing toward the sun: well under the lowest ground
 
     const auto sample = [&](float x, float z) {
         const float u = (std::min)((std::max)((x - origin) / cell, 0.0f), static_cast<float>(n - 1));
@@ -327,7 +333,7 @@ bool drawShadowHeight(geom::Terrain* terrain, const V3& towardSun)
             const float x = origin + (static_cast<float>(i) + 0.5f) * hcell;
             const float z = origin + (static_cast<float>(j) + 0.5f) * hcell;
             const bool fromMap = onMap(x, z);
-            float best = -1e30f;
+            float best = none;
             for (float s = start; ; s += step)
             {
                 if (top - rise * s <= best)
@@ -612,7 +618,6 @@ void rendererSunStaticFrame(float* constants, float time)
         constants[22] = 0.0f;
         constants[23] = 0.0f;
     }
-    rendererSunStaticBind(kWaterSceneSampler);
 }
 
 } // namespace dx9rend

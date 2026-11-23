@@ -224,6 +224,8 @@ void publishSunCascadeConstants(bool zero)
     stateManagerSetAerial(zero ? kNoSunCascades : g_aerialConstants);
     stateManagerSetCloudShadow(zero ? kNoSunCascades : g_cloudShadowConstants);
     stateManagerSetSunStatic(zero ? kNoSunCascades : g_sunStaticConstants);
+    if (!zero)   // the frame steps before the world pass (atmosphere, clouds, water) use s12 too
+        rendererSunStaticBind(kWaterSceneSampler);
     stateManagerSetSunFactor(g_sunFactor);   // the sun is the same in every pass
 }
 
