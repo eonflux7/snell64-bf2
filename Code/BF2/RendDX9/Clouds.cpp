@@ -369,6 +369,7 @@ struct State
     LARGE_INTEGER start, lastBuild;
     bool started;
     bool settingsChanged;
+    bool changeBuild;         // the build under way was started by a settings change
     bool effectMissing;
     unsigned int builds;
     // The panorama (task 3).
@@ -1222,6 +1223,12 @@ float& rendererCloudMidDensity() { return st().midDensity; }
 float& rendererCloudMidCoverage() { return st().midCoverage; }
 void rendererCloudSettingsChanged() { st().settingsChanged = true; }
 
+bool rendererCloudsSettling()
+{
+    const State& s = st();
+    return s.enabled && (s.settingsChanged || (s.changeBuild && s.stage != kIdle));
+}
+
 void rendererCloudsFrame()
 {
     State& s = st();
@@ -1266,6 +1273,7 @@ void rendererCloudsFrame()
         const bool due = s.live < 0 || s.settingsChanged || secondsSince(s.lastBuild) >= kRebuildSeconds;
         if (due && ensureSet(s.sets[0]) && ensureSet(s.sets[1]))
         {
+            s.changeBuild = s.settingsChanged || s.live < 0;
             s.settingsChanged = false;
             WeatherInputs w;
             w.preset = std::min(std::max(s.preset, 0), 1);

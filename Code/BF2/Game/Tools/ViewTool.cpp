@@ -765,7 +765,8 @@ int g_shotHud = 0;
 int g_shotWidth = 960;      // the JPEG's width
 
 const int kShotHudFrames = 2;       // frames the HUD draws before its shot
-const int kShotTimeoutFrames = 60;  // frames a request may wait for the capture point
+const int kShotTimeoutFrames = 600; // frames a request may wait for the capture point (it waits
+                                    // out the renderer's rebuilds: ToolsCapture.cpp)
 
 dx9rend::IRendererTools* rendererTools()
 {

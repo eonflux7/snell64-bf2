@@ -1281,6 +1281,11 @@ void rendererAtmosphereFrame()
     updateSkyCube();
 }
 
+bool rendererAtmosphereSettling()
+{
+    return g.job || g.pending || g.cubeDirty;
+}
+
 void rendererAtmosphereDrawAtlas(const float cloudShadow[2][4])
 {
     g.atlasLive = false;

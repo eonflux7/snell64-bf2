@@ -818,6 +818,11 @@ const float* rendererSkyShFrame()
     return g_skyShFrame;
 }
 
+bool rendererSkyCubeSettling()
+{
+    return g_job || g_pending;
+}
+
 SkyCubeInfo rendererSkyCubeInfo()
 {
     SkyCubeInfo i;

@@ -152,7 +152,10 @@ reads back after the composite and the sky's second pass, just before the HudMan
 `tools.shotHud 1` it reads at end of scene instead, with the HUD and without the debug menu and
 console, and while a view hides the HUD it is shown for two frames and hidden again. The command
 returns once queued; the result goes to the console and `view.lastShot` (`wrote PATH (WxH, ...)`,
-`failed: ...`, `pending PATH` or `none`). A request no frame serves within 60 frames fails. The
+`failed: ...`, `pending PATH` or `none`). The renderer holds a request while the weather's tables,
+the sky cube or a cloud build started by a setting are being rebuilt, and 24 frames after (the
+cloud panoramas' redraw), so a shot right after a console change shows it. A request no frame
+serves within 600 frames fails. The
 encode is synchronous, so the frame of the shot is longer. Works with no view held.
 
 **Settle and freeze.** Before a shot the tool waits until streaming has no pending loads and LOD

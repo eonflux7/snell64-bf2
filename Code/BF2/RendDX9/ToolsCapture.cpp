@@ -45,6 +45,12 @@ struct Request
 
 Request g_request = { false, false, 960, 1, std::string(), std::string(), std::string() };
 
+// A shot waits while the weather's tables, the sky cube or a cloud build started by a setting are
+// being rebuilt, then kQuietFrames more for the cloud panoramas to redraw and fade in (two of
+// 8 frames each), so a shot right after a console change shows the change.
+const int kQuietFrames = 24;
+int g_quietFrames = kQuietFrames;
+
 template <class T>
 void release(T*& p)
 {
@@ -157,6 +163,8 @@ void serve(bool afterHud)
 {
     if (!g_request.pending || g_request.afterHud != afterHud || !g_rendererBase)
         return;
+    if (g_quietFrames < kQuietFrames)
+        return;
     g_request.pending = false;
     const std::string error = capture(static_cast<RendDX9Base*>(g_rendererBase));
     if (error.empty())
@@ -248,6 +256,11 @@ IRendererTools* toolsInterface()
 
 void toolsCaptureBeforeHud()
 {
+    // Once per world frame: frames since the renderer last rebuilt something a shot shows.
+    if (rendererAtmosphereSettling() || rendererSkyCubeSettling() || rendererCloudsSettling())
+        g_quietFrames = 0;
+    else if (g_quietFrames < kQuietFrames)
+        ++g_quietFrames;
     if (g_request.pending)
         serve(false);
 }

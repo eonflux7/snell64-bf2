@@ -884,6 +884,8 @@ void rendererAtmosphereFrame();
 // Draws this frame's aerial-perspective atlas (contract 27), the air's sunlight shadowed by the
 // clouds (RaCloudShadow's constants, rendererCloudShadowConstants), and binds it to s9.
 void rendererAtmosphereDrawAtlas(const float cloudShadow[2][4]);
+// [TOOLS] A weather build, or the sky cube it asks for, is under way (view.shot waits for it).
+bool rendererAtmosphereSettling();
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
 // register kAerialRegister, contract 8) for the world pass: 1 / the viewport's width and height,
@@ -956,6 +958,8 @@ float& rendererCloudMidTop();
 float& rendererCloudMidDensity();
 float& rendererCloudMidCoverage();
 void rendererCloudSettingsChanged();
+// [TOOLS] A volume build started by a setting (or the first) is pending or under way.
+bool rendererCloudsSettling();
 void rendererCloudsNear(bool allowed);
 float& rendererCloudNearDistance();
 struct CloudsInfo
@@ -1086,6 +1090,8 @@ struct SkyCubeInfo
     float irradianceUp[3];
 };
 SkyCubeInfo rendererSkyCubeInfo();
+// [TOOLS] A build is running or requested (view.shot waits for it).
+bool rendererSkyCubeSettling();
 // RASM, the sun cascade constants: 22 float4s, laid out in RaSunShadow.fxh. Pixel shaders read them
 // from the fixed registers c200..c221, which the engine owns: it writes them once per frame
 // (rendererSetSunCascadeConstants) and the StateManager drops every effect's write into the range,
