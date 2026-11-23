@@ -31,6 +31,7 @@
 #include "Texture.h"
 #include "../GeomMisc/FSQuadDrawer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -65,6 +66,10 @@ struct State
     // its terrain draws at about 25/255 (retail about 30, at +4.5).
     float exposureMin = -4.0f, exposureMax = 4.0f;
     float exposureSpeed = 1.0f;
+    // The share of a darkening the exposure lifts back (render milestone 21): a room 4 stops under
+    // the key gets 2.4 at 0.6, keeping it darker than outside; bright scenes are darkened in full.
+    // Night still reaches the ceiling (The Falklands: 7.5 stops under the key).
+    float exposureStrength = 0.6f;
 
     unsigned int w = 0, h = 0;          // the scene's size the targets were made for
     unsigned int levelW[kLevels] = {}, levelH[kLevels] = {};
@@ -178,14 +183,14 @@ bool thermalView()
     return fog[0] == 0.0f;   // Ra_IsTisActive (RaCommon.fxh)
 }
 
-// One pass of `technique` from `source` into `target`, with RaHdrPost's rows 1-3 in `c` (row 0,
+// One pass of `technique` from `source` into `target`, with RaHdrPost's rows 1-4 in `c` (row 0,
 // the sizes, is filled here).
 struct Passes
 {
     void* effect;
     ID3DXEffect* d3dx;
     D3DXHANDLE constants, source, history;
-    float c[4][4];
+    float c[5][4];
 
     bool draw(const char* technique, IDirect3DBaseTexture9* input, unsigned int inW, unsigned int inH,
               IDirect3DTexture9* target)
@@ -199,7 +204,7 @@ struct Passes
         if (!effectSetTechniqueByName(effect, technique))
             return false;
         if (constants)
-            d3dx->SetVectorArray(constants, reinterpret_cast<const D3DXVECTOR4*>(c), 4);
+            d3dx->SetVectorArray(constants, reinterpret_cast<const D3DXVECTOR4*>(c), 5);
         if (source)
             d3dx->SetTexture(source, input);
         IDirect3DSurface9* surface = 0;
@@ -272,6 +277,8 @@ bool runPasses(EngineTexture* scene)
     p.c[3][1] = kLowPercentile;
     p.c[3][2] = kHighPercentile;
     p.c[3][3] = kLuminanceCap;
+    p.c[4][0] = s.exposureStrength;
+    p.c[4][1] = p.c[4][2] = p.c[4][3] = 0.0f;
 
     IDirect3DSurface9* savedTarget = stateManagerGetRenderTarget(0);
     IDirect3DSurface9* savedDepth = stateManagerGetDepthStencilSurface();
@@ -362,7 +369,9 @@ void rendererHdrPost(EngineTexture* scene)
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaGradeBloom"))
         d3dx->SetTexture(h, bloom ? s.level[0] : 0);
     // The ceiling's adapted luminance: below it the exposure sits on exposureMax (the night)
-    rendererGradeBind(d3dx, s.thermal, std::log2(kKey) + s.exposureBias - s.exposureMax);
+    const float lift = s.exposureMax - s.exposureBias;
+    rendererGradeBind(d3dx, s.thermal,
+                      std::log2(kKey) - (lift > 0.0f ? lift / std::max(s.exposureStrength, 0.05f) : lift));
 }
 
 void rendererHdrPostBindParticles(void* effect)
@@ -394,6 +403,7 @@ float& rendererExposureBias() { return st().exposureBias; }
 float& rendererExposureMin() { return st().exposureMin; }
 float& rendererExposureMax() { return st().exposureMax; }
 float& rendererExposureSpeed() { return st().exposureSpeed; }
+float& rendererExposureStrength() { return st().exposureStrength; }
 
 HdrPostInfo rendererHdrPostInfo()
 {
@@ -406,6 +416,7 @@ HdrPostInfo rendererHdrPostInfo()
     i.exposureMin = s.exposureMin;
     i.exposureMax = s.exposureMax;
     i.exposureSpeed = s.exposureSpeed;
+    i.exposureStrength = s.exposureStrength;
     i.key = kKey;
     i.evLow = kEvLow;
     i.evRange = kEvRange;

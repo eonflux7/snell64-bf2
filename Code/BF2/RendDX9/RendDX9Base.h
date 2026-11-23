@@ -1014,10 +1014,11 @@ float& rendererExposureBias();
 float& rendererExposureMin();
 float& rendererExposureMax();
 float& rendererExposureSpeed();
+float& rendererExposureStrength();
 struct HdrPostInfo
 {
     bool ran, thermal, lastSnap;
-    float bloomStrength, exposureBias, exposureMin, exposureMax, exposureSpeed;
+    float bloomStrength, exposureBias, exposureMin, exposureMax, exposureSpeed, exposureStrength;
     float key, evLow, evRange, lowPercentile, highPercentile, rateLight, rateDark;
     unsigned int frames, sceneW, sceneH, levels;
     float lastDt;

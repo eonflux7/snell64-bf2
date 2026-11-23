@@ -932,9 +932,9 @@ bool toolsWriteExposure(const char* base, const char*& message)
     }
     std::string failed;
     std::fprintf(f, "# tools.exposure (render milestone 13): bloom and auto-exposure, the last frame's\n");
-    std::fprintf(f, "[settings] exposure bias %.2f, min %.2f, max %.2f stops, speed %.2f (into light %.1f/s, "
-                    "dark %.1f/s); key %.3f; bloom strength %.3f\n",
-                 e.exposureBias, e.exposureMin, e.exposureMax, e.exposureSpeed,
+    std::fprintf(f, "[settings] exposure bias %.2f, min %.2f, max %.2f stops, strength %.2f, speed %.2f (into light "
+                    "%.1f/s, dark %.1f/s); key %.3f; bloom strength %.3f\n",
+                 e.exposureBias, e.exposureMin, e.exposureMax, e.exposureStrength, e.exposureSpeed,
                  e.rateLight * e.exposureSpeed, e.rateDark * e.exposureSpeed, e.key, e.bloomStrength);
     {
         const GradeSettings& g = rendererGrade();

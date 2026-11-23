@@ -1558,6 +1558,10 @@ float getExposureSpeed() { return rendererExposureSpeed(); }
 void setExposureSpeed(float value) { rendererExposureSpeed() = clampf(value, 0.05f, 20.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureSpeed, float, true, getExposureSpeed(), setExposureSpeed, 0.05f, 20.0f,
                                  kRendererConsoleTag)
+float getExposureStrength() { return rendererExposureStrength(); }
+void setExposureStrength(float value) { rendererExposureStrength() = clampf(value, 0.05f, 1.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureStrength, float, true, getExposureStrength(), setExposureStrength, 0.05f,
+                                 1.0f, kRendererConsoleTag)
 
 // [RENDER] The frame grade's look (render milestone 21, Grade.cpp).
 int getGradeCurve() { return rendererGrade().curve; }
@@ -1635,6 +1639,7 @@ const char* rendererVariableHelp(const char* name)
         { "exposureMin", "Auto-exposure: the lowest exposure, in stops (how far bright scenes are darkened)" },
         { "exposureMax", "Auto-exposure: the highest exposure, in stops (keeps night dark)" },
         { "exposureSpeed", "Auto-exposure: adaptation speed, times 3/s into light and 1/s into dark" },
+        { "exposureStrength", "Auto-exposure: share of a darkening it lifts back (1 all: interiors as bright as outside; lower keeps shade and rooms darker); bright scenes are darkened in full" },
         { "gradeCurve", "Tonemap curve: 1 the GT curve (toe, linear mids, shoulder; highlights may shift toward white), 0 PBR Neutral with the old fixed grade (A/B)" },
         { "gradeContrast", "Grade: contrast around mid grey, before the curve (1 none)" },
         { "gradeSaturation", "Grade: saturation, before the curve (1 none)" },
