@@ -47,6 +47,9 @@ void farGroundLoad(Terrain* terrain);
 // ring's span (m, one map side) and cell (m).
 void farGroundAddRing(int slot, const float* x, const float* z, const float* y, unsigned int count, float span,
                       float cell);
+// A map patch's drawn vertices near the map's edge as it loads (world x, z, height, `count` of each):
+// the far ground meets these, not the physics heightmap, where they differ.
+void farGroundAddMapEdge(const float* x, const float* z, const float* y, unsigned int count);
 // The terrain's first update after its load, once its textures exist: builds the textures and the
 // mesh. Later calls do nothing.
 void farGroundUpdate(Terrain* terrain);

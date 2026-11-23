@@ -98,6 +98,10 @@ public:
     explicit QuadPatch(Terrain* owner);
     virtual ~QuadPatch();                                            // slot 0: 0x1018E520 -> body sub_1018A220
     void load(TerrainRawReader& reader);
+    // [RENDER] The far ground (FarGround.h): this patch's drawn vertices within 64 m of the map's
+    // edge, from the patch stream as read (`stride` bytes a vertex, its height float at
+    // `heightOffset`; the grid from the shared base grid when `sharedGrid`, else the vertex's own).
+    void addEdgeHeights(const unsigned char* data, unsigned int stride, unsigned int heightOffset, bool sharedGrid);
     // Drops detail resources in low quality; otherwise reloads them from the saved file offset.
     void reloadDetailLayers(TerrainRawReader& reader);
     void loadDetailLayers(TerrainRawReader& reader);

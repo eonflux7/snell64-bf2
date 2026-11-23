@@ -16,6 +16,7 @@
 #include <string>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "QuadPatch.h"
+#include "FarGround.h"
 #include "RaQuadPatchAdapter.h"
 #include "MeshTemplate.h"
 #include "Terrain.h"
@@ -421,6 +422,37 @@ QuadPatch::~QuadPatch()
 // the patch's file record: six header fields, the placement, the vertex buffer, the
 // detail layers, the per-patch textures.
 // PE 0x1018A5B0.
+// [RENDER] The drawn heights near the map's edge for the far ground (render milestone 17): the
+// compiled patches' edge rows need not equal the heightmap the physics reads (Kunar Province's
+// east edge lies about 6 m under it), and the far ground has to meet what is drawn. A vertex's
+// world x, z is its grid column, row times the primary scale plus the patch's origin, as the
+// terrain shader places it (scaletransxz); its height the float times the primary y scale.
+void QuadPatch::addEdgeHeights(const unsigned char* data, unsigned int stride, unsigned int heightOffset,
+                               bool sharedGrid)
+{
+    Terrain* const t = terrain;
+    const int n = t->m_patchSize;
+    const float sx = t->m_primaryWorldScale.x, sz = t->m_primaryWorldScale.z, sy = t->m_primaryWorldScale.y;
+    const float half = 0.5f * static_cast<float>(t->m_patchCount * n) * sx;
+    std::vector<float> xs, zs, ys;
+    for (int i = 0; i != (n + 1) * (n + 1); ++i)
+    {
+        const unsigned char* const v = data + static_cast<std::size_t>(i) * stride;
+        const int col = sharedGrid ? i % (n + 1) : v[2];
+        const int row = sharedGrid ? i / (n + 1) : v[1];
+        const float x = worldXf + static_cast<float>(col) * sx, z = worldZf + static_cast<float>(row) * sz;
+        if (half - std::fabs(x) > 64.0f && half - std::fabs(z) > 64.0f)
+            continue;
+        float h;
+        std::memcpy(&h, v + heightOffset, sizeof(h));
+        xs.push_back(x);
+        zs.push_back(z);
+        ys.push_back(h * sy);
+    }
+    if (!xs.empty())
+        farGroundAddMapEdge(xs.data(), zs.data(), ys.data(), static_cast<unsigned int>(xs.size()));
+}
+
 void QuadPatch::load(TerrainRawReader& reader)
 {
     reader.readU32(&gridX);
@@ -463,7 +495,14 @@ void QuadPatch::load(TerrainRawReader& reader)
                 static_cast<unsigned int>(vertexCount), 20u, 8u, "QuadPatch_SingleCompact");
             void* const bits = dx9rend::vertexBufferLock(vertexBuffer, 0, 0, 0);
             if (bits)
-                reader.read(bits, static_cast<unsigned int>(20 * vertexCount));
+            {
+                // [RENDER] Read through a copy: the far ground takes the drawn heights along the
+                // map's edge (FarGround.h), and a locked vertex buffer is not for reading back.
+                std::vector<unsigned char> copy(static_cast<std::size_t>(20 * vertexCount));
+                reader.read(copy.data(), static_cast<unsigned int>(copy.size()));
+                std::memcpy(bits, copy.data(), copy.size());
+                addEdgeHeights(copy.data(), 20u, 0u, true);
+            }
         }
         else
         {
@@ -471,7 +510,13 @@ void QuadPatch::load(TerrainRawReader& reader)
                 static_cast<unsigned int>(vertexCount), 24u, 8u, "QuadPatch_SingleCompact");
             unsigned char* bits = static_cast<unsigned char*>(dx9rend::vertexBufferLock(vertexBuffer, 0, 0, 0));
             if (bits)
-                reader.read(bits, static_cast<unsigned int>(24 * vertexCount));
+            {
+                // [RENDER] As above: the drawn heights along the map's edge for the far ground.
+                std::vector<unsigned char> copy(static_cast<std::size_t>(24 * vertexCount));
+                reader.read(copy.data(), static_cast<unsigned int>(copy.size()));
+                std::memcpy(bits, copy.data(), copy.size());
+                addEdgeHeights(copy.data(), 24u, 4u, false);
+            }
             if (!t->m_rawHasVersion || t->m_rawVersion < 0x1Au)
             {
                 // 0x18/0x19 content: clear the border-code byte and the pad of every vertex.

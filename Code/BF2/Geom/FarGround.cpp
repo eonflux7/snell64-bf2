@@ -123,6 +123,8 @@ struct State
     float              slotMax[8];
     unsigned int       slotHash[8];
     bool               slotSeen[8];
+    // The map's drawn vertices near its edge (farGroundAddMapEdge), until the build takes them.
+    std::vector<float> mapEdgeX, mapEdgeZ, mapEdgeY;
 
     Terrain*           pending;
     bool               built;
@@ -221,6 +223,9 @@ void clearRing()
     std::vector<float>().swap(g.ringSum);
     std::vector<float>().swap(g.ringCount);
     std::vector<signed char>().swap(g.ringSlot);
+    std::vector<float>().swap(g.mapEdgeX);
+    std::vector<float>().swap(g.mapEdgeZ);
+    std::vector<float>().swap(g.mapEdgeY);
     for (int s = 0; s != 8; ++s)
     {
         g.slotMin[s] = FLT_MAX;
@@ -705,6 +710,30 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf, 
             g.edgeMap[static_cast<std::size_t>(j) * g.edge.n + i] = cluster->getHeightInWorldCoords(
                 (std::max)(-inside, (std::min)(x, inside)), (std::max)(-inside, (std::min)(z, inside)));
         }
+    // The drawn heights where the patches gave them (farGroundAddMapEdge): the compiled patches can
+    // differ from the heightmap near the edge.
+    {
+        int taken = 0;
+        double sumAbs = 0.0, maxAbs = 0.0;
+        for (std::size_t v = 0; v != g.mapEdgeX.size(); ++v)
+        {
+            const int i = static_cast<int>(std::floor((g.mapEdgeX[v] - g.edge.origin) / g.edge.cell + 0.5f));
+            const int j = static_cast<int>(std::floor((g.mapEdgeZ[v] - g.edge.origin) / g.edge.cell + 0.5f));
+            if (i < 0 || j < 0 || i >= g.edge.n || j >= g.edge.n)
+                continue;
+            float& h = g.edgeMap[static_cast<std::size_t>(j) * g.edge.n + i];
+            if (h != h)
+                continue;
+            const double d = std::fabs(static_cast<double>(g.mapEdgeY[v]) - h);
+            sumAbs += d;
+            maxAbs = (std::max)(maxAbs, d);
+            h = g.mapEdgeY[v];
+            ++taken;
+        }
+        ::renddx9abi::logf("[farground] the map's drawn edge: %d vertices, %.2f m from the heightmap on average, "
+                           "%.1f m at most", taken, taken ? sumAbs / taken : 0.0, maxAbs);
+    }
+
     // Along each side: the map's edge height minus the ground one fine cell past it, smoothed along
     // the side over +-8 nodes (the ring's cells are coarser than the map's).
     g.mapHalf = mapHalf;
@@ -717,9 +746,9 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf, 
             const float t = -mapHalf + static_cast<float>(k) * mapCell;
             const float ox = side == 1 ? 1.0f : (side == 3 ? -1.0f : 0.0f), oz = side == 2 ? 1.0f : (side == 0 ? -1.0f : 0.0f);
             const float x = ox != 0.0f ? ox * mapHalf : t, z = oz != 0.0f ? oz * mapHalf : t;
-            const float inside = mapHalf - 0.01f;
-            const float atEdge = cluster->getHeightInWorldCoords((std::max)(-inside, (std::min)(x, inside)),
-                                                                 (std::max)(-inside, (std::min)(z, inside)));
+            const int ei = static_cast<int>(std::floor((x - g.edge.origin) / g.edge.cell + 0.5f));
+            const int ej = static_cast<int>(std::floor((z - g.edge.origin) / g.edge.cell + 0.5f));
+            const float atEdge = g.edgeMap[static_cast<std::size_t>(ej) * g.edge.n + ei];
             const float past = sampleGrid(fineE, fine, x + ox * fine.cell, z + oz * fine.cell);
             raw[static_cast<std::size_t>(side) * g.edgeNodes + k] = atEdge - past;
         }
@@ -1212,6 +1241,13 @@ void farGroundAddRing(int slot, const float* x, const float* z, const float* y, 
         g.ringCount[node] += 1.0f;
         g.ringSlot[node] = static_cast<signed char>(slot);
     }
+}
+
+void farGroundAddMapEdge(const float* x, const float* z, const float* y, unsigned int count)
+{
+    g.mapEdgeX.insert(g.mapEdgeX.end(), x, x + count);
+    g.mapEdgeZ.insert(g.mapEdgeZ.end(), z, z + count);
+    g.mapEdgeY.insert(g.mapEdgeY.end(), y, y + count);
 }
 
 void farGroundUpdate(Terrain* terrain)
