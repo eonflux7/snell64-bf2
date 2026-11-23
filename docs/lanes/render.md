@@ -913,6 +913,11 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    0.18 in log2, before the curve. `renderer.gradeCurve 0` is milestone 13's output exactly (Neutral,
    contrast 1.05), the A/B until acceptance; thermals always take it. `tools.exposure` prints the
    settings (`[grade]`).
+   Seen by an agent (2026-11-23, against curve 0): Muttrah City `sun` and `street` nearly the same in
+   the mids (mid grey kept), shadows a little deeper, sunlit concrete rolling off short of clipping;
+   `gradeTemperature 4500` cools the image. The Falklands' night layer (`w0`, +4 stops on the
+   ceiling): the toe takes the terrain from 27 to 19/255; `gradeToe 1` keeps milestone 13's night.
+   Fire not yet seen.
 2. **Shadows, mid tones, highlights** (planned): saturation and colour per range.
 3. **A 3D LUT** (planned): the grade baked to a 32³ table when a variable changes, one fetch in the
    pass; per-level looks.

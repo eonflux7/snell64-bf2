@@ -49,6 +49,11 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
+- The grade (milestone 21, task 1): `renderer.gradeCurve 1` the GT curve (default), 0 the old
+  Neutral grade. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night is darker: toe
+  1.25 takes the terrain from 27 to 19/255; `renderer.gradeToe 1` keeps the old night). Also
+  `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`.
+
 - The run-time sun (milestone 14): `renderer.sunBakedFallback 1` is the old baked sun past the
   cascades, 0 (the default) the new. Kashan Desert, `lightManager.sunDirection 0.7/-0.07/0.71`
   (4°), views `kas_high`, `kas_here`, `m14-above` (buildings from above; `renderer.sunShadows 0`
