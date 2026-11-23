@@ -901,23 +901,26 @@ variables (`Grade.cpp`, bound as `RaGradeLook` next to milestone 13's `RaGrade`)
 ops in the one full-screen pass, about what Neutral cost (contract 37). Drops: PBR Neutral, and the shader's
 unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
 
-1. **Curve, white balance, console variables** (built). The GT curve (Uchimura 2017): a power toe
-   below 0.22 (`renderer.gradeToe`, 1.25), slope 1 to 0.22 + 0.78 × `renderer.gradeShoulder`
-   (0.4: 0.53), then an exponential shoulder to 1. Taken two ways and blended by
-   `renderer.gradeHighlightShift` (0.5): hue kept (the brightest channel through the curve, the
-   others scaled with it, desaturated toward white by the shoulder's pull as Neutral does) and per
-   channel (orange runs to yellow, then white). White balance: a Bradford adaptation from the white
-   of `renderer.gradeTemperature` (K, 6504 the identity; the Planckian locus offset onto D65) moved
-   off the locus by `renderer.gradeTint` (1 = 0.02 Duv), to D65; a 3x3 matrix from the CPU, the
-   white's luminance kept. `renderer.gradeContrast` and `gradeSaturation` (1, 1) as before, around
-   0.18 in log2, before the curve. `renderer.gradeCurve 0` is milestone 13's output exactly (Neutral,
-   contrast 1.05), the A/B until acceptance; thermals always take it. `tools.exposure` prints the
-   settings (`[grade]`).
-   Seen by an agent (2026-11-23, against curve 0): Muttrah City `sun` and `street` nearly the same in
-   the mids (mid grey kept), shadows a little deeper, sunlit concrete rolling off short of clipping;
-   `gradeTemperature 4500` cools the image. The Falklands' night layer (`w0`, +4 stops on the
-   ceiling): the toe takes the terrain from 27 to 19/255; `gradeToe 1` keeps milestone 13's night.
-   Fire not yet seen.
+1. **Curve, white balance, console variables** (built). The GT curve's toe and straight section
+   (Uchimura 2017): a power toe below 0.22 (`renderer.gradeToe`, 1.5), slope 1 to
+   0.22 + 0.78 × `renderer.gradeShoulder` (0.6: 0.69), then a rational shoulder, PBR Neutral's
+   form (slope 1 where it starts, white at 10× display white). GT's own exponential shoulder was
+   white by about 3× and lost the brightest gradations; the rational one keeps Neutral's headroom
+   (display 0.92 at 1.5×, 0.97 at 3×, 0.99 at 5×). Taken two ways and blended by
+   `renderer.gradeHighlightShift` (0.3; at 0.5 a bright sky drifted toward cyan): hue kept (the
+   brightest channel through the curve, the others scaled with it, desaturated toward white by
+   the shoulder's pull as Neutral does) and per channel (orange runs to yellow, then white).
+   White balance: a Bradford adaptation from the white of `renderer.gradeTemperature` (K, 6504
+   the identity; the Planckian locus offset onto D65) moved off the locus by `renderer.gradeTint`
+   (1 = 0.02 Duv), to D65; a 3x3 matrix from the CPU, the white's luminance kept.
+   `renderer.gradeContrast` (1.2) around 0.18 in log2, and `gradeSaturation` (1), before the
+   curve. `renderer.gradeCurve 0` is milestone 13's output exactly (Neutral, contrast 1.05), the
+   A/B until acceptance; thermals always take it. `tools.exposure` prints the settings (`[grade]`).
+   Contrast and toe raised by the owner's call (2026-11-23, "we need more overall contrast"): at
+   Muttrah City `sun` the ground's 5th / 50th / 95th percentile went from 63 / 110 / 189 (contrast
+   1, toe 1.25) to 45 / 107 / 212 (1.25, 1.5); toe 1.8 reached 38 but lost the rock's shadow detail.
+   The shadows' brightness is mostly the lighting's (sky light into shade, the haze), not the
+   grade's.
 2. **Shadows, mid tones, highlights** (built). After the contrast, in scene linear: weights by the
    pixel's luminance in stops from 0.18, shadows full below −4 EV and gone by −0.5, highlights from
    +0.5 to full at +4, the mids between. Each range has a tint (`renderer.gradeShadowTint`,
@@ -933,7 +936,7 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
 4. **Low light** (built). Night is how far the adapted luminance sits under the exposure ceiling
    (the luminance at which the exposure reaches `renderer.exposureMax`: log2 key + bias − max, from
    the engine; the adapted value from milestone 13's state), 0 at the ceiling, 1 two stops under it,
-   0 without auto-exposure. With night the toe relaxes to 1, so the toe never deepens what the
+   0 without auto-exposure. With night the toe and the contrast relax to 1, so the toe never deepens what the
    ceiling already holds dark (milestone 13's accepted night stays), and dark pixels (exposed
    luminance under 0.05, fading out by 0.5; lights keep their colour) move toward the rods'
    response (roughly 0.06 / 0.52 / 0.42 of linear sRGB) in a grey-blue, by

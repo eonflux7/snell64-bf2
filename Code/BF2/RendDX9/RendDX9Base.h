@@ -1035,11 +1035,11 @@ HdrPostInfo rendererHdrPostInfo();
 struct GradeSettings
 {
     int curve = 1;
-    float contrast = 1.0f;          // around mid grey, in log2, before the curve
+    float contrast = 1.2f;          // around mid grey, in log2, before the curve (relaxes to 1 at night)
     float saturation = 1.0f;
-    float highlightShift = 0.5f;    // 0 hue kept in highlights, 1 each channel through the curve
-    float toe = 1.25f;              // the toe's power below 0.22 (1 none)
-    float shoulder = 0.4f;          // the linear section's length, as a share of 0.22..1
+    float highlightShift = 0.3f;    // 0 hue kept in highlights, 1 each channel through the curve
+    float toe = 1.5f;               // the toe's power below 0.22 (1 none; relaxes to 1 at night)
+    float shoulder = 0.6f;          // the linear section's length, as a share of 0.22..1 (0.6: to 0.69)
     float temperature = 6504.0f;    // the light the image is balanced for: lower cooler, higher warmer
     float tint = 0.0f;              // + magenta, - green
     // Per range (task 2), by scene luminance around mid grey: shadows below about -1 EV, highlights
