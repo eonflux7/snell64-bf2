@@ -52,7 +52,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   past known ground. Look at with 2: Fallujah West `ft-2000` (no sea
   past the river's mouth), Muttrah City `ft-top` (the sea only by the bay), Kashan Desert
   `ft-1000-y0` (the map's colour at its edge with its detail layers' mean, the detail texture
-  close to the camera). Procedural ground was built and dropped on the owner's look.
+  close to the camera). Procedural ground was built and dropped on the owner's look. Cracks
+  between its levels and the ground crawling as they snap, fixed (2026-11-23): Kashan Desert
+  `fg-corner`, `fg-corner2`, flying low over the far ground.
 
 - Render milestone 13, tasks 1–5: on any map, A/B with `renderer.exposure 0`, `renderer.bloom 0`,
   `renderer.encodeSrgb 0` (all three: the old look). Muttrah City `street`, `sunup` (the sun's

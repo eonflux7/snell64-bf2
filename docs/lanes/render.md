@@ -841,7 +841,7 @@ Tasks:
    As built for task 2 (`Geom/FarGround.cpp`, contract 21; `renderer.farGround` 0 draws the retail
    ring): seven levels of 64 x 64 cells, 16 m to 1 km, out to about 32 km from the camera, one draw
    of about 43,000 triangles; each level snapped on the CPU to twice its cell, its outer cells
-   morphed onto the next level's grid from 16 to 26 cells out, the levels overlapping by one coarse
+   morphed onto the next level's grid from 18 to 28 cells out (16 to 26 until 2026-11-23: see below), the levels overlapping by one coarse
    cell. Heights: the ring's vertices into a grid at the ring's cell over its square (769 nodes a
    side on the measured levels), pull-push filled; 3 km past the ring they reach the base height.
    Colour: every patch's colormap shrunk into one texture (512 texels a side at most), read at the
@@ -920,6 +920,18 @@ Tasks:
    has them), Kashan Desert (`ft-2000-y0`: bare, villages and fields), Muttrah City (`ridges`).
    Open: from above the map reads darker than the ground round it (its tree meshes; the far
    ground has none); within a class the colour is flat.
+   Cracks and crawl (owner, 2026-11-23, Kashan Desert from a jet; built, contract 31). One-pixel
+   sky-coloured cracks along level boundaries came and went as the camera moved: where a finer
+   level's snap is a coarse cell ahead it meets the coarser level's hole edge to edge, and those
+   coarse edge vertices, up to 17 of their cells from the camera, were already morphing (from 16),
+   so they slid off the finer level's. The morph now runs 18 to 28 cells. And the ground visibly
+   moved as levels snapped and morphed: every vertex read the full-resolution heights, so a
+   level's coarse vertices picked single 60 m samples that changed as it snapped. The fine and
+   coarse height textures now carry box-filtered mips, and a vertex reads them filtered to its
+   distance / 14 (about its level's cell at the hole's edge, twice it once morphed); by distance,
+   not level, so coincident vertices of two levels still agree. The edge heights stay full
+   resolution (the map's drawn edge). The pixel shader's normals read at their step's mip.
+   Seen on Kashan Desert `fg-corner`, `fg-corner2`.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
@@ -1260,6 +1272,7 @@ and add its row here.
 | 28 | The clouds through the one atmosphere (render milestone 18): `RaCloudNear` reads the atlas on s9 and `RaAerial` (c223) as the lit passes do (the shaders' `RaAerial.fxh`); `RaClouds[18].zw` unused (contract 25 removed); the panorama's air from `RaAtmosphere` rows 0, 2 and 7; the panorama's rgb compressed by its luminance per unit opacity, rgb / (1 + Y / (1 − a)) (`Ra_CloudCompress`; the engine's read-back of the ground panorama decodes the same) |
 | 29 | The far ground's colour past the map (render milestone 17 task 5): `RaFarGround` grows to `float4[9]` ([8] the far colour's uv scale and offset, 1 / the blend from the edge colour in m past the map, 1 when drawn); texture `RaFarGroundColorFar` (sRGB, mips) over the bake's square, the bake's land classes coloured from the map's; bound to the map's colour when the level has no classes |
 | 30 | Hex-tiled detail (render milestone 19): `RaTerrainLayerAtlas[i].w` 1 hex-tiles the layer's planes; `RaFarGroundC[2].w` 1 hex-tiles the far ground's detail fade; both 1 while `renderer.hexTiling` is on and the layer's texture is not in the list's `[terrain grid]`. `RaShaderSTM`'s `RaHexDetail` (float4[4], a template parameter of the detail literals): [0].x 1 the whole detail sheet, 2 only the strips whose frac(V) lies in [1].xy, [1].zw, [2].xy, [2].zw (shifted along U only), 0 none (and while `renderer.hexTiling` is 0); shift steps a tile, 0 any shift, [0].y for the sheet, [3] per strip |
+| 31 | The far ground's filtered heights (render milestone 17): `RaFarGround` grows to `float4[10]` ([9] 1 / the fine heights' texel, 1 / the coarse heights' texel, the vertices' height spacing per m of distance); `RaFarGroundHeight` and `RaFarGroundHeightFar` carry full box-filtered mip chains, read by `tex2Dlod` at log2(spacing / texel); the edge heights stay one level; the morph runs 18 to 28 cells |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

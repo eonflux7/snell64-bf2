@@ -63,14 +63,22 @@ namespace {
 
 // The mesh: kLevels nested levels of kCells x kCells cells around the camera, cell kCell0 * 2^level.
 // Level 0 is whole; each coarser one leaves out its middle (kHole cells from its centre on each
-// side), which the finer level covers with one coarse cell to spare whatever their snapping.
+// side), which the finer level covers with one coarse cell to spare whatever their snapping (none
+// on one side when the finer level's snap is a coarse cell ahead: there the two meet edge to edge).
+// The morph runs from kMorphStart to kMorphStart + kMorphRange cells from the camera: a coarser
+// level's vertices on its hole's edge are at most 17 of its cells away, so they never morph (a
+// partly morphed edge left one-pixel cracks against the finer level), and a level's outer cells
+// from 30 out, where the coarser level overlaps them, are fully morphed.
 const int   kLevels = 9;
 const int   kCells = 64;
 const int   kHole = kCells / 4 - 1;
 const float kCell0 = 4.0f;
 const int   kSide = kCells + 1;                                    // vertices a side
-const float kMorphStart = 16.0f;                                   // cells from the camera
-const float kMorphRange = 10.0f;                                   // complete 26 cells out
+const float kMorphStart = 18.0f;                                   // cells from the camera
+const float kMorphRange = 10.0f;                                   // complete 28 cells out
+// The vertices' heights are filtered to their distance / kSpacingCells (m), so a level's
+// vertices read about its own cell at its hole's edge (15 cells) and twice it once morphed (28).
+const float kSpacingCells = 14.0f;
 const float kEarthRadius = 6371000.0f;
 const unsigned int kColorTexels = 512;                             // the map's colour, texels a side (at most)
 
@@ -94,7 +102,7 @@ const float kDetailFadeRange = 1000.0f;
 struct Params
 {
     void* levels;    // RaFarGroundLevels (float4[8]: origin x, z, cell, morphs)
-    void* constants; // RaFarGround (float4[8], layout in the shader)
+    void* constants; // RaFarGround (float4[10], layout in the shader)
     void* height;    // RaFarGroundHeight (texture, fine)
     void* heightFar; // RaFarGroundHeightFar (texture, coarse)
     void* heightEdge; // RaFarGroundHeightEdge (texture, the map's cell around its edge)
@@ -147,7 +155,7 @@ struct State
     unsigned int       vertexCount;
     unsigned int       primCount;
     Params             params;
-    float              constants[9][4];
+    float              constants[10][4];
 
     // The coarse heights on the CPU (the sea test) and the sea level, when it is a sea.
     Grid               coarse;
@@ -356,21 +364,46 @@ struct Field
     float            seaLevel;
 };
 
-bool uploadHeights(const std::vector<float>& value, int n, IDirect3DTexture9*& texture, dx9rend::EngineTexture& engineValue)
+// mips: a full chain, each level the 2x2 box mean of the one above (an odd side's last texel
+// clamps), for the vertices' distance-filtered heights (contract 31).
+bool uploadHeights(const std::vector<float>& value, int n, IDirect3DTexture9*& texture, dx9rend::EngineTexture& engineValue,
+                   bool mips)
 {
-    if (!texture && FAILED(device()->CreateTexture(n, n, 1, 0, D3DFMT_R32F, D3DPOOL_MANAGED, &texture, 0)))
+    if (!texture && FAILED(device()->CreateTexture(n, n, mips ? 0 : 1, 0, D3DFMT_R32F, D3DPOOL_MANAGED, &texture, 0)))
     {
         ::renddx9abi::logf("[farground] could not create the %dx%d height texture", n, n);
         texture = 0;
         return false;
     }
-    D3DLOCKED_RECT rect;
-    if (FAILED(texture->LockRect(0, &rect, 0, 0)))
-        return false;
-    for (int j = 0; j != n; ++j)
-        std::memcpy(static_cast<unsigned char*>(rect.pBits) + j * rect.Pitch, &value[static_cast<std::size_t>(j) * n],
-                    sizeof(float) * n);
-    texture->UnlockRect(0);
+    std::vector<float> level(value), next;
+    int side = n;
+    const DWORD levels = texture->GetLevelCount();
+    for (DWORD l = 0; l != levels; ++l)
+    {
+        if (l > 0)
+        {
+            const int down = (std::max)(side / 2, 1);
+            next.assign(static_cast<std::size_t>(down) * down, 0.0f);
+            for (int j = 0; j != down; ++j)
+                for (int i = 0; i != down; ++i)
+                {
+                    const int i0 = (std::min)(2 * i, side - 1), i1 = (std::min)(2 * i + 1, side - 1);
+                    const int j0 = (std::min)(2 * j, side - 1), j1 = (std::min)(2 * j + 1, side - 1);
+                    const std::size_t r0 = static_cast<std::size_t>(j0) * side, r1 = static_cast<std::size_t>(j1) * side;
+                    next[static_cast<std::size_t>(j) * down + i] =
+                        0.25f * (level[r0 + i0] + level[r0 + i1] + level[r1 + i0] + level[r1 + i1]);
+                }
+            level.swap(next);
+            side = down;
+        }
+        D3DLOCKED_RECT rect;
+        if (FAILED(texture->LockRect(l, &rect, 0, 0)))
+            return false;
+        for (int j = 0; j != side; ++j)
+            std::memcpy(static_cast<unsigned char*>(rect.pBits) + j * rect.Pitch,
+                        &level[static_cast<std::size_t>(j) * side], sizeof(float) * side);
+        texture->UnlockRect(l);
+    }
     engineValue.baseTexture = texture;
     return true;
 }
@@ -473,9 +506,9 @@ bool composeHeights()
                 h = sampleGrid(fineHeight, g.fine, sx, sz) + edgeMeet(x, z);
             }
         }
-    if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
-        || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue)
-        || !uploadHeights(edgeHeight, g.edge.n, g.heightEdgeTexture, g.heightEdgeValue))
+    if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue, true)
+        || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue, true)
+        || !uploadHeights(edgeHeight, g.edge.n, g.heightEdgeTexture, g.heightEdgeValue, false))
         return false;
     // An inland bake has no water past known ground: the level's water (a river, Kunar Province's at
     // 36 m) would flood the real valleys under it. The CPU copy, the sea test's only input.
@@ -815,6 +848,10 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf, 
     g.constants[4][2] = 1.0f / (static_cast<float>(g.edge.n) * g.edge.cell);
     g.constants[4][3] = (-g.edge.origin / g.edge.cell + 0.5f) / static_cast<float>(g.edge.n);
     g.constants[3][3] = -g.edge.origin;
+    // [9]: 1 / the fine and coarse texels (m), the vertices' height spacing per m of distance.
+    g.constants[9][0] = 1.0f / fine.cell;
+    g.constants[9][1] = 1.0f / coarse.cell;
+    g.constants[9][2] = 1.0f / kSpacingCells;
 
     ::renddx9abi::logf("[farground] heights: fine %dx%d of %.1f m, coarse %dx%d of %.1f m, edge %dx%d of %.1f m; "
                        "%d of 8 sectors data; base %.1f m; "
