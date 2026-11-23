@@ -1194,6 +1194,7 @@ StaticMesh::StaticMesh(void* objectTemplate)
 // PE 0x100FDE50
 StaticMesh::~StaticMesh()
 {
+    dx9rend::rendererSunStaticCastersChanged();   // [RENDER] milestone 14: a static caster gone
     m_vptr = kStaticMeshVtable;
     m_lightSampleableVptr = kStaticMeshLightSampleableVtable;
     // 1. Release every cached lightmap texture; the nodes go with the map (step 7).
@@ -1552,6 +1553,8 @@ void StaticMesh::getTriangleIndices(int material, int triangle, unsigned int* a,
 // staticMeshRefreshSelection.
 void StaticMesh::setGeom(int geom)
 {
+    if (m_dword314 != static_cast<unsigned int>(geom))
+        dx9rend::rendererSunStaticCastersChanged();   // [RENDER] milestone 14: a destroyed state
     m_dword314 = static_cast<unsigned int>(geom);
 
     StaticMeshTemplate* const objectTemplate = static_cast<StaticMeshTemplate*>(m_template);

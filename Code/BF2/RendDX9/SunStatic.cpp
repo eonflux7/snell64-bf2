@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace dice {
@@ -73,6 +74,8 @@ struct Key
 };
 Key g_drawn;   // zero-initialised (static storage)
 bool g_invalid = true;
+bool g_castersChanged = false;                         // the static cascade only
+std::chrono::steady_clock::time_point g_staticDrawn;   // when it was last drawn
 float g_depthPerTexel = 0.0f;   // the static cascade's light depth over one texel
 
 // The drawn layers' constants (rows [0..3], [5].zw, [6], [7]); the frame adds [4] and [5].xy.
@@ -323,30 +326,42 @@ bool drawShadowHeight(geom::Terrain* terrain, const V3& towardSun)
 
     // Per texel: the highest h(s) - rise * s over the march toward the sun, from one coarse cell
     // out (the ground under the texel is not its own caster), until nothing ahead can be higher.
+    // The step grows with the distance (a far ridge's shadow is soft anyway); rows on threads.
     const float step = 0.5f * cell;
     const float start = 1.5f * cell;
     const float bias = 1.0f + rise * cell;   // what the coarse cells' own slope gives
     std::vector<float> out(static_cast<std::size_t>(h) * h);
-    for (unsigned int j = 0; j < h; ++j)
-        for (unsigned int i = 0; i < h; ++i)
-        {
-            const float x = origin + (static_cast<float>(i) + 0.5f) * hcell;
-            const float z = origin + (static_cast<float>(j) + 0.5f) * hcell;
-            const bool fromMap = onMap(x, z);
-            float best = none;
-            for (float s = start; ; s += step)
+    const auto rows = [&](unsigned int j0, unsigned int j1) {
+        for (unsigned int j = j0; j < j1; ++j)
+            for (unsigned int i = 0; i < h; ++i)
             {
-                if (top - rise * s <= best)
-                    break;
-                const float px = x + dx * s, pz = z + dz * s;
-                if (px < origin || pz < origin || px > origin + extent || pz > origin + extent)
-                    break;
-                if (fromMap && onMap(px, pz))
-                    continue;   // the map's own terrain is in the static cascade
-                best = (std::max)(best, sample(px, pz) - rise * s);
+                const float x = origin + (static_cast<float>(i) + 0.5f) * hcell;
+                const float z = origin + (static_cast<float>(j) + 0.5f) * hcell;
+                const bool fromMap = onMap(x, z);
+                float best = none;
+                for (float s = start; ; s += step + 0.01f * s)
+                {
+                    if (top - rise * s <= best)
+                        break;
+                    const float px = x + dx * s, pz = z + dz * s;
+                    if (px < origin || pz < origin || px > origin + extent || pz > origin + extent)
+                        break;
+                    if (fromMap && onMap(px, pz))
+                        continue;   // the map's own terrain is in the static cascade
+                    best = (std::max)(best, sample(px, pz) - rise * s);
+                }
+                out[static_cast<std::size_t>(j) * h + i] = best - bias;
             }
-            out[static_cast<std::size_t>(j) * h + i] = best - bias;
-        }
+    };
+    {
+        const unsigned int threads = (std::max)(1u, (std::min)(8u, std::thread::hardware_concurrency()));
+        std::vector<std::thread> pool;
+        for (unsigned int t = 1; t < threads; ++t)
+            pool.emplace_back(rows, h * t / threads, h * (t + 1) / threads);
+        rows(0, h / threads);
+        for (size_t t = 0; t < pool.size(); ++t)
+            pool[t].join();
+    }
 
     // Up through a system-memory copy into the atlas's rows below the static square.
     IDirect3DTexture9* staging = 0;
@@ -527,6 +542,11 @@ void rendererSunStaticInvalidate()
     g_invalid = true;
 }
 
+void rendererSunStaticCastersChanged()
+{
+    g_castersChanged = true;
+}
+
 void rendererSunStaticRelease()
 {
     if (g_atlas && g_rendererBase)
@@ -588,14 +608,27 @@ void rendererSunStaticFrame(float* constants, float time)
     now.heights = heights;
     now.heightGeneration = generation;
     const bool changed = g_invalid || std::memcmp(&now, &g_drawn, sizeof(Key)) != 0;
+    const std::chrono::steady_clock::time_point clock = std::chrono::steady_clock::now();
     if (changed && terrain && ensureAtlas())
     {
         std::memset(g_layers, 0, sizeof(g_layers));
         g_drawn = now;
         g_invalid = false;
+        g_castersChanged = false;
+        g_staticDrawn = clock;
         if (forward.y < -0.01f)   // the sun above the horizon: anything to cast
             drawStaticCascade(terrain, forward, time);
         drawShadowHeight(terrain, towardSun);
+    }
+    else if (g_castersChanged && terrain && g_atlas && forward.y < -0.01f
+             && clock - g_staticDrawn > std::chrono::seconds(1))
+    {
+        // A static caster changed: the static cascade alone, its rows rewritten in place
+        g_castersChanged = false;
+        g_staticDrawn = clock;
+        std::memset(g_layers, 0, 16 * sizeof(float));
+        g_layers[22] = 0.0f;
+        drawStaticCascade(terrain, forward, time);
     }
 
     std::memcpy(constants, g_layers, sizeof(g_layers));

@@ -694,7 +694,7 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
             paramRegs += bytes > members ? bytes : members;
         }
     }
-    if (paramRegs > walk.paramRegsMax)
+    if (!functions && paramRegs > walk.paramRegsMax)   // the bound for effects without bytecode
     {
         walk.paramRegsMax = paramRegs;
         walk.paramRegsMaxName = name;
@@ -773,9 +773,10 @@ void writeEffects(FILE* f)
                     "engine-owned c%u-c%u; %u effect constants inside them\n", walk.constMax,
                  walk.constMaxName.c_str(), kEngineRegisterBegin, kEngineRegisterEnd - 1,
                  walk.collisions);
-    std::fprintf(f, "[effects] the most float4 registers one effect's own numeric parameters could take: "
-                    "%u ('%s'); below c%u none can reach the engine's\n", walk.paramRegsMax,
-                 walk.paramRegsMaxName.c_str(), kEngineRegisterBegin);
+    std::fprintf(f, "[effects] without bytecode, the most float4 registers one effect's own numeric "
+                    "parameters could take: %u ('%s'); %s\n", walk.paramRegsMax,
+                 walk.paramRegsMaxName.c_str(), walk.paramRegsMax <= kEngineRegisterBegin
+                     ? "none can reach the engine's registers" : "MORE THAN THE REGISTERS BELOW THE ENGINE'S");
 }
 
 void writeReport()

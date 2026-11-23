@@ -1153,8 +1153,12 @@ SunStaticSettings& sunStaticSettings();
 // Fills this frame's RaSunStatic (kSunStaticVec4s float4s); draws the layers first when the sun,
 // the level or a setting changed since they were drawn, or a static caster changed.
 void rendererSunStaticFrame(float* constants, float time);
-// The static layers need drawing again (a static object added or destroyed).
+// Both static layers need drawing again.
 void rendererSunStaticInvalidate();
+// A static mesh was removed or switched geometry (a destroyed state): the static cascade is redrawn,
+// at most once a second; the shadow height (terrain only) is kept. Static meshes created during a
+// round are not reported: overgrowth's pools create them as the camera moves.
+void rendererSunStaticCastersChanged();
 IDirect3DTexture9* rendererSunStaticAtlas();
 void rendererSunStaticRelease();
 // The atlas on s12 (the world pass) or s3 (water, whose s12 is the scene copy); 0 unbinds it.
