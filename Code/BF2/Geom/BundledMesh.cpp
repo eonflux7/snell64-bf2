@@ -421,7 +421,7 @@ BM1(void,setTransparency,float)
 #undef BM1
 void RD9_THUNK bm_draw(BundledMesh* s RD9_THUNK_EDX,void* a,void* b,void* c) { s->draw(a,b,c); }
 // +0x20, the shadow-map draw. [RENDER] Its only caller, the point/spot shadow-map pass, is deleted
-// with the draw (docs/lanes/render.md, milestone 6); the slot keeps the layout.
+// with the draw (docs/render/contract.md, milestone 6); the slot keeps the layout.
 void RD9_THUNK bm_shadow(BundledMesh* RD9_THUNK_EDX,void*,void*,void*,void*,void*,void*) {}
 void* RD9_THUNK bm_destroy(void* s RD9_THUNK_EDX,unsigned char flags) { return bundledMeshDestroyFlags(s,flags); }
 void RD9_THUNK bm_setPart(BundledMesh* s RD9_THUNK_EDX,const Mat4* value,int part) { s->setPartTransformation(value,part); }

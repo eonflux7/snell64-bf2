@@ -1,4 +1,4 @@
-// [RENDER] Atmosphere (render milestones 11 and 18, docs/lanes/render.md#18-atmosphere-rework).
+// [RENDER] Atmosphere (render milestones 11 and 18, docs/render/atmosphere.md#18-atmosphere-rework).
 // Not part of retail BF2.
 //
 // One atmosphere over a planet of Earth's size (kilometres; radius 6360 km at sea level): Rayleigh

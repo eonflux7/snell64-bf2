@@ -1,5 +1,5 @@
 // [RENDER] The frame's HDR post before the grade (render milestone 13,
-// docs/lanes/render.md#13-hdr-bloom--auto-exposure, contract 19). Not part of retail BF2.
+// docs/render/post.md#13-hdr-bloom--auto-exposure, contract 19). Not part of retail BF2.
 //
 // Runs in the post-production composite, on the resolved single-sample float scene, just before
 // the final copy (FSQuadDrawer pass 0, the frame grade). Every pass is technique of

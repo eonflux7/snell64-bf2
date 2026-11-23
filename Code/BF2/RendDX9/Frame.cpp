@@ -1,7 +1,7 @@
 // [RENDER] The frame module (Frame.h): the scene's pass sequence and the render targets it
 // draws through - the HDR scene colour, the depth prepass and its linear depth, the resolve and
 // depth rebuild before the world transparents. Not part of retail BF2. The order is described in
-// docs/lanes/render.md (Frame). The pass sequence keeps retail's PE annotations where
+// docs/render/README.md (Frame). The pass sequence keeps retail's PE annotations where
 // it still follows the shipped renderFrame (0x1002F7E0).
 #ifdef BF2_IMAGE_RENDDX9
 
@@ -772,7 +772,7 @@ void frameRoadPass(const FrameInputs& in)
     postProductionUpdateFog(underwaterDepth());
 
     stateManagerPush();
-    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/lanes/render.md#reversed-z).
+    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/render/README.md#reversed-z).
     renderQueueFlush(0x24, 1);                                                               // RSMTRoad
     stateManagerPop();
 }

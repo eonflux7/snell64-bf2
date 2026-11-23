@@ -290,7 +290,7 @@ void RD9_THUNK sm_drawSilhouette(void* RD9_THUNK_EDX, void*, int)
 }
 
 // +0x20, the shadow-map draw.  `retn 18h`. [RENDER] Its only caller, the point/spot shadow-map
-// pass, is deleted with the draw (docs/lanes/render.md, milestone 6); the slot keeps the layout.
+// pass, is deleted with the draw (docs/render/contract.md, milestone 6); the slot keeps the layout.
 void RD9_THUNK sm_drawShadowMap(void* RD9_THUNK_EDX, void*, unsigned int, unsigned int,
                                  unsigned int, unsigned int, unsigned int)
 {

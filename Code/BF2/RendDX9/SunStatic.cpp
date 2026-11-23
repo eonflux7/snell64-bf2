@@ -14,7 +14,7 @@
 //
 // Both are redrawn when the sun, the level, the far ground's heights or a setting change, and on
 // rendererSunStaticInvalidate. RaSunStatic (contract 36, pixel registers c180..c187) is laid out in
-// the shaders' RaSunShadow.fxh; docs/lanes/render.md, milestone 14, has the design.
+// the shaders' RaSunShadow.fxh; docs/render/shadows.md, milestone 14, has the design.
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../RendDX9Abi/ThunkAbi.h"

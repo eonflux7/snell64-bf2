@@ -1331,7 +1331,7 @@ BF2_CONSOLE_PROPERTY_FN_RANGED_T(uiConsoleHeight, float, true, uiLayerGetConsole
 BF2_CONSOLE_PROPERTY_FN(uiOverlay, bool, true, uiLayerGetOverlay(), uiLayerSetOverlay,
                         kRendererConsoleTag)
 
-// [RENDER] Sun shadow tuning (docs/lanes/render.md, sun shadows). Each variable clamps to its
+// [RENDER] Sun shadow tuning (docs/render/shadows.md, sun shadows). Each variable clamps to its
 // range; the defaults are the values the cascades were accepted with.
 #define BF2_SUN_SHADOW_VARIABLE(name, T, field, minValue, maxValue)                                 \
     T get_##name() { return static_cast<T>(sunShadowSettings().field); }                            \
@@ -1397,7 +1397,7 @@ void setSunShadowResolution(int value)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(sunShadowResolution, int, true, getSunShadowResolution(),
                                  setSunShadowResolution, 512, 4096, kRendererConsoleTag)
 
-// [RENDER] Soft particles (docs/lanes/render.md): the depth over which a particle fades out in
+// [RENDER] Soft particles (docs/render/particles.md): the depth over which a particle fades out in
 // front of the scene behind it, in metres.
 float getSoftParticleDistance() { return softParticleDistance(); }
 void setSoftParticleDistance(float value)

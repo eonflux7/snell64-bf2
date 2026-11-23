@@ -1,4 +1,4 @@
-// [RENDER] The level's weather (render milestone 18, docs/lanes/render.md#18-atmosphere-rework).
+// [RENDER] The level's weather (render milestone 18, docs/render/atmosphere.md#18-atmosphere-rework).
 // Not part of retail BF2.
 //
 // At each level load the weather variables go back to their defaults (fair weather), then the

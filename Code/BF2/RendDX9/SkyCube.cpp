@@ -1,5 +1,5 @@
 // [RENDER] Sky cube, sky irradiance and the split-sum BRDF table (render milestone 11, task 7;
-// docs/lanes/render.md#11-atmosphere-sky-ibl-water-reflections). Not part of retail BF2.
+// docs/render/atmosphere.md#11-atmosphere-sky-ibl-water-reflections). Not part of retail BF2.
 //
 // Built on the CPU, like the atmosphere's tables, whenever the sky view is (Atmosphere.cpp: at the
 // fit), into managed textures that survive device resets:

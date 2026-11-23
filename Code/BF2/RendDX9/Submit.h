@@ -1,4 +1,4 @@
-// [RENDER] Draw submission (render milestone 9, docs/lanes/render.md). Not part of retail BF2.
+// [RENDER] Draw submission (render milestone 9, docs/render/submission.md). Not part of retail BF2.
 //
 // A program is one pass of one technique of a Ra effect, taken from the effect file once: its
 // vertex and pixel shaders, its fixed render and sampler states, and where each effect parameter

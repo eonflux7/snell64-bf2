@@ -2784,7 +2784,7 @@ bool RD9_THUNK lm_getShadowStaticFeature(void* self RD9_THUNK_EDX)
 // point/spot maps, here. The sun cascades (RendDX9/SunShadows.cpp) replace the first; the second
 // never drew outside the expansion pack (retail kept a light's records only under its policy
 // byte, which PE 0x1018FB10 cleared there), so its pass, atlas and receivers are deleted
-// (docs/lanes/render.md, milestone 6). The slot stays for the interface layout.
+// (docs/render/contract.md, milestone 6). The slot stays for the interface layout.
 void RD9_THUNK lm_renderShadowMaps(void* RD9_THUNK_EDX)
 {
 }

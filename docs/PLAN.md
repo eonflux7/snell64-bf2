@@ -1,12 +1,14 @@
 # Plan
 
-What each lane does next: its milestones, their state and their order. A milestone's design is in
-its lane's document under [lanes/](lanes/); the current milestone's tasks are in
-[STATUS.md](STATUS.md). When the owner accepts a milestone, its row here says so, with its commits.
+What each lane does next: its milestones, their state and their order. An open milestone's design
+and tasks are in its own document under [milestones/](milestones/) (`render`) or in its lane's
+document under [lanes/](lanes/) (`tools`, `ui`); what is active now is in [STATUS.md](STATUS.md).
+When the owner accepts a milestone, its row here says so, with its commits.
 
 ## `render`
 
-Design: [lanes/render.md](lanes/render.md#milestones).
+Open milestones: [milestones/](milestones/); accepted ones are folded into the renderer as built,
+[render/](render/README.md).
 
 | Milestone | State | Engine commits |
 |---|---|---|
@@ -22,22 +24,22 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 10. Terrain in one pass | Accepted | `2eb4d02d`, `c21a012e`, `0d9e15a6`, `57fa2899`, `3b9da48c`, `6fd523bb`, and the deletion ("milestone 10 accepted") |
 | 11. Atmosphere, sky IBL, water reflections | Accepted | `git log --grep 'milestone 11'`, and the deletion ("milestone 11's switches and the sky dome deleted") |
 | 15. Shader pipeline (ahead of 12) | Accepted | `a14e57a6`, `cbbe8725` |
-| 12. Clouds | Paused (owner, 2026-11-22) after tasks 1–5, 7–8; open tasks in STATUS.md | `git log --grep 'milestone 12'` |
+| 12. Clouds | Paused (owner, 2026-11-22); open tasks in its document | `git log --grep 'milestone 12'` |
 | 16. Water | Accepted | `git log --grep 'milestone 16'`, and the deletion ("milestone 16 accepted") |
 | 13. HDR bloom + auto-exposure | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 13'` |
 | 14. Run-time sun term (lightmaps' sun channel dropped) | Accepted (owner, 2026-11-23) | `dc1a7223`–`c1060597` |
 | 17. Far terrain | In progress: tasks 1–5 built, seen by the owner (fine for now); bakes for more levels next | `git log --grep 'milestone 17'` |
 | 18. Atmosphere rework (one atmosphere, weather per level) | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 18'` |
 | 19. Hex-tiled detail textures | Accepted | `git log --grep 'milestone 19'` |
-| 20. GTAO (split out of 14) | Not planned | — |
+| 20. GTAO (split out of 14: small-scale occlusion; owner, 2026-11-23) | Not planned | — |
 | 21. Tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 deferred | `git log --grep 'milestone 21'` |
 | 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | In progress: task 1 built (the whole map, one cell per patch) | `git log --grep 'milestone 22'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,
-2026-11-22): the GPU pass timers ([render.md](lanes/render.md#gpu-pass-timers)) and the benchmark
+2026-11-22): the GPU pass timers ([render/README.md](render/README.md#gpu-pass-timers)) and the benchmark
 paths, each milestone's cost stated against milestone 11's baseline; a regression stands only if
-the owner accepts it explicitly, and is recorded with the milestone in [render.md](lanes/render.md).
+the owner accepts it explicitly, and is recorded with the milestone in its subsystem's document under [render/](render/README.md).
 
 Bloom and auto-exposure depend only on the HDR scene and can move earlier if night layers need
 them sooner.

@@ -29,12 +29,16 @@ the StateManager MRT slot overflow, found in `render` work) is committed on its 
 
 ## Milestones
 
-`render`, `ui` and `tools` plan their work as numbered **milestones**: their order and state in
-`docs/PLAN.md`, each one's design in the lane's document. The current milestone is broken into
-**tasks** in `docs/STATUS.md`. Outside the lane's own document, name the lane: "render milestone 9",
-"tools milestone 1". When the owner accepts a milestone, its flag and any replaced path are deleted,
-its section in the lane's document is rewritten as built, its row in `PLAN.md` says accepted, and
-`STATUS.md` moves on to the next. Commit messages before 2026-11-19 say "step" for milestone.
+`render`, `ui` and `tools` plan their work as numbered **milestones**, broken into **tasks**; their
+order and state are in `docs/PLAN.md`. Several milestones may be open at once (in progress or
+paused). An open `render` milestone has its own document, `docs/milestones/render-<n>-<name>.md`:
+design, tasks with their state, checks; that is the only place its task state is kept, and
+`docs/STATUS.md` lists the open milestones with one line each. (`tools` and `ui` keep their
+milestones in their lane documents for now.) Outside the lane's own documents, name the lane:
+"render milestone 9", "tools milestone 1". When the owner accepts a milestone, its flag and any
+replaced path are deleted, its document is folded into the subsystem's document under
+`docs/render/`, rewritten as built, and deleted; its row in `PLAN.md` says accepted, with its
+commits, and its row leaves `STATUS.md`. Commit messages before 2026-11-19 say "step" for milestone.
 
 ## Repositories and what is public
 
@@ -131,15 +135,17 @@ the same comment. A marker is a pointer, not a justification.
 
 | Document | What it records |
 |---|---|
-| `docs/STATUS.md` | Where each lane stands; the current milestone, its tasks and open issues |
+| `docs/STATUS.md` | An index: where each lane stands, the open milestones (one line each), what awaits the owner's look, open issues |
 | `docs/PLAN.md` | What comes next: each lane's milestones, their state and their order |
-| `docs/lanes/<lane>.md` | One per lane (`render`, `tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
+| `docs/milestones/` | One document per open `render` milestone: design, tasks and their state, checks |
+| `docs/render/` | The renderer as built, one document per subsystem (`README.md` indexes them: the frame, the shader contract, submission, shadows, terrain, atmosphere, water, post, particles) |
+| `docs/lanes/<lane>.md` | One per other lane (`tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
 | `docs/archive/` | OpenBF2's documentation, inherited |
 
-- Read `docs/STATUS.md` first, then only the sections the task needs (`grep -n '^#' FILE` gives
-  the outline). Do not read whole documents by default.
-- `STATUS.md` holds state, not history: a finished task is one line, its facts go to the lane's
-  document, the story to the commit message.
+- Read `docs/STATUS.md` first, then only the document it links to for the task (`grep -n '^#'
+  FILE` gives the outline). Do not read whole documents by default.
+- `STATUS.md` holds state, not history: a milestone is one row, a finished task one line in its
+  document, its facts in the design, the story in the commit message.
 - Update the relevant document in the same commit as the change it describes. Each fact lives in
   one place; elsewhere, link to it.
 - `docs/archive/` holds reconstruction notes and evidence that source comments cite. It is

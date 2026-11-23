@@ -1,6 +1,6 @@
 ; [RENDER] Import-library definition for d3dx9_43.dll, the June 2010 DirectX runtime's D3DX and
 ; the last one: what the Ninja build's RendDX9.dll and TextureAtlasBuilder.dll link (render
-; milestone 15, docs/lanes/render.md#15-shader-pipeline). D3dx9_25.def stays for the scripts'
+; milestone 15, docs/render/submission.md#15-shader-pipeline). D3dx9_25.def stays for the scripts'
 ; retail-parity builds; BF2_D3DX=sdk links the April 2005 SDK's d3dx9.lib (d3dx9_25.dll) instead.
 ;
 ; The same names as D3dx9_25.def; each is a d3dx9_43.dll export. Every COM interface the renderer

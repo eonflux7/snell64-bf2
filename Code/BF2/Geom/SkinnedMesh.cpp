@@ -1639,7 +1639,7 @@ float RD9_THUNK skm_getFov(void* self RD9_THUNK_EDX)
 void RD9_THUNK skm_draw(void* self RD9_THUNK_EDX, void* a, void* b, void* c)
 { static_cast<SkinnedMesh*>(self)->draw(a, b, c); }
 // +0x20, the shadow-map draw. [RENDER] Its only caller, the point/spot shadow-map pass, is deleted
-// with the draw (docs/lanes/render.md, milestone 6); the slot keeps the layout.
+// with the draw (docs/render/contract.md, milestone 6); the slot keeps the layout.
 void RD9_THUNK skm_drawShadowMap(void* RD9_THUNK_EDX, void*, unsigned int, unsigned int,
                                   unsigned int, bool, unsigned int)
 {}

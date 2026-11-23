@@ -271,7 +271,7 @@ void constructStaticMeshRenderer(StaticMeshRenderer* self)
     // [RENDER] Retail then loaded the shadow Effects "StaticMesh" and "BundledMesh" (with their
     // parameters) and registered them with the LightManager. They drew only the point/spot shadow
     // maps (and the editor's lightmap silhouette and an unreachable bundled-mesh highlight), all
-    // deleted (docs/lanes/render.md, milestone 6).
+    // deleted (docs/render/contract.md, milestone 6).
 }
 } // anonymous namespace
 

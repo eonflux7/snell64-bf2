@@ -4905,7 +4905,7 @@ void Renderer::roadScenePass()
     postProductionUpdateFog(underwaterDepth());                                   // sub_1004FDA0
 
     stateManagerPush();
-    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/lanes/render.md#reversed-z).
+    // [RENDER] No depth bias: road shaders pull themselves toward the camera (docs/render/README.md#reversed-z).
     renderQueueFlush(0x24, 1);                                                    // RSMTRoad
     stateManagerPop();
 }

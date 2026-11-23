@@ -1,5 +1,5 @@
 // [RENDER] Water's waves from an ocean spectrum (render milestone 16, task 2,
-// docs/lanes/render.md#16-water). Not part of retail BF2, whose water tiled one 3D normal volume.
+// docs/render/water.md#16-water). Not part of retail BF2, whose water tiled one 3D normal volume.
 //
 // Tessendorf's FFT ocean ("Simulating Ocean Water", 2001) with the JONSWAP spectrum and
 // Mitsuyasu's directional spreading (after Horvath, "Empirical directional wave spectra for

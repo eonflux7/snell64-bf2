@@ -1,12 +1,12 @@
 # Status
 
-Where each lane stands now. Read this first, then only the section it links to. Update it in the
-commit that changes a lane's state. It holds state, not history: a finished task is one line, its
-design and as-built facts live in the lane's document, the story in commit messages.
+Where each lane stands now: an index. Read this first, then only the document it links to. Update
+it in the commit that changes a lane's or a milestone's state. A milestone's tasks and their state
+live only in its document in [milestones/](milestones/); the row here gives the next step.
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13–16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | 22 (far overgrowth) task 1 built; 21 (tonemap and grade) tasks 1, 2, 4, 6 built | [render.md](lanes/render.md#22-far-overgrowth) |
+| `render` | Milestones 1–11, 13–16, 18 and 19 accepted | 21, 22 in progress; 12, 17 paused ([below](#open-milestones)) | [render/](render/README.md) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -14,34 +14,16 @@ design and as-built facts live in the lane's document, the story in commit messa
 | `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
 | `fix` | G–O, Q, R fixed | A, C–F open (packaging, build) | [fix.md](lanes/fix.md) |
 
-## Current: `render` milestone 22, far overgrowth
+## Open milestones
 
-Task 1 built (2026-11-23): far overgrowth over the whole map, one cell per patch built once, buffers
-sized per patch (Kunar 32.7 MB). Next: 3 (shadows), 4 (index range), 5 (checks)
-([render.md](lanes/render.md#22-far-overgrowth)).
+Several may run at once; each session works in one milestone's document.
 
-## In progress: `render` milestone 21, tonemap and grade
-
-Tasks 1 (the GT curve, white balance, `renderer.grade*`), 2 (tint and saturation per range) and 4 (low light) built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23)
-([render.md](lanes/render.md#21-tonemap-and-grade)). `renderer.gradeCurve 0` is milestone 13's grade.
-
-## Paused: `render` milestone 17, far terrain
-
-Tasks 1–5 built and seen by the owner (2026-11-23: fine for now); Kunar Province, Kashan Desert and
-Muttrah City baked. Next: 6, bakes for the other levels; 7, judged from a jet, cost with the final
-GPU pass ([render.md](lanes/render.md#17-far-terrain)).
-
-## Paused: `render` milestone 12, clouds
-
-Tasks 1–7 and 8's day sky done, 6 judged by the owner (2026-11-22; GPU time with the final GPU pass)
-([render.md](lanes/render.md#12-clouds)). Open: 8's night layers (stars from a catalog with the moon, the
-sky's rotation; the Yale Bright Star Catalogue has no stated licence, so it waits on the owner: a
-catalog read from outside the tree, or another source); 9 (low scud, perhaps).
-
-Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`, earlier
-`m10-<view>` at 1600x900): Muttrah City and Fallujah West `sun`, `antisun`, `ridges`, `valley`,
-`street`; Saaremaa the same with `water` for `street`; test_bootcamp (`gpm_cq 16`) `gloss`,
-`gloss2`, `glass`. A view facing the sun has yaw = the survey's sun azimuth + 180°.
+| Milestone | State | Next | Document |
+|---|---|---|---|
+| `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
+| `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
+| `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
+| `render` 12, clouds | Paused (owner, 2026-11-22): tasks 1–7 and 8's day sky done | 8's night layers (a star catalog: the owner's call), 9 | [render-12-clouds.md](milestones/render-12-clouds.md) |
 
 ## Awaiting the owner's look
 
@@ -62,7 +44,7 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   (one air integral, a cross-fade band); edge albedo and the eroded light bake. Kashan Desert,
   views `hb-owner`, `hb-owner-back`, sun `lightManager.sunDirection 0.7/-0.07/0.71`.
 - Clouds' ambient along the view (contract 34): shaded sides take the sky behind them. The dusk
-  flatness was Kashan's haze (render.md, 12, near clouds); compare with `renderer.weatherVisibility
+  flatness was Kashan's haze ([render-12-clouds.md](milestones/render-12-clouds.md), near clouds); compare with `renderer.weatherVisibility
   60000` and `renderer.weatherMixing 1500` (the level's: 20000, 3500).
 - The sky under the deck (contract 35): gaps between clouds now take the clouds' shadow on the
   haze below the deck, so they no longer glow clear past veiled clouds. Same views.
@@ -71,7 +53,7 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 
 - Far clouds at dusk shade flat under Kashan's dust haze (visibility 20 km, mixing 3500 m): the
   air's in-scatter, as modelled; whether that haze is right for dusk (a deep dust layer at
-  sunset) is the owner's call ([render.md](lanes/render.md#12-clouds), near clouds' notes).
+  sunset) is the owner's call ([render-12-clouds.md](milestones/render-12-clouds.md), near clouds' notes).
 
 - The default video profile picks 8x antialiasing while the scene runs 4x. Settle on fixed 4x (a
   single-sample HUD back buffer, the scene's own 4x depth; touches device init and reset).

@@ -1,4 +1,4 @@
-// [RENDER] The frame grade's look (render milestone 21, docs/lanes/render.md#21-tonemap-and-grade).
+// [RENDER] The frame grade's look (render milestone 21, docs/milestones/render-21-grade.md).
 // Not part of retail BF2.
 //
 // The grade itself is FSQuadDrawer pass 0 (RGrade_Apply); this file holds its console variables and

@@ -1,5 +1,5 @@
 // [RENDER] Sky clouds' baked volumes (render milestone 12, task 2,
-// docs/lanes/render.md#12-clouds). Not part of retail BF2.
+// docs/milestones/render-12-clouds.md). Not part of retail BF2.
 //
 // The structure is Gaijin's Dagor daSkies2 (BSD-3-Clause, Copyright (c) 2023 Gaijin
 // Entertainment): a weather map over a tiled 65 km world, a baked density field marched instead

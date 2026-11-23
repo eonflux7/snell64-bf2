@@ -1,5 +1,5 @@
 // [RENDER] The effect compiler: d3dcompiler_47's D3DCompile with the fx_2_0 target, in place of
-// D3DX's effect compiler (render milestone 15, docs/lanes/render.md#15-shader-pipeline).
+// D3DX's effect compiler (render milestone 15, docs/render/submission.md#15-shader-pipeline).
 // The April 2005 compiler in d3dx9_24/25 takes 20 to 30 times as long on the renderer's shaders
 // and runs one compile at a time per loaded module; D3DCompile may be called from any thread.
 // D3DXCreateEffect (d3dx9_43) loads its output as it loads D3DX's.

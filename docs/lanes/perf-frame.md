@@ -38,7 +38,7 @@ its commit messages (`git log --grep 'milestone 9'`).
 1920x1080, 4x MSAA, after render milestone 11 (2026-11-22): Muttrah City `bench1` 9.20–9.26 ms,
 Fallujah West `bench` 16.00 ms, Saaremaa `bench1` 5.78 ms. Every frame is CPU-bound. Milestone 11
 added 0.65–1.45 ms, most of it the scenery drawn past the view distance (its section in
-[render.md](render.md#11-atmosphere-sky-ibl-water-reflections)); accepted by the owner. After
+[atmosphere.md](../render/atmosphere.md#11-atmosphere-sky-ibl-water-reflections)); accepted by the owner. After
 milestone 10 (2026-11-20): 8.39–8.48, 15.34 and 5.22 ms.
 
 ## Render milestone 9 (draw submission)
@@ -70,7 +70,7 @@ Lessons for later work:
 - Caster culling first lost draws: the casters' spheres must be the local box's own sphere, and
   an object stays when either sphere touches the range.
 - Remaining GPU lead: `Ra_LodDitherClip` costs early depth rejection in every lit shader
-  ([render.md](render.md#8-anti-aliasing)).
+  ([README.md](../render/README.md#8-anti-aliasing)).
 
 ## State
 
