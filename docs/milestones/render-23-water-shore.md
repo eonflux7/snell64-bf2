@@ -68,9 +68,12 @@ Tasks:
 3. **Shore waves (Dagor).** Wave fronts travelling up the distance map's gradient, breaking where
    the depth falls under their height, foam from the break; run-up sheets on the beach and a wet
    sand band on the terrain above the waterline. Replaces the fixed shore strip.
-4. **Water types.** Pure water's absorption built in, and the level's turbidity (scattering and its
-   tint) as a water type from Jerlov's classification, picked from `waterColor` by default with a
-   console variable to override. Rivers get their own type.
+4. **Water types.** Pure water's absorption built in, and turbidity (scattering and its tint) as a
+   water type from Jerlov's classification, chosen from where the level is set (the Gulf of Oman
+   for Muttrah City, a glacial river for Kunar), not fitted to retail. `renderer.waterColor` is
+   no longer read (owner, 2026-11-24: physically correct, not judged by retail). Each level's type
+   is map data in the mod's `settings/`, like its views, with a console variable to override it
+   and a clear coastal type when a level has none. Rivers get their own type.
 5. **Whitecaps.** Wind gusts varying over hundreds of metres, and breaking weighted by the 503 m
    cascade's crests too, so no scale reads as a tile.
 6. **Checks.** Muttrah City `ssr-shore`, `seahigh`; The Falklands; Kunar's rivers; GPU cost.
