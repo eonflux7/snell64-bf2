@@ -755,7 +755,8 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    (−4, +4); under the key only `renderer.exposureStrength` of the gap is lifted since milestone 21
    ([21](#21-tonemap-and-grade), task 6). The key is 0.42, calibrated, not 0.18: Muttrah City's reference views meter −1.0 to
    −1.3 EV, and 0.42 (−1.25 EV) shows them at milestone 11's accepted look (0 stops). The ceiling
-   is what keeps night dark (task 5). `renderer.exposureBias` adds stops over it.
+   is what keeps night dark (task 5). `renderer.exposureBias` adds stops over it: −0.3 since
+   milestone 21 (owner, 2026-11-23: Muttrah City's day read washed out at 0).
    Particle emissives read the state per vertex (`RaExposureParticle`, `RaExposureState`) and
    divide by the exposure, so an emissive tint reaches the tonemap at its authored value, as
    retail showed it, by day and by night; one frame late (the state is written at the frame's end).
@@ -915,7 +916,7 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    White balance: a Bradford adaptation from the white of `renderer.gradeTemperature` (K, 6504
    the identity; the Planckian locus offset onto D65) moved off the locus by `renderer.gradeTint`
    (1 = 0.02 Duv), to D65; a 3x3 matrix from the CPU, the white's luminance kept.
-   `renderer.gradeContrast` (1.2) around 0.18 in log2, and `gradeSaturation` (1), before the
+   `renderer.gradeContrast` (1.2) around 0.18 in log2, and `gradeSaturation` (1.15), before the
    curve. `renderer.gradeCurve 0` is milestone 13's output exactly (Neutral, contrast 1.05), the
    A/B until acceptance; thermals always take it. `tools.exposure` prints the settings (`[grade]`).
    Contrast and toe raised by the owner's call (2026-11-23, "we need more overall contrast"): at

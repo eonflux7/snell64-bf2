@@ -60,7 +60,7 @@ const double kSnapSeconds = 0.5;
 struct State
 {
     float bloomStrength = 0.04f;
-    float exposureBias = 0.0f;         // stops, over the auto-exposure
+    float exposureBias = -0.3f;        // stops, over the auto-exposure
     // The ceiling keeps night dark: The Falklands' night layer meters -9 EV and sits on it; at +4
     // its terrain draws at about 25/255 (retail about 30, at +4.5).
     float exposureMin = -4.0f, exposureMax = 4.0f;

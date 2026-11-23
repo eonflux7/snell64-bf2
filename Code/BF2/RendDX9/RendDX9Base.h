@@ -1037,7 +1037,7 @@ struct GradeSettings
 {
     int curve = 1;
     float contrast = 1.2f;          // around mid grey, in log2, before the curve (relaxes to 1 at night)
-    float saturation = 1.0f;
+    float saturation = 1.15f;
     float highlightShift = 0.3f;    // 0 hue kept in highlights, 1 each channel through the curve
     float toe = 1.5f;               // the toe's power below 0.22 (1 none; relaxes to 1 at night)
     float shoulder = 0.6f;          // the linear section's length, as a share of 0.22..1 (0.6: to 0.69)

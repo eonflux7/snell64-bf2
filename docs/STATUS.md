@@ -50,7 +50,7 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Far overgrowth (milestone 22, task 1): trees over the whole map, no setting. Kunar `og-sw`,
   `ft-1500`, `edge-e`.
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast
-  1.2, toe 1.5, the rational shoulder), 0 the old Neutral grade. Auto-exposure lifts dark scenes only
+  1.2, saturation 1.15, exposure bias −0.3, toe 1.5, the rational shoulder), 0 the old Neutral grade. Auto-exposure lifts dark scenes only
   partly, `renderer.exposureStrength` (0.6; 1 the old full lift): to judge indoors (no interior view
   saved). Open before acceptance: a fire. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night as accepted, the toe
   relaxed past the exposure ceiling, a faint grey-blue by `renderer.gradeNight`). Also
