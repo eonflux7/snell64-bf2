@@ -1013,6 +1013,14 @@ As built for tasks 1 and 2 (2026-11-23):
   exponential above), the height linear in distance; its in-scatter is the clear sky's radiance
   scaled by (1 - Ta(d)) / (1 - Ta(∞)), the aerosol's Ta(∞) with its column above the observer as
   scale height. `RaClouds[18].zw` (contract 25) is gone.
+- Task 4 (`Weather.cpp`): at each level load (terrain load, beside the far ground's) the six
+  weather variables (`weatherVisibility`, `weatherAerosol`, `weatherMixing`, `weatherAltitude`,
+  `cloudPreset`, `cloudCoverage`) go back to their defaults, then the level's file runs: a line is
+  a variable without `renderer.` and a value, `#` comments; lines before any section apply to every
+  layer, `[<mode>]` and `[<mode> <size>]` (the loaded layer from the game: mode and chosen size)
+  apply in file order where they match. Values go through the console as typed, so they keep the
+  variables' ranges; other names are logged and skipped. `tools.atmosphere` prints the file and
+  lines applied (`[weather] file`).
 
 Tasks (1 and 2 land in one build: the old haze is deleted, not kept beside the new):
 1. The model: aerosol from visibility, type, Ångström exponent and mixing height; altitude (bake

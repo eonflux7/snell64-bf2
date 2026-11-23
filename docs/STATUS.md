@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework): tasks 1–3 built, 4 next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework): tasks 1–4 built, 5 next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -38,7 +38,8 @@ altitude) in place of the ground-haze layer; weather per level. Design, as built
 2. Aerial perspective from the model to 40 km (contract 27), the ground haze deleted: built.
 3. Clouds through the same air (contract 28: near clouds by the atlas, the panorama's air from the
    model): built.
-4. Weather per level: next. 5–6 as planned.
+4. Weather per level (the level's file, defaults otherwise; first picks for the three baked
+   levels): built. 5 next, then 6.
 
 Open for the owner: above the mixing layer the aerosol falls at 1.2 km (the design's), so 1 km
 over the layer's top it keeps 43 %: from a jet (Kunar Province `jet`) the ground 20 km off is
@@ -86,6 +87,12 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   Muttrah City `sun`, `antisun` (bright warm haze toward the sun, bluer away). Task 3: the clouds
   fade in the same air (`m18t3-horizon-25k`, `-8k`; visibility is in metres). No A/B: the old
   haze is gone. A rebuild takes about 0.3 s after a change.
+- Weather per level (render milestone 18, task 4): each load resets the weather variables, then
+  runs the level's `eon64-weather/<level>.txt` (lines for every layer, `[gpm_cq]` and
+  `[gpm_cq 16]` sections); `tools.atmosphere` names what was applied. First picks to set: Kunar
+  Province 45 km continental, mixing 2.5 km, clouds 0.35 (`horizon`, shot `m18t4-kunar-horizon`);
+  Kashan Desert 20 km dust, 3.5 km, 0.1; Muttrah City 12 km maritime, 1 km, 0.1 (`sun`, shot
+  `m18t4-muttrah-sun`). Other levels keep the defaults.
 
 ## Open issues
 
