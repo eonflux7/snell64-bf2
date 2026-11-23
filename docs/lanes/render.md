@@ -251,6 +251,15 @@ Left, outside the milestone:
 - View distance: the far ground ring (milestone 17; land past the surrounding ring shows sky; below the horizon
   the sky repeats its horizon row), vegetation past overgrowth's range, jets and anti-air not
   checked, the far scenery's cost.
+- Far overgrowth over the whole map (test, `renderer.overgrowthRange`, read at level load; 0 the
+  level's `Overgrowth.viewDistance`): past the level's range the grid of far cells round the camera
+  widens at the level's cell size (retail grows the cells on its 10 x 10 grid). Kunar (57.7k
+  instances, level range 1000 m) at 3000 m: 26 x 26 cells of 256 m; GPU 5.73 -> 5.85 ms low over the
+  south-west corner, 6.00 -> 6.06 ms from 1500 m up (which drew none before); about 2-3 % fewer
+  frames per second, one sample each. The cost is memory: every cell allocates leaf and trunk buffers
+  for the densest patch (48k / 12k vertices), 769 MB in all. To keep it: size each cell's buffers to
+  its own patch (or one shared pool), and check hitches as rows of 26 cells rebuild while flying.
+  Changing the range at run time through retail's `reload()` path lost every instance (not kept).
 - Banding in the dark blue and the sun's glare: milestone 13 (dither, bloom).
 
 ### 15. Shader pipeline

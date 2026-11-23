@@ -492,10 +492,22 @@ OverGrowthPatch::OverGrowthPatch()
 }
 
 
-// Initializes maps and geometry indices from the primary heightmap, then applies view distance.
-// Requires heightmap singletons; missing raw maps retain zero density/full shadow defaults.
+namespace {
+float s_rangeOverride = 0.0f;   // [RENDER] renderer.overgrowthRange
+float s_levelRange = 0.0f;      // the level's Overgrowth.viewDistance, kept while the override applies
+float s_appliedRange = 0.0f;    // the range the override set, 0 when none
+}
 
+float& overGrowthRangeOverride() { return s_rangeOverride; }
+float overGrowthLevelRange(const OverGrowth* self)
+{
+    return s_appliedRange != 0.0f && self->getViewDistance() == s_appliedRange ? s_levelRange
+                                                                               : self->getViewDistance();
+}
+
+// Initializes maps and geometry indices from the primary heightmap, then applies view distance.
 // PE 0x1015F5F0
+// Requires heightmap singletons; missing raw maps retain zero density/full shadow defaults.
 void OverGrowth::initialize()
 {
     IBase* const cluster = ::dice::hfe::classManager->getSingleton(
@@ -559,6 +571,25 @@ void OverGrowth::initialize()
                      bytes, bytesRead);
     }
 
+    // [RENDER] renderer.overgrowthRange: past the level's range the grid grows, not the cells; the
+    // grid is not resized under live cells.
+    if (!m_cells)
+    {
+        if (s_appliedRange == 0.0f || m_viewDistance != s_appliedRange)
+            s_levelRange = m_viewDistance;
+        m_gridSize = 10;
+        m_viewDistance = s_levelRange;
+        s_appliedRange = 0.0f;
+        const float range = overGrowthRangeOverride();
+        if (s_levelRange > 0.0f && range > s_levelRange)
+        {
+            const float cellSize = s_levelRange / 4.0f;
+            const int half = static_cast<int>(std::ceil(range / cellSize));
+            m_gridSize = 2 * (half + 1);
+            m_viewDistance = static_cast<float>(half) * cellSize;
+            s_appliedRange = m_viewDistance;
+        }
+    }
     setViewDistance(m_viewDistance);                                                  // vtable +0x0C
 
     std::vector<OverGrowthMaterial>& layers = m_materials;
@@ -736,6 +767,21 @@ void OverGrowth::postLoadResources()
         }
     }
 
+    // [RENDER] renderer.overgrowthRange: what the wider grid holds.
+    if (s_appliedRange != 0.0f)
+    {
+        const double bytes = static_cast<double>(m_gridSize) * m_gridSize
+            * (16.0 * (m_streamVertexCounts[0] + m_streamVertexCounts[1])
+               + 2.0 * (m_streamIndexCounts[0] + m_streamIndexCounts[1]));
+        std::fprintf(stderr, "[OVERGROWTH] range %.0f m (level %.0f): %d x %d cells of %.0f m, patches %d x %d; "
+                     "per cell leaf %u vertices / %u indices, trunk %u / %u; buffers %.0f MB%s\n",
+                     m_viewDistance, s_levelRange, m_gridSize, m_gridSize, m_cellSize, m_patchCountX,
+                     m_patchCountZ, m_streamVertexCounts[0], m_streamIndexCounts[0], m_streamVertexCounts[1],
+                     m_streamIndexCounts[1], bytes / 1048576.0,
+                     (m_streamVertexCounts[0] > 65535 || m_streamVertexCounts[1] > 65535)
+                         ? " - OVER the 16-bit index range" : "");
+    }
+
     // the N x N cells
     const int gridSize = m_gridSize;
     m_cells = static_cast<OverGrowthCell**>(
@@ -843,7 +889,7 @@ void OverGrowth::save()
 {
     OverGrowth* const self = this;
     std::ostringstream out;
-    out << "Overgrowth.viewDistance " << self->m_viewDistance << std::endl;
+    out << "Overgrowth.viewDistance " << overGrowthLevelRange(self) << std::endl;   // [RENDER] not the override
     out << "Overgrowth.viewDistanceScale " << self->m_viewDistanceScale << std::endl;
     out << "Overgrowth.closeDistPercentage " << self->m_closeDistPercentage << std::endl;
     out << std::endl;

@@ -875,7 +875,7 @@ bool OverGrowth::getEditorEnable() const { return m_editorEnable != 0; }
 // multiplied left to right.
 float OverGrowth::getLodDistance() const
 {
-    return m_qualityScale * m_closeDistPercentage * m_viewDistance;
+    return m_qualityScale * m_closeDistPercentage * overGrowthLevelRange(this);   // [RENDER] the level's range
 }
 
 // 100CDC20 (407 B), read in full: a std::set<std::string> of every NON-empty type geometry name

@@ -38,6 +38,7 @@ float& roadCompiledRendererConsoleSlopeScaleDepthBias(void* receiver);
 float& roadCompiledRendererConsoleLodDistanceModifier(void* receiver);
 void readRendererConsoleVector(std::istream& in, Vec3& value);
 void readRendererConsoleVector(std::istream& in, Vec4& value);
+float& overGrowthRangeOverride();   // Overgrowth/OverGrowth.h
 }
 namespace dx9rend {
 
@@ -1391,6 +1392,15 @@ void setContributionCull(float value)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(contributionCull, float, true, getContributionCull(),
                                  setContributionCull, 0.0f, 32.0f, kRendererConsoleTag)
 
+// [RENDER] Far overgrowth's range (test): metres round the camera, read at level load; 0 the level's.
+float getOvergrowthRange() { return geom::overGrowthRangeOverride(); }
+void setOvergrowthRange(float value)
+{
+    geom::overGrowthRangeOverride() = value < 0.0f ? 0.0f : value > 8000.0f ? 8000.0f : value;
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(overgrowthRange, float, true, getOvergrowthRange(),
+                                 setOvergrowthRange, 0.0f, 8000.0f, kRendererConsoleTag)
+
 // Texels per cascade side: the nearest power of two in 512..4096.
 int getSunShadowResolution() { return static_cast<int>(sunShadowSettings().resolution); }
 void setSunShadowResolution(int value)
@@ -1613,6 +1623,7 @@ const char* rendererVariableHelp(const char* name)
         { "sunStaticResolution", "Static sun cascade over the map: texels per side (1024-8192), drawn once per sun" },
         { "sunStaticNormalOffset", "Static sun cascade: receiver offset along its normal, in its texels" },
         { "sunStaticDepthBias", "Static sun cascade: receiver offset toward the sun, in its texels, times 1 + the slope's tangent" },
+        { "overgrowthRange", "Far overgrowth: metres round the camera, read at level load (wider grid, same cells); 0 the level's" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
         { "weatherVisibility", "Weather: metres at which a level ray at the level's ground keeps 2 % contrast (lower: hazier)" },
         { "weatherAerosol", "Weather: the haze's kind, 0 continental (grey), 1 maritime (white), 2 dust (yellow-brown), 3 smoke" },

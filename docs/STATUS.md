@@ -49,6 +49,9 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
+- Far overgrowth over the whole map (test): `renderer.overgrowthRange 3000` set before the level loads
+  (in `eon64-ui.con`), Kunar `og-sw`, `ft-1500`. Little GPU cost, 769 MB of cell buffers; numbers
+  in `lanes/render.md` (render milestone 11's limits).
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast
   1.2, toe 1.5, the rational shoulder), 0 the old Neutral grade. Auto-exposure lifts dark scenes only
   partly, `renderer.exposureStrength` (0.6; 1 the old full lift): to judge indoors (no interior view

@@ -936,7 +936,7 @@ void OverGrowth::updateCells(IRenderView* view)
     if (!m_patches)
         return;
     m_closeDistance = view->getZoom() * m_qualityScale * m_closeDistPercentage
-                      * m_viewDistance;                                           // vslot +0x28
+                      * overGrowthLevelRange(this);   // vslot +0x28; [RENDER] the level's, not renderer.overgrowthRange
     for (int z = 0; z < m_gridSize; ++z)
     {
         for (int x = 0; x < m_gridSize; ++x)
