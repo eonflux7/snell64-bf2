@@ -20,7 +20,7 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
-| `render` 23, water at the shore | In progress: tasks 1–4 built (2026-11-24) | 5 (surf turbidity) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
+| `render` 23, water at the shore | In progress: tasks 1–5 built (2026-11-24) | 6 (caustics) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
 | `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
 | `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
@@ -46,6 +46,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Water types (milestone 23, task 4, contract 42): the water's colour from its constituents, a
   type per level in its weather file; `renderer.waterType` 0–10 (oceanic I to coastal 9, 10 a
   glacial river). Muttrah City `ssr-shore` (coastal 1; try 0 and 9), Kunar `river` (glacial river).
+- Surf turbidity (milestone 23, task 5, contract 43): breaking waves stir sediment into the surf
+  zone, khaki and opaque, falling offshore in plumes; sand only. `renderer.waterSurfSediment` (40
+  g/m³ per metre of breaker height; 0 off). Omaha Beach `surf-along`, `surf-plume`.
 - Far overgrowth (milestone 22, task 1): trees over the whole map, no setting. Kunar `og-sw`,
   `ft-1500`, `edge-e`.
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast

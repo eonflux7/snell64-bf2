@@ -128,9 +128,23 @@ Tasks:
    Seen: Muttrah City `ssr-shore` (types 0, 5, 9: blue, green, olive); Kunar `river` (the glacial
    type against oceanic II). Open: glacial flour's turquoise (the sediment's scattering slope is one
    for all minerals); the terrain's far water colour (`TerrainWaterColor`) is the level's.
-5. **Surf turbidity.** Breaking waves stir up sediment: the water's scattering rises with task 3's
-   breaking energy and falls with distance from the break, the brown band along a real beach,
-   in the sediment's tint over the water type's.
+5. **Surf turbidity:** built (contract 43, 2026-11-24). Breaking waves hold fine sediment in
+   suspension: a concentration (g/m³) added to the water type's sediment, with the same mineral's
+   coefficients (`WaterMedium.cpp` publishes what each g/m³ adds to K and b_b: the medium with
+   50 g/m³ more, less the medium, over 50; `RaWaterMedium[2..3]`). The shader (`Ra_SurfSediment`,
+   `RaShore.fxh`): the breakers' height Hb from the train's deep-water height and period (Komar
+   and Gaudiano 1975, Hb = 0.39 g^0.2 (T H0²)^0.4), breaking at Hb / 0.78; in the surf zone
+   `renderer.waterSurfSediment` g/m³ per metre of Hb (40; 0 none; at most 150), none under 5 cm
+   breakers; offshore of the break an e-fold over 0.3 to 1.2 breaking depths, varied by plumes
+   (cells along the shore of 100 breaking depths, three surf widths on a 1:30 beach, stretched
+   offshore, changing over 500 s); only on sand (none where the bed is steeper than 0.25, full
+   under 0.08). The water body takes the pixel's concentration for its whole path; the swash's
+   sheet takes it in its K. Omaha Beach (Hb 0.98 m, 39 g/m³): the surf zone khaki and opaque where
+   it was clear green, `surf-along`, `surf-plume` (from the sea, the sun low behind: the
+   obstacles' shadows now show on the turbid water as shafts). Muttrah City `beach-e` unchanged
+   (rocks and quays). Open: Omaha's flat is shallow for hundreds of metres, so the whole of it
+   is surf zone and the plumes hardly show; a rectangular shadow edge on the turbid water at
+   `surf-plume` (the shadows' cover, not this task's).
 6. **Caustics.** The sun focused by the waves onto the bed in shallow water, from the slopes the
    FFT already makes (the refracted sun's convergence), fading with depth as the focus blurs and
    with the water type's extinction; on the terrain and objects under the water.
