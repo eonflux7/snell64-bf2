@@ -78,6 +78,10 @@ public:
     // the shadow height) to base.txt, base-static.png and base-height.png, at once.
     virtual bool toolsWriteSun(const char* base, const char*& message) = 0;
 
+    // Water (docs/lanes/tools.md#water): writes render milestone 23's open-water map and its fetch
+    // table to base.txt, base-distance.png and base-fetch.png, at once.
+    virtual bool toolsWriteWater(const char* base, const char*& message) = 0;
+
 protected:
     ~IRendererTools() {}
 };

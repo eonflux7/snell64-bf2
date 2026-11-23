@@ -13,6 +13,8 @@ bool toolsWriteClouds(const char* base, const char*& message);
 bool toolsWriteExposure(const char* base, const char*& message);
 // IRendererTools::toolsWriteSun (render milestone 14), in SunStatic.cpp.
 bool toolsWriteSun(const char* base, const char*& message);
+// IRendererTools::toolsWriteWater (render milestone 23), in WaterOpen.cpp.
+bool toolsWriteWater(const char* base, const char*& message);
 
 } // namespace dx9rend
 } // namespace hfe

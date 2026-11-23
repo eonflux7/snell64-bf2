@@ -38,6 +38,7 @@
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "RendDX9Base.h"
+#include "ToolsAtmosphere.h"
 #include "../Geom/Terrain.h"
 #include "../Physics/HeightmapCluster.h"
 
@@ -86,13 +87,14 @@ struct OpenState
     std::atomic<bool> done;
     bool building;
     Bake bake;                       // the worker's while building
-    std::vector<float> map;          // the last bake's texels
+    std::vector<float> map;          // the last bake's texels (kept for tools.water)
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
     float table[kWaterOpenTableRows][kWaterOpenTable][4];
     bool haveTable, tableNew;
     IDirect3DTexture9* texture;
     float scale;                     // 1 / the uploaded map's side, m
+    std::string message;
 };
 
 OpenState* g_open = 0;
@@ -511,6 +513,94 @@ void rendererWaterOpenUnbind()
 {
     if (IDirect3DDevice9* const d = device())
         d->SetTexture(kWaterOpenSampler, 0);
+}
+
+// [TOOLS] tools.water (render milestone 23): the open-water map's state and table to base.txt, its
+// signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black) and its fetch
+// to base-fetch.png (log2, 16 m black to 64 km white).
+bool toolsWriteWater(const char* base, const char*& message)
+{
+    OpenState& s = st();
+    message = "";
+    if (!base || s.map.empty())
+    {
+        s.message = "the open-water map is not baked";
+        message = s.message.c_str();
+        return false;
+    }
+    const std::string root(base);
+    FILE* const f = std::fopen((root + ".txt").c_str(), "w");
+    if (!f)
+    {
+        s.message = "cannot write " + root + ".txt";
+        message = s.message.c_str();
+        return false;
+    }
+    std::fprintf(f, "# tools.water (render milestone 23): the open-water map and its fetch table\n");
+    std::fprintf(f, "[map] %d x %d over %.1f m (%.2f m a texel), sea level %.2f m, wind toward (%.3f, %.3f), "
+                    "bound %s\n", kSide, kSide, 2.0 * s.info.half, 2.0 * s.info.half / kSide, s.info.sea,
+                 s.info.dirX, s.info.dirZ, s.scale > 0.0f ? "yes" : "no");
+    std::fprintf(f, "[bake] water %.2f %% of the map, %d edge runs open sea, %.0f ms\n",
+                 100.0 * s.info.waterShare, s.info.openEdges, s.info.ms);
+    const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
+    double bins[6] = { 0, 0, 0, 0, 0, 0 };
+    static const double kBinTop[6] = { 100.0, 1000.0, 5000.0, 20000.0, 100000.0, 1e30 };
+    std::size_t wet = 0;
+    for (std::size_t k = 0; k < count; ++k)
+        if (s.map[k * 4] > 0.0f)
+        {
+            const double fetch = std::exp2(s.map[k * 4 + 3]);
+            int bin = 0;
+            while (fetch > kBinTop[bin])
+                ++bin;
+            bins[bin] += 1.0;
+            ++wet;
+        }
+    std::fprintf(f, "[fetch] of the water: under 100 m %.1f %%, 100 m-1 km %.1f %%, 1-5 km %.1f %%, "
+                    "5-20 km %.1f %%, 20-100 km %.1f %%, open sea %.1f %%\n",
+                 wet ? 100.0 * bins[0] / wet : 0.0, wet ? 100.0 * bins[1] / wet : 0.0, wet ? 100.0 * bins[2] / wet : 0.0,
+                 wet ? 100.0 * bins[3] / wet : 0.0, wet ? 100.0 * bins[4] / wet : 0.0, wet ? 100.0 * bins[5] / wet : 0.0);
+    if (s.haveTable)
+        for (int e = 0; e < kWaterOpenTable; ++e)
+            std::fprintf(f, "[table %2d] fetch %7.0f m: amplitude %.3f %.3f %.3f, height x%.3f, whitecaps x%.3f\n", e,
+                         std::exp2(static_cast<double>(kWaterOpenTableFirst + e)), s.table[0][e][0], s.table[0][e][1],
+                         s.table[0][e][2], s.table[0][e][3], s.table[1][e][0]);
+    else
+        std::fprintf(f, "[table] not written yet\n");
+    std::fclose(f);
+
+    IDirect3DDevice9* const d = device();
+    bool ok = d != 0;
+    for (int image = 0; image < 2 && ok; ++image)
+    {
+        IDirect3DSurface9* surface = 0;
+        ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
+        D3DLOCKED_RECT locked;
+        if (ok && surface->LockRect(&locked, 0, 0) >= 0)
+        {
+            for (int j = 0; j < kSide; ++j)
+                for (int i = 0; i < kSide; ++i)
+                {
+                    const float* const p = &s.map[(static_cast<std::size_t>(j) * kSide + i) * 4];
+                    const float t = image == 0 ? 0.5f + p[0] / 512.0f
+                                  : p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f;
+                    const unsigned int g = static_cast<unsigned int>(std::min(std::max(t, 0.0f), 1.0f) * 255.0f);
+                    // Rows from z high at the top: north up
+                    reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(locked.pBits)
+                        + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
+                }
+            surface->UnlockRect();
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : "-fetch.png")).c_str(),
+                                        D3DXIFF_PNG, surface, 0, 0) >= 0;
+        }
+        else
+            ok = false;
+        if (surface)
+            surface->Release();
+    }
+    s.message = ok ? root + ".txt" : "could not write the images";
+    message = s.message.c_str();
+    return ok;
 }
 
 } // namespace dx9rend

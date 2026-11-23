@@ -450,6 +450,20 @@ layers as last drawn. Fails before they are drawn.
 - `[static]`: the light depth's range, the share of texels with a caster, `<NAME>-static.png`
   (1024 wide, white = none). `[height]`: the shadow height's range, `<NAME>-height.png`.
 
+## Water
+
+`tools.water [NAME]` (render milestone 23, task 2; `tools(water)`) writes
+`<outputDir>/<map>/water/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
+`RendDX9/WaterOpen.cpp`: the open-water map as last baked and its fetch table. Fails before the
+first bake.
+
+- `[map]`: its size, the texel, the sea level, the wind it was baked for, whether it is bound.
+  `[bake]`: the water's share of the map, the edge runs taken as open sea, the bake's time.
+- `[fetch]`: the water's share by effective fetch (under 100 m to open sea).
+- `[table e]`: per entry its fetch, the three cascades' amplitudes, the height and whitecap ratios.
+- `<NAME>-distance.png`: the signed distance (grey the shore, white 256 m out, black 256 m inland);
+  `<NAME>-fetch.png`: log2 of the fetch over water (16 m black, 64 km white), land black. North up.
+
 ## Clouds
 
 `tools.clouds [NAME]` (render milestone 12, task 2; `tools(clouds)`) writes

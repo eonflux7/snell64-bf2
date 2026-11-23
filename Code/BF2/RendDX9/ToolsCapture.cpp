@@ -247,6 +247,10 @@ public:
     {
         return dx9rend::toolsWriteSun(base, message);
     }
+    virtual bool toolsWriteWater(const char* base, const char*& message)
+    {
+        return dx9rend::toolsWriteWater(base, message);
+    }
 };
 
 RendererTools g_tools;
