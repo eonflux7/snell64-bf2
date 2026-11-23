@@ -6,7 +6,7 @@ live only in its document in [milestones/](milestones/); the row here gives the 
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13–16, 18 and 19 accepted | 21, 22 in progress; 12, 17 paused ([below](#open-milestones)) | [render/](render/README.md) |
+| `render` | Milestones 1–11, 13–16, 18 and 19 accepted | 21, 22, 23 in progress; 12, 17 paused ([below](#open-milestones)) | [render/](render/README.md) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -20,6 +20,7 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
+| `render` 23, water at the shore | In progress (2026-11-24) | 1 (the dark shore patches, Muttrah City `ssr-shore`) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
 | `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
 | `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
