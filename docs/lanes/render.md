@@ -877,8 +877,11 @@ Tasks:
    x0.17. Past known ground the pulled-out known heights reach the bake over 3 km. An inland bake
    has no water past known ground (Kunar Province's river level at 36 m would flood the real
    valleys). The load logs the bake's correlation with the map, as placed and mirrored, to check
-   the placement's orientation. Colour past the map is still the map's edge colour, blurred:
-   WorldCover classes next.
+   the placement's orientation (Muttrah City 0.75 as placed, about 0 mirrored; Kunar 0.48). Seen
+   in game on Muttrah City (`ridges`, `ft-top`) and Kunar Province (`ft-1500`, the variant
+   switched live). Open: colour past the map is still the map's edge colour, blurred, with seams
+   along the map's corner lines from above (WorldCover classes next); on Kunar Province, water
+   specks along the map's north edge.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
