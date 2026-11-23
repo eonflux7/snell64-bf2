@@ -934,9 +934,9 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    sun's glow; mid grey unmoved.
 3. **A 3D LUT** (deferred, owner 2026-11-23, with per-level looks): the grade baked to a 32³ table when a variable changes, one fetch in the
    pass; per-level looks.
-4. **Low light** (built). Night is how far the adapted luminance sits under the exposure ceiling
-   (the luminance at which the exposure reaches `renderer.exposureMax`: log2 key + bias − max, from
-   the engine; the adapted value from milestone 13's state), 0 at the ceiling, 1 two stops under it,
+4. **Low light** (built). Night is how far the adapted luminance sits under the full-lift ceiling
+   (the luminance at which a full lift would reach `renderer.exposureMax`: log2 key + bias − max,
+   from the engine, whatever `exposureStrength`; the adapted value from milestone 13's state), 0 at the ceiling, 1 two stops under it,
    0 without auto-exposure. With night the toe and the contrast relax to 1, so the toe never deepens what the
    ceiling already holds dark (milestone 13's accepted night stays), and dark pixels (exposed
    luminance under 0.05, fading out by 0.5; lights keep their colour) move toward the rods'
@@ -950,9 +950,12 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    now only `renderer.exposureStrength` (0.6) of that gap is lifted (a room 4 stops under the key
    gets 2.4), while a scene brighter than the key is still darkened in full, so daylight views at
    or above the key are unchanged. The night still reaches the ceiling (The Falklands' night layer
-   is 7.5 stops under the key; 0.6 lifts 4.5, clamped to 4). The grade's night (task 4) is
-   measured against the ceiling's luminance under the partial lift: log2 key − (max − bias) /
-   strength. `RaHdrPost` grows to `float4[5]` ([4].x the strength).
+   is 7.5 stops under the key; 0.6 lifts 4.5, clamped to 4). The grade's night (task 4) keeps
+   its threshold where a full lift would reach the ceiling (log2 key + bias − max, −5.25 EV), not
+   the partial lift's (−7.9 EV at 0.6, which left The Falklands, −8.7, under half a night).
+   Seen by an agent (2026-11-23): Muttrah City `sun`, `antisun`, `street`, `valley`, `market` meter
+   above the key, exposure the same at 1 and 0.6; Kashan Desert `hb-owner` at the dusk test setting
+   likewise. No interior view saved yet. `RaHdrPost` grows to `float4[5]` ([4].x the strength).
 5. **Checks**: A/B on Muttrah City `sun`, `street`; Kashan Desert `hb-owner` at dusk; a fire; the
    Falklands' night layer (`w0`, its toe against milestone 13's accepted 25/255).
 

@@ -31,7 +31,6 @@
 #include "Texture.h"
 #include "../GeomMisc/FSQuadDrawer.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -368,10 +367,10 @@ void rendererHdrPost(EngineTexture* scene)
         d3dx->SetTexture(h, autoExposure ? s.state[s.live] : 0);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaGradeBloom"))
         d3dx->SetTexture(h, bloom ? s.level[0] : 0);
-    // The ceiling's adapted luminance: below it the exposure sits on exposureMax (the night)
-    const float lift = s.exposureMax - s.exposureBias;
-    rendererGradeBind(d3dx, s.thermal,
-                      std::log2(kKey) - (lift > 0.0f ? lift / std::max(s.exposureStrength, 0.05f) : lift));
+    // Night's threshold: where a full lift would reach the ceiling. Fixed by the key and the
+    // ceiling, not by exposureStrength: a partial lift moves the real ceiling down (to -7.9 EV at
+    // 0.6), and The Falklands' night (-8.7) would count as under half a night
+    rendererGradeBind(d3dx, s.thermal, std::log2(kKey) + s.exposureBias - s.exposureMax);
 }
 
 void rendererHdrPostBindParticles(void* effect)
