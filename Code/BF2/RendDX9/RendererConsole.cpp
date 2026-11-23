@@ -1543,6 +1543,11 @@ float getWaterSurfSediment() { return rendererWaterSurfSediment(); }
 void setWaterSurfSediment(float value) { rendererSetWaterSurfSediment(clampf(value, 0.0f, 500.0f)); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterSurfSediment, float, true, getWaterSurfSediment(), setWaterSurfSediment, 0.0f,
                                  500.0f, kRendererConsoleTag)
+// [RENDER] render milestone 23 task 6: the caustics' contrast (1 as modelled, 0 none).
+float getWaterCaustics() { return rendererWaterCaustics(); }
+void setWaterCaustics(float value) { rendererSetWaterCaustics(clampf(value, 0.0f, 4.0f)); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterCaustics, float, true, getWaterCaustics(), setWaterCaustics, 0.0f, 4.0f,
+                                 kRendererConsoleTag)
 // [RENDER] render milestone 23 task 2's A/B switch, until acceptance: the open-water map bound.
 bool getWaterOpen() { return rendererWaterOpen(); }
 void setWaterOpen(bool value) { rendererWaterOpen() = value; }

@@ -884,7 +884,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 43
+#define RA_CONTRACT_VERSION 44
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -1203,7 +1203,9 @@ const unsigned int kSunStaticVec4s = 8;
 // diffuse attenuation K = a + b_b (rgb, per metre) and backscattering b_b (rgb, per metre), per
 // screen channel (WaterMedium.cpp), written every frame by rendererWaterMediumFrame. Task 5 (contract
 // 43): c178..c179 what a g/m^3 of sediment stirred up by the surf adds to each (rgb), c178.w
-// renderer.waterSurfSediment (g/m^3 per metre of breaker height, 0 none).
+// renderer.waterSurfSediment (g/m^3 per metre of breaker height, 0 none). Task 6 (contract 44):
+// c176.w the total scattering b (per metre), c179.w what a g/m^3 of surf sediment adds to it,
+// c177.w renderer.waterCaustics (the caustics' contrast, 0 none).
 const unsigned int kWaterMediumRegister = 176;
 const unsigned int kWaterMediumVec4s = 4;
 void stateManagerSetWaterMedium(const float* value /* RaWaterMedium, four float4s */);
@@ -1217,6 +1219,8 @@ float rendererWaterConstituent(int which);
 void rendererSetWaterConstituent(int which, float value);
 float rendererWaterSurfSediment();
 void rendererSetWaterSurfSediment(float value);
+float rendererWaterCaustics();
+void rendererSetWaterCaustics(float value);
 const float* rendererWaterMedium();   // the sixteen floats published
 void rendererWaterMediumFrame();
 const unsigned int kEngineRegisterBegin = 176;

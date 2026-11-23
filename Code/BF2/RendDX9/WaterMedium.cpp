@@ -32,6 +32,13 @@
 // four float4s: K, b_b, and per g/m^3 of sediment stirred up by the surf (task 5) what it adds to
 // each, with renderer.waterSurfSediment) every frame from rendererWaterFrame.
 //
+// Caustics (task 6, contract 44): the shader draws the sun focused by the waves on the bed
+// (rashaderwaterbase.fx, Ra_WaterCaustics). Light scattered on the way down, even by a few degrees,
+// no longer belongs to the pattern, so its contrast falls as e^(-b d): b, the total scattering
+// (pure water, particles, sediment; per metre, the green channel's band mean), and what each g/m^3
+// of surf sediment adds to it go out with K and b_b; renderer.waterCaustics scales the pattern
+// (1 as measured, 0 none).
+//
 // Surf turbidity (task 5): breaking waves hold fine sediment in suspension, a mineral like the
 // constituent above. Its increments to K and b_b per g/m^3 are the medium's with kSurfReference
 // g/m^3 more sediment, less the medium's, over kSurfReference (linear in the concentration but
@@ -93,6 +100,7 @@ struct State
     float cdom = kPresets[kDefaultPreset].cdom;
     float sediment = kPresets[kDefaultPreset].sediment;
     float surf = 40.0f;   // g/m^3 per metre of breaker height (renderer.waterSurfSediment)
+    float caustics = 1.0f;   // the caustics' contrast (renderer.waterCaustics, task 6)
     bool dirty = true;
     float medium[16] = {};
 };
@@ -117,13 +125,13 @@ void response(double l, double rgb[3])
     rgb[2] = std::max(0.0, 0.0557 * x - 0.2040 * y + 1.0570 * z);
 }
 
-// K and b_b per channel (rgb), with Extra g/m^3 of sediment added
-void channels(const State& s, double extra, double kOut[3], double bbOut[3])
+// K, b_b and the total scattering b per channel (rgb), with Extra g/m^3 of sediment added
+void channels(const State& s, double extra, double kOut[3], double bbOut[3], double bOut[3])
 {
     const double kDepth = 3.0;   // metres over which a channel's mean transmittance is matched
     const double c = std::max(static_cast<double>(s.chlorophyll), 0.0);
     const double sediment = s.sediment + extra;
-    double weight[3] = {}, transmit[3] = {}, back[3] = {};
+    double weight[3] = {}, transmit[3] = {}, back[3] = {}, scatter[3] = {};
     for (int i = 0; i < kBands; ++i)
     {
         const double l = 400.0 + 10.0 * i;
@@ -142,20 +150,22 @@ void channels(const State& s, double extra, double kOut[3], double bbOut[3])
             weight[k] += w[k];
             transmit[k] += w[k] * std::exp(-(a + bb) * kDepth);
             back[k] += w[k] * bb;
+            scatter[k] += w[k] * (bw + bp + bm);
         }
     }
     for (int j = 0; j < 3; ++j)
     {
         kOut[j] = -std::log(transmit[j] / weight[j]) / kDepth;
         bbOut[j] = back[j] / weight[j];
+        bOut[j] = scatter[j] / weight[j];
     }
 }
 
 void compute(State& s)
 {
-    double k[3], bb[3], kSurf[3], bbSurf[3];
-    channels(s, 0.0, k, bb);
-    channels(s, kSurfReference, kSurf, bbSurf);
+    double k[3], bb[3], b[3], kSurf[3], bbSurf[3], bSurf[3];
+    channels(s, 0.0, k, bb, b);
+    channels(s, kSurfReference, kSurf, bbSurf, bSurf);
     for (int j = 0; j < 3; ++j)
     {
         s.medium[j] = static_cast<float>(k[j]);
@@ -163,10 +173,10 @@ void compute(State& s)
         s.medium[8 + j] = static_cast<float>((kSurf[j] - k[j]) / kSurfReference);
         s.medium[12 + j] = static_cast<float>((bbSurf[j] - bb[j]) / kSurfReference);
     }
-    s.medium[3] = 0.0f;
-    s.medium[7] = 0.0f;
+    s.medium[3] = static_cast<float>(b[1]);
+    s.medium[7] = s.caustics;
     s.medium[11] = s.surf;
-    s.medium[15] = 0.0f;
+    s.medium[15] = static_cast<float>((bSurf[1] - b[1]) / kSurfReference);
     s.dirty = false;
 }
 
@@ -208,6 +218,13 @@ void rendererSetWaterSurfSediment(float value)
 {
     g_state.surf = value;
     g_state.medium[11] = value;
+}
+
+float rendererWaterCaustics() { return g_state.caustics; }
+void rendererSetWaterCaustics(float value)
+{
+    g_state.caustics = value;
+    g_state.medium[7] = value;
 }
 
 const float* rendererWaterMedium()

@@ -981,6 +981,9 @@ bool toolsWriteWater(const char* base, const char*& message)
                      rendererWaterConstituent(1), rendererWaterConstituent(2), m[0], m[1], m[2], m[4], m[5], m[6]);
         std::fprintf(f, "[surf] %.3g g/m^3 per metre of breaker height; per g/m^3 K + %.5f %.5f %.5f /m, "
                         "b_b + %.5f %.5f %.5f /m\n", m[11], m[8], m[9], m[10], m[12], m[13], m[14]);
+        std::fprintf(f, "[caustics] contrast %.3g; scattering b %.4f /m (+ %.5f per g/m^3 of surf sediment): the "
+                        "pattern's contrast e^(-b d) %.2f at 2 m, %.2f at 5 m\n", m[7], m[3], m[15],
+                     std::exp(-2.0 * m[3]), std::exp(-5.0 * m[3]));
     }
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     double bins[6] = { 0, 0, 0, 0, 0, 0 };
