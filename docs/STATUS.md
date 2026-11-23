@@ -42,6 +42,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Clouds' ambient along the view (contract 34): shaded sides take the sky behind them. The dusk
   flatness was Kashan's haze (render.md, 12, near clouds); compare with `renderer.weatherVisibility
   60000` and `renderer.weatherMixing 1500` (the level's: 20000, 3500).
+- The sky under the deck (contract 35): gaps between clouds now take the clouds' shadow on the
+  haze below the deck, so they no longer glow clear past veiled clouds. Same views.
 
 ## Open issues
 

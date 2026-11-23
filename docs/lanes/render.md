@@ -577,10 +577,23 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   surface. The air under the clouds takes `Ra_HazeLight`: the clear sky's radiance times S plus
   (1 − S) times the clouded sky's mean radiance (`RaAtmosphere[8]`, Dagor's statistical clouds
   shadow): the haze, the air in front of the clouds (panorama, near clouds; only while the camera
-  is under the slab's top), the sky pass within about 3° of the horizon, and the clouds' light from
+  is under the slab's top), and the clouds' light from
   the ground below them. Past the panorama's 150 km reach the slab's clouds are extrapolated from
   the marched part (to 400 km), so an overcast deck closes to the horizon. The sun on surfaces is
   dimmed by the cloud shadow map (task 8), not by S, which takes over only past the map.
+  The sky behind the clouds and their gaps (contract 35, 2026-11-23): the sky view table is the
+  clear sky's, so its air under the deck was sunlit while the air in front of the clouds was in
+  their shadow, and gaps glowed past clouds veiled by the same dust (the owner's "the sky is
+  crystal clear against the clouds in the haze"). The sky pass took the shadow only within about
+  3° of the horizon. Now the main panorama, while the camera is under the slab, marches the air
+  from the camera to the slab's base (`Ra_AirCloudDelta`, `RaAir.fxh`: `Ra_AirAlong`'s in-scatter
+  less the clear sky's, 16 steps) and dims the sky behind by it, as a luminance factor in the
+  panorama's a; the sky pass's 3° blend is gone. A colour rest in rgb (the shaded air is bluer)
+  left bright fringes at cloud edges (the compression takes colour as opacity's) and was dropped.
+  Not in the sky cube's 256x128 panorama (`SkyCube.cpp` reads its a as the clouds' transmittance
+  toward the sun, which feeds S). Kashan Desert at dusk (views `hb-owner`, `hb-owner-back`):
+  gaps dim toward the veil, most away from the sun; at 60 km visibility, no visible change. Not
+  measured: the panorama's added cost (one 16-step march per texel, over its frames).
   Kashan Desert (agent): at 0.4 S 0.99 and the sky light as clear; at 1.0 (desert preset, a deck of
   towers 2–6 km) S 0.12–0.14, sky irradiance up 0.24/0.25/0.29 against the clear 0.09/0.18/0.39,
   global horizontal about 17 % of the clear day's, the diffuse part 24 %. Against references:
@@ -1296,6 +1309,7 @@ and add its row here.
 | 32 | One air integral (render milestone 12): the clouds' panorama, sky-light panorama and near passes get `RaTransmittanceTable`, `RaMultiScatterTable`, `RaCloudShadow` and `RaCloudShadowMap` (0 before the map's first build), as the aerial-perspective pass does; the cloud shadow map's technique is `RaCloudShadowBuild` |
 | 33 | The clouds' light bake (render milestone 12): `RaCloudBuildLight` gets `RaCloudDetail` and `RaClouds[7].z` (the detail tile, m), so the baked sun and sky visibility see the field eroded as the march erodes it near |
 | 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
+| 35 | The sky under the deck (render milestone 12): the main panorama's a (`RaClouds[4].w` ≥ half `RA_PANO_H`; not the sky cube's) is the clouds' transmittance times the dimming of the clear sky's air under the slab by the clouds' shadow and light (luminance); `RaSkyClouds.z` no longer read by the sky pass |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
