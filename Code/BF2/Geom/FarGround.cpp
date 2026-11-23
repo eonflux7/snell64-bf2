@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -63,10 +64,10 @@ namespace {
 // The mesh: kLevels nested levels of kCells x kCells cells around the camera, cell kCell0 * 2^level.
 // Level 0 is whole; each coarser one leaves out its middle (kHole cells from its centre on each
 // side), which the finer level covers with one coarse cell to spare whatever their snapping.
-const int   kLevels = 7;
+const int   kLevels = 9;
 const int   kCells = 64;
 const int   kHole = kCells / 4 - 1;
-const float kCell0 = 16.0f;
+const float kCell0 = 4.0f;
 const int   kSide = kCells + 1;                                    // vertices a side
 const float kMorphStart = 16.0f;                                   // cells from the camera
 const float kMorphRange = 10.0f;                                   // complete 26 cells out
@@ -79,6 +80,9 @@ const float kFarReach = 34000.0f;                                  // m past the
 const float kFineBlend = 1500.0f;                                  // m inside the fine square's edge: fine to coarse
 const float kBaseFall = 6000.0f;                                   // m past known ground: at the base height
 const float kBakeBlend = 3000.0f;                                  // m past known ground: on the bake
+const float kEdgeReach = 256.0f;                                   // m past the map: the edge heights at its cell
+const float kSkirtDepth = 30.0f;                                   // m: the strip under the map's edge
+const int   kSkirtLevel = 9;                                       // its slot in RaFarGroundLevels (origin 0, cell 1)
 const float kSeaNear = 10.0f;                                      // m: a sea level under the map's lowest by more is none
 const float kFillerDepth = 5.0f;                                   // m under the map's lowest: ring filler
 const float kFlatSector = 1.0f;                                    // m: a sector with less relief is a placeholder
@@ -92,6 +96,7 @@ struct Params
     void* constants; // RaFarGround (float4[8], layout in the shader)
     void* height;    // RaFarGroundHeight (texture, fine)
     void* heightFar; // RaFarGroundHeightFar (texture, coarse)
+    void* heightEdge; // RaFarGroundHeightEdge (texture, the map's cell around its edge)
     void* color;     // RaFarGroundColor (texture)
 };
 
@@ -123,9 +128,11 @@ struct State
     bool               baked;     // the level has a bake file
     IDirect3DTexture9* heightTexture;
     IDirect3DTexture9* heightFarTexture;
+    IDirect3DTexture9* heightEdgeTexture;
     IDirect3DTexture9* colorTexture;
     dx9rend::EngineTexture heightValue;
     dx9rend::EngineTexture heightFarValue;
+    dx9rend::EngineTexture heightEdgeValue;
     dx9rend::EngineTexture colorValue;
     void*              vertexBuffer;
     void*              indexBuffer;
@@ -148,6 +155,8 @@ struct State
     std::vector<float> fineDist;
     std::vector<float> farE;
     std::vector<float> farDist;
+    Grid               edge;      // the map's square plus kEdgeReach, at the map's cell
+    std::vector<float> edgeMap;   // its nodes on the map: the map's heights; NaN past it
     float              base;
     bool               seaNear;   // the level's sea lies near the map's heights
     int                variant;   // the bake's variant the heights were composed with (-1 none)
@@ -403,8 +412,19 @@ bool composeHeights()
                                 ? pastKnown(g.fineE[k], g.fineDist[k], g.fine.x(i), g.fine.x(j), scaled)
                                 : g.fineE[k];
         }
+    // The edge heights: the map's own at its nodes (so the far ground's vertices on them meet the
+    // map's), the fine heights past it.
+    std::vector<float> edgeHeight(g.edgeMap);
+    for (int j = 0; j != g.edge.n; ++j)
+        for (int i = 0; i != g.edge.n; ++i)
+        {
+            float& h = edgeHeight[static_cast<std::size_t>(j) * g.edge.n + i];
+            if (h != h)
+                h = sampleGrid(fineHeight, g.fine, g.edge.x(i), g.edge.x(j));
+        }
     if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
-        || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue))
+        || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue)
+        || !uploadHeights(edgeHeight, g.edge.n, g.heightEdgeTexture, g.heightEdgeValue))
         return false;
     // An inland bake has no water past known ground: the level's water (a river, Kunar Province's at
     // 36 m) would flood the real valleys under it. The CPU copy, the sea test's only input.
@@ -511,7 +531,7 @@ void logBakeFit(world::IHeightmapCluster* cluster, float mapHalf)
 }
 
 // The heights: known ground, the fine and coarse grids filled and uploaded.
-bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
+bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf, float mapCell)
 {
     Field f;
     f.known.push_back({ -mapHalf, -mapHalf, mapHalf, mapHalf });
@@ -625,6 +645,20 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
             fineDist[static_cast<std::size_t>(j) * fine.n + i] = distanceToKnown(f.known, fine.x(i), fine.x(j));
     g.fine = fine;
     g.coarse = coarse;
+    g.edge.cell = mapCell;
+    g.edge.n = static_cast<int>(std::floor(2.0f * (mapHalf + kEdgeReach) / mapCell + 0.5f)) + 1;
+    g.edge.origin = -0.5f * static_cast<float>(g.edge.n - 1) * mapCell;
+    g.edgeMap.assign(static_cast<std::size_t>(g.edge.n) * g.edge.n, std::numeric_limits<float>::quiet_NaN());
+    for (int j = 0; j != g.edge.n; ++j)
+        for (int i = 0; i != g.edge.n; ++i)
+        {
+            const float x = g.edge.x(i), z = g.edge.x(j);
+            if (std::fabs(x) > mapHalf + 0.01f || std::fabs(z) > mapHalf + 0.01f)
+                continue;
+            const float inside = mapHalf - 0.01f;
+            g.edgeMap[static_cast<std::size_t>(j) * g.edge.n + i] = cluster->getHeightInWorldCoords(
+                (std::max)(-inside, (std::min)(x, inside)), (std::max)(-inside, (std::min)(z, inside)));
+        }
     g.fineE.swap(fineE);
     g.fineDist.swap(fineDist);
     g.farE.swap(farE);
@@ -647,11 +681,16 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
     g.constants[3][2] = fine.cell;
     g.constants[4][0] = 1.0f / (static_cast<float>(coarse.n) * coarse.cell);
     g.constants[4][1] = (-coarse.origin / coarse.cell + 0.5f) / static_cast<float>(coarse.n);
+    // [4].zw: edge uv = xz * z + w; [3].w: the edge square's half side (m).
+    g.constants[4][2] = 1.0f / (static_cast<float>(g.edge.n) * g.edge.cell);
+    g.constants[4][3] = (-g.edge.origin / g.edge.cell + 0.5f) / static_cast<float>(g.edge.n);
+    g.constants[3][3] = -g.edge.origin;
 
-    ::renddx9abi::logf("[farground] heights: fine %dx%d of %.1f m, coarse %dx%d of %.1f m; %d of 8 sectors data; "
-                       "base %.1f m; "
+    ::renddx9abi::logf("[farground] heights: fine %dx%d of %.1f m, coarse %dx%d of %.1f m, edge %dx%d of %.1f m; "
+                       "%d of 8 sectors data; base %.1f m; "
                        "sea %.1f m %s (map %.1f..%.1f m, %d ring nodes filler), %s past the map",
-                       fine.n, fine.n, fine.cell, coarse.n, coarse.n, coarse.cell, usable, f.base,
+                       fine.n, fine.n, fine.cell, coarse.n, coarse.n, coarse.cell, g.edge.n, g.edge.n, g.edge.cell,
+                       usable, f.base,
                        f.seaLevel, f.seaValid ? "is a sea" : "is none", mapLowest, mapHighest, filler,
                        g.seaValid ? "water" : "no water");
     return true;
@@ -945,9 +984,16 @@ bool buildColor(Terrain* t, float mapHalf)
     return true;
 }
 
-bool buildMesh()
+// The grid's levels, then the strip under the map's edge: a node of the map's edge at each of its
+// cells, at the edge height and kSkirtDepth under it, both windings (seen from either side), so no
+// gap opens between the map and the far ground where their simplified surfaces differ.
+bool buildMesh(float mapHalf, float mapCell)
 {
-    g.vertexCount = static_cast<unsigned int>(kLevels * kSide * kSide);
+    const int edgeCells = static_cast<int>(std::floor(2.0f * mapHalf / mapCell + 0.5f));
+    const unsigned int gridVertices = static_cast<unsigned int>(kLevels * kSide * kSide);
+    g.vertexCount = gridVertices + 4u * 2u * static_cast<unsigned int>(edgeCells + 1);
+    if (g.vertexCount > 65535u || mapHalf > 32000.0f)
+        return false;
     std::vector<unsigned short> indices;
     for (int level = 0; level != kLevels; ++level)
         for (int j = -kCells / 2; j != kCells / 2; ++j)
@@ -965,6 +1011,17 @@ bool buildMesh()
                 indices.push_back(v00); indices.push_back(v11); indices.push_back(v10);
                 indices.push_back(v00); indices.push_back(v01); indices.push_back(v11);
             }
+    for (int side = 0; side != 4; ++side)
+        for (int k = 0; k != edgeCells; ++k)
+        {
+            const unsigned short a = static_cast<unsigned short>(gridVertices + (side * (edgeCells + 1) + k) * 2);
+            const unsigned short b = static_cast<unsigned short>(a + 2);
+            const unsigned short a1 = static_cast<unsigned short>(a + 1), b1 = static_cast<unsigned short>(b + 1);
+            indices.push_back(a); indices.push_back(b); indices.push_back(b1);
+            indices.push_back(a); indices.push_back(b1); indices.push_back(a1);
+            indices.push_back(a); indices.push_back(b1); indices.push_back(b);
+            indices.push_back(a); indices.push_back(a1); indices.push_back(b1);
+        }
     g.primCount = static_cast<unsigned int>(indices.size() / 3);
 
     g.vertexBuffer = dx9rend::bufferManagerCreateVertexBuffer(g.vertexCount, 8u, 8u, "FarGround");
@@ -980,6 +1037,22 @@ bool buildMesh()
                 *v++ = static_cast<short>(level);
                 *v++ = 0;
             }
+    // The strip: x, z on the map's edge (whole metres), its level slot, the depth under the edge.
+    const short half = static_cast<short>(std::floor(mapHalf + 0.5f));
+    for (int side = 0; side != 4; ++side)
+        for (int k = 0; k <= edgeCells; ++k)
+        {
+            const short t = static_cast<short>(std::floor(-mapHalf + static_cast<float>(k) * mapCell + 0.5f));
+            const short x = side == 0 ? t : (side == 1 ? half : (side == 2 ? t : static_cast<short>(-half)));
+            const short z = side == 0 ? static_cast<short>(-half) : (side == 1 ? t : (side == 2 ? half : t));
+            for (int row = 0; row != 2; ++row)
+            {
+                *v++ = x;
+                *v++ = z;
+                *v++ = static_cast<short>(kSkirtLevel);
+                *v++ = static_cast<short>(row ? kSkirtDepth : 0.0f);
+            }
+        }
     dx9rend::vertexBufferUnlock(g.vertexBuffer);
 
     g.indexBuffer = dx9rend::bufferManagerCreateIndexBuffer(static_cast<unsigned int>(indices.size()), 8u, 101u);
@@ -1071,7 +1144,9 @@ void farGroundUpdate(Terrain* terrain)
     g.baked = loadBake();
     const float mapHalf = 0.5f * static_cast<float>(terrain->m_patchCount * terrain->m_patchSize)
                           * terrain->m_primaryWorldScale.x;
-    const bool ok = buildHeights(terrain, cluster, mapHalf) && buildColor(terrain, mapHalf) && buildMesh();
+    const float mapCell = terrain->m_primaryWorldScale.x > 0.0f ? terrain->m_primaryWorldScale.x : 4.0f;
+    const bool ok = buildHeights(terrain, cluster, mapHalf, mapCell) && buildColor(terrain, mapHalf)
+                    && buildMesh(mapHalf, mapCell);
     clearRing();
     if (!ok)
     {
@@ -1086,6 +1161,7 @@ void farGroundUpdate(Terrain* terrain)
     g.params.constants = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGround"));
     g.params.height = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeight"));
     g.params.heightFar = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeightFar"));
+    g.params.heightEdge = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeightEdge"));
     g.params.color = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundColor"));
     g.built = true;
     ::renddx9abi::logf("[farground] built: map half side %.0f m, %u triangles, %d levels to %.0f m",
@@ -1132,7 +1208,7 @@ bool farGroundDraw(Terrain* terrain)
     g.constants[0][2] = camera[2];
 
     // Each level snapped to twice its cell, so its odd vertices sit on the next level's grid.
-    float levels[8][4];
+    float levels[10][4];
     std::memset(levels, 0, sizeof(levels));
     for (int level = 0; level != kLevels; ++level)
     {
@@ -1142,10 +1218,12 @@ bool farGroundDraw(Terrain* terrain)
         levels[level][2] = cell;
         levels[level][3] = level + 1 < kLevels ? 1.0f : 0.0f;
     }
+    levels[kSkirtLevel][2] = 1.0f;   // the strip: absolute x, z
     param(g.params.levels)->setValue(levels, 0);
     param(g.params.constants)->setValue(g.constants, 0);
     param(g.params.height)->setValue(&g.heightValue, 0);
     param(g.params.heightFar)->setValue(&g.heightFarValue, 0);
+    param(g.params.heightEdge)->setValue(&g.heightEdgeValue, 0);
     param(g.params.color)->setValue(&g.colorValue, 0);
     // The detail fade reads the terrain's atlases, as drawFinal binds them.
     const TerrainAtlases* const atlases = terrainAtlases();
@@ -1177,6 +1255,7 @@ void releaseBuilt()
 {
     releaseTexture(g.heightTexture, g.heightValue);
     releaseTexture(g.heightFarTexture, g.heightFarValue);
+    releaseTexture(g.heightEdgeTexture, g.heightEdgeValue);
     releaseTexture(g.colorTexture, g.colorValue);
     if (g.vertexBuffer)
         dx9rend::vertexBufferRelease(g.vertexBuffer);
@@ -1191,12 +1270,14 @@ void releaseBuilt()
     releaseParam(g.params.constants);
     releaseParam(g.params.height);
     releaseParam(g.params.heightFar);
+    releaseParam(g.params.heightEdge);
     releaseParam(g.params.color);
     std::vector<float>().swap(g.farHeight);
     std::vector<float>().swap(g.fineE);
     std::vector<float>().swap(g.fineDist);
     std::vector<float>().swap(g.farE);
     std::vector<float>().swap(g.farDist);
+    std::vector<float>().swap(g.edgeMap);
     std::vector<float>().swap(g.bake);
     g.seaValid = false;
     g.baked = false;
