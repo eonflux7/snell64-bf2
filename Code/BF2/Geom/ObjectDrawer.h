@@ -99,8 +99,10 @@ public:
     // capture and tags its captured entries with the geometry's world bounding sphere. Requires an
     // active capture (dx9rend::rendererBeginCasterCapture) and a completed camera
     // updateVisible/draw.
+    // [RENDER] Milestone 14: with staticOnly, only static-mesh geometry of objects without mobile
+    // physics (the static cascade's casters).
     void  submitShadowCasters(const void* volume, const dx9rend::ShadowCascadeCull& range,
-                              float time);
+                              float time, bool staticOnly = false);
 
     // Offset comments identify retail x86 positions; native builds access named members.
     void* const*           m_vptr;                  // +0x00  ObjectDrawer's primary table
@@ -146,7 +148,8 @@ IBase* __fastcall createObjectDrawer(unsigned int iid, IBase* outer);
 
 // [RENDER] The published ObjectDrawer's submitShadowCasters; no-op without one.
 void objectDrawerSubmitShadowCasters(const void* volume,
-                                     const dx9rend::ShadowCascadeCull& range, float time);
+                                     const dx9rend::ShadowCascadeCull& range, float time,
+                                     bool staticOnly = false);
 
 } // namespace geom
 } // namespace hfe

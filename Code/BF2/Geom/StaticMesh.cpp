@@ -968,6 +968,12 @@ unsigned char rendererBaseFlag102()
 
 } // anonymous namespace - the helpers below are declared in StaticMesh.h
 
+// [RENDER] Milestone 14: whether a geometry instance is a static mesh (the static cascade's casters).
+bool geometryIsStaticMesh(const void* geometry)
+{
+    return geometry && *static_cast<void* const* const*>(geometry) == kStaticMeshVtable;
+}
+
 StaticMeshRenderer* staticMeshRenderer()
 {
     return static_cast<StaticMeshRenderer*>(static_cast<void*>(g_StaticMeshRenderer));
@@ -2227,6 +2233,9 @@ void StaticMesh::drawVanilla()
         const float dz = difference.z;
         distance = static_cast<float>(std::sqrt(static_cast<double>(dz * dz + dy * dy + dx * dx)));
     }
+    // [RENDER] Milestone 14: the static cascade's casters at a fixed distance, not the camera's.
+    if (dx9rend::rendererCasterCaptureActive() && dx9rend::rendererCasterLodDistance() > 0.0f)
+        distance = dx9rend::rendererCasterLodDistance();
     *reinterpret_cast<float*>(&m_dword288) = distance;
     *reinterpret_cast<float*>(&op.tail220)  = distance;
 
@@ -2774,10 +2783,13 @@ void staticMeshDrawExpansion(void* self)
     const ExpansionReal dz = ExpansionReal(camera->m[14]) - ExpansionReal(transform->m[14]);
     const ExpansionReal squared = (ExpansionReal(dx) * ExpansionReal(dx) + dz * dz) + dy * dy;
 #if defined(__APPLE__)
-    const float distance = bf2x87::store(bf2x87::squareRoot(squared));
+    float distance = bf2x87::store(bf2x87::squareRoot(squared));
 #else
-    const float distance = std::sqrt(squared);
+    float distance = std::sqrt(squared);
 #endif
+    // [RENDER] Milestone 14: the static cascade's casters at a fixed distance, not the camera's.
+    if (dx9rend::rendererCasterCaptureActive() && dx9rend::rendererCasterLodDistance() > 0.0f)
+        distance = dx9rend::rendererCasterLodDistance();
     std::memcpy(&mesh.m_dword288, &distance, sizeof(distance));
     std::memcpy(&op.tail220, &distance, sizeof(distance));
 

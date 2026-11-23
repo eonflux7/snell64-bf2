@@ -1360,6 +1360,26 @@ bool getSunBakedFallback() { return sunStaticSettings().bakedFallback; }
 void setSunBakedFallback(bool value) { sunStaticSettings().bakedFallback = value; }
 BF2_CONSOLE_PROPERTY_FN(sunBakedFallback, bool, true, getSunBakedFallback(), setSunBakedFallback,
                         kRendererConsoleTag)
+// [RENDER] Render milestone 14: the static cascade's receiver offsets, in its texels.
+float getSunStaticNormalOffset() { return sunStaticSettings().normalOffset; }
+void setSunStaticNormalOffset(float value) { sunStaticSettings().normalOffset = value < 0.0f ? 0.0f : value > 8.0f ? 8.0f : value; }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(sunStaticNormalOffset, float, true, getSunStaticNormalOffset(),
+                                 setSunStaticNormalOffset, 0.0f, 8.0f, kRendererConsoleTag)
+float getSunStaticDepthBias() { return sunStaticSettings().depthBias; }
+void setSunStaticDepthBias(float value) { sunStaticSettings().depthBias = value < 0.0f ? 0.0f : value > 8.0f ? 8.0f : value; }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(sunStaticDepthBias, float, true, getSunStaticDepthBias(),
+                                 setSunStaticDepthBias, 0.0f, 8.0f, kRendererConsoleTag)
+// Texels per side of the static cascade: a power of two in 1024..8192 (redrawn on change).
+int getSunStaticResolution() { return static_cast<int>(sunStaticSettings().resolution); }
+void setSunStaticResolution(int value)
+{
+    unsigned int size = 1024;
+    while (size < 8192 && value > static_cast<int>(size + size / 2))
+        size *= 2;
+    sunStaticSettings().resolution = size;
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(sunStaticResolution, int, true, getSunStaticResolution(),
+                                 setSunStaticResolution, 1024, 8192, kRendererConsoleTag)
 
 // [RENDER] Contribution culling (milestone 9): a static mesh whose bounding sphere projects to fewer
 // pixels across than this is not drawn, and fades out over the 20 % above it; 0 turns it off.
@@ -1554,6 +1574,9 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowNormalOffset", "Receiver offset along its normal, in cascade texels (against acne)" },
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
         { "sunBakedFallback", "Milestone 14 A/B: 1 keeps the lightmaps' baked sun past the cascades, 0 the run-time sun term" },
+        { "sunStaticResolution", "Static sun cascade over the map: texels per side (1024-8192), drawn once per sun" },
+        { "sunStaticNormalOffset", "Static sun cascade: receiver offset along its normal, in its texels" },
+        { "sunStaticDepthBias", "Static sun cascade: receiver offset toward the sun, in its texels, times 1 + the slope's tangent" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
         { "weatherVisibility", "Weather: metres at which a level ray at the level's ground keeps 2 % contrast (lower: hazier)" },
         { "weatherAerosol", "Weather: the haze's kind, 0 continental (grey), 1 maritime (white), 2 dust (yellow-brown), 3 smoke" },

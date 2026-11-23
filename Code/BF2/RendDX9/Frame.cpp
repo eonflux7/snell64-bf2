@@ -351,7 +351,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     // transform (right, up, forward, position) over the projection scales, so position
     // + clip.w * forward + clip.x * right' + clip.y * up' is the world point of a clip position.
     rendererSunShadowsRender(time, g_sunCascadeConstants);
-    rendererSunStaticFrame(g_sunStaticConstants);   // [RENDER] milestone 14: the sun past the cascades
+    rendererSunStaticFrame(g_sunStaticConstants, time);   // [RENDER] milestone 14: the sun past the cascades
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
     rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
     rendererWaterFrame();        // [RENDER] milestone 16: the waves

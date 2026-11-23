@@ -951,7 +951,7 @@ bool objectDrawerCastsInto(world::IObject* object, const dx9rend::ShadowCascadeC
 }
 
 void ObjectDrawer::submitShadowCasters(const void* volume, const dx9rend::ShadowCascadeCull& range,
-                                       float time)
+                                       float time, bool staticOnly)
 {
     static ObjectDrawerSet candidates;
     static ObjectDrawerSet noCollision;
@@ -986,6 +986,9 @@ void ObjectDrawer::submitShadowCasters(const void* volume, const dx9rend::Shadow
         const unsigned int flags = object->getFlags();
         if ((flags & world::IObject::OFIsDisabled) != 0 || (flags & world::IObject::OFIsVisible) == 0)
             continue;
+        if (staticOnly && (flags & (world::IObject::OFHasMobilePhysics
+                                    | world::IObject::OFParentHasMobilePhysics)) != 0)
+            continue;
 
         // The shadow range swept toward the sun, before any work on the object.
         if (!objectDrawerCastsInto(object, range))
@@ -1011,6 +1014,11 @@ void ObjectDrawer::submitShadowCasters(const void* volume, const dx9rend::Shadow
             typedef void  (__thiscall* PassFn)(void*, void*, void*, int);
             typedef void* (__thiscall* NextFn)(void*);
             void** const vtbl = objectDrawerGeometryTable(geometry);
+            if (staticOnly && !geometryIsStaticMesh(geometry))
+            {
+                geometry = reinterpret_cast<NextFn>(vtbl[0xCC / 4])(geometry);
+                continue;
+            }
 
             const size_t first = dx9rend::rendererShadowCasters().size();
             reinterpret_cast<PassFn>(vtbl[0x18 / 4])(geometry, m_renderView, m_occluder, 1);
@@ -1027,11 +1035,11 @@ void ObjectDrawer::submitShadowCasters(const void* volume, const dx9rend::Shadow
 }
 
 void objectDrawerSubmitShadowCasters(const void* volume, const dx9rend::ShadowCascadeCull& range,
-                                     float time)
+                                     float time, bool staticOnly)
 {
     if (dx9rend::g_ObjectDrawer)
         reinterpret_cast<ObjectDrawer*>(dx9rend::g_ObjectDrawer)
-            ->submitShadowCasters(volume, range, time);
+            ->submitShadowCasters(volume, range, time, staticOnly);
 }
 
 // PE 0x100F8C00. The first tree is walked forward, the second backward (rbegin to rend), each

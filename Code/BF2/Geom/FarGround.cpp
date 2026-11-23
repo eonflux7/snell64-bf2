@@ -160,6 +160,7 @@ struct State
     // The coarse heights on the CPU (the sea test) and the sea level, when it is a sea.
     Grid               coarse;
     std::vector<float> farHeight;
+    unsigned int       heightGeneration;   // [RENDER] milestone 14: raised as farHeight is rebuilt
     bool               seaValid;
     float              seaLevel;
 
@@ -468,6 +469,7 @@ bool composeHeights()
     const bool scaled = dx9rend::rendererFarGroundScaled();
     const std::size_t farCount = g.farE.size(), fineCount = g.fineE.size();
     g.farHeight.assign(farCount, 0.0f);
+    ++g.heightGeneration;
     int farWater = 0;
     for (int j = 0; j != g.coarse.n; ++j)
         for (int i = 0; i != g.coarse.n; ++i)
@@ -1509,6 +1511,19 @@ bool farGroundActive()
 {
     const int mode = dx9rend::rendererFarGround();
     return g.built && (mode == 2 || (mode == 1 && g.baked));
+}
+
+bool farGroundCoarseHeights(const float*& heights, int& n, float& origin, float& cell,
+                            unsigned int& generation)
+{
+    if (!g.built || g.farHeight.empty())
+        return false;
+    heights = g.farHeight.data();
+    n = g.coarse.n;
+    origin = g.coarse.origin;
+    cell = g.coarse.cell;
+    generation = g.heightGeneration;
+    return true;
 }
 
 bool farGroundSeaIn(float x0, float z0, float x1, float z1)

@@ -550,6 +550,8 @@ struct EffectWalk
     int constMax;              // [RENDER] the highest pixel float4 register an effect's own constant uses
     std::string constMaxName;
     unsigned int collisions;   // effect constants inside the engine-owned registers (contract 36)
+    unsigned int paramRegsMax; // without bytecode: the most float4 registers an effect's own numeric
+    std::string paramRegsMaxName;   // parameters could take, all of them in one shader
 };
 
 // [RENDER] The engine-owned pixel registers' names (RendDX9Base.h, kEngineRegisterBegin..End).
@@ -634,6 +636,7 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
     unsigned int ps = 0, vs = 0;
     std::set<std::string> cubes, cubeParams;
     unsigned int samplerParams = 0;
+    unsigned int paramRegs = 0;
     std::set<const DWORD*> seen;
     unsigned int functions = 0;
     int constHighest = -1;
@@ -673,6 +676,28 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
             cubeParams.insert(pd.Name ? pd.Name : "?");
         if (pd.Type >= D3DXPT_SAMPLER && pd.Type <= D3DXPT_SAMPLERCUBE)
             samplerParams += pd.Elements ? pd.Elements : 1;
+        // [RENDER] Float4 registers the parameter could take (an upper bound: a column-major
+        // matrix takes its columns, a vector one, each array element its own).
+        if ((pd.Class == D3DXPC_SCALAR || pd.Class == D3DXPC_VECTOR || pd.Class == D3DXPC_MATRIX_ROWS
+             || pd.Class == D3DXPC_MATRIX_COLUMNS) && !engineOwnedConstant(pd.Name))
+        {
+            const unsigned int each = pd.Class == D3DXPC_MATRIX_ROWS ? pd.Rows
+                                    : pd.Class == D3DXPC_MATRIX_COLUMNS ? pd.Columns : 1u;
+            paramRegs += each * (pd.Elements ? pd.Elements : 1);
+        }
+        else if (pd.Class == D3DXPC_STRUCT && !engineOwnedConstant(pd.Name))
+        {
+            // Each member starts a register: the larger of its bytes and its members, per element
+            const unsigned int elements = pd.Elements ? pd.Elements : 1u;
+            const unsigned int bytes = (pd.Bytes + 15u) / 16u;
+            const unsigned int members = pd.StructMembers * elements;
+            paramRegs += bytes > members ? bytes : members;
+        }
+    }
+    if (paramRegs > walk.paramRegsMax)
+    {
+        walk.paramRegsMax = paramRegs;
+        walk.paramRegsMaxName = name;
     }
     int highest = -1;
     for (int i = 0; i < 16; ++i)
@@ -748,6 +773,9 @@ void writeEffects(FILE* f)
                     "engine-owned c%u-c%u; %u effect constants inside them\n", walk.constMax,
                  walk.constMaxName.c_str(), kEngineRegisterBegin, kEngineRegisterEnd - 1,
                  walk.collisions);
+    std::fprintf(f, "[effects] the most float4 registers one effect's own numeric parameters could take: "
+                    "%u ('%s'); below c%u none can reach the engine's\n", walk.paramRegsMax,
+                 walk.paramRegsMaxName.c_str(), kEngineRegisterBegin);
 }
 
 void writeReport()

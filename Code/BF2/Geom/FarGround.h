@@ -67,6 +67,11 @@ bool farGroundSeaIn(float x0, float z0, float x1, float z1);
 // The level's height above sea level from its bake (version 2): real elevation = level height +
 // `offset` (m). False without a bake or with a version 1 bake. Render milestone 18's altitude.
 bool farGroundBakeSeaOffset(float& offset);
+// [RENDER] Render milestone 14: the coarse heights as drawn (before the curvature's drop): n x n
+// nodes, row z, node (i, j) at (origin + i * cell, origin + j * cell); the map inside them. A new
+// `generation` each time they are rebuilt. False when the far ground is not built.
+bool farGroundCoarseHeights(const float*& heights, int& n, float& origin, float& cell,
+                            unsigned int& generation);
 void farGroundRelease();
 
 } // namespace geom

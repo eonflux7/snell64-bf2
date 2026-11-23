@@ -335,6 +335,8 @@ void* staticMeshRootParent(void* object);
 // IID_IPlayerControlObject: that interface, or null. Skinned meshes' first-person test and the
 // nametags use it.
 void* staticMeshControlObject(void* object);
+// [RENDER] Milestone 14: a geometry instance is a static mesh.
+bool geometryIsStaticMesh(const void* geometry);
 
 // 0x100FDC20, called on storage the template already allocated (retail 0x37C bytes).
 StaticMesh* staticMeshConstruct(void* storage, void* objectTemplate);

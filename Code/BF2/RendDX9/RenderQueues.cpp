@@ -3317,6 +3317,17 @@ bool rendererCasterCaptureActive()
     return g_casterCapture.active;
 }
 
+// [RENDER] Milestone 14: the static cascade's casters take their LOD at this distance, not the
+// camera's (0: the camera's).
+namespace {
+float g_casterLodDistance = 0.0f;
+}
+
+float& rendererCasterLodDistance()
+{
+    return g_casterLodDistance;
+}
+
 namespace {
 // 3, the safe side (owner, 2026-11-19): 8 saved about 10 % on Fallujah West and Muttrah City but
 // drops props at distances where they are still seen.

@@ -807,6 +807,10 @@ void rendererBeginCasterCapture(const Frustum* volume);
 void rendererEndCasterCapture();
 const Frustum* rendererSubmitCullFrustum();
 bool rendererCasterCaptureActive();   // a shadow pass is capturing (draw() submits casters)
+// [RENDER] Milestone 14: while > 0 and a capture is active, static meshes choose their LOD (and their
+// contribution cull) at this distance instead of the camera's, so the static cascade's casters do
+// not depend on where the camera is.
+float& rendererCasterLodDistance();
 // [RENDER] Milestone 9 contribution culling (renderer.contributionCull): the projected diameter,
 // in pixels, below which a static mesh is not drawn; 0 turns the cull off.
 float rendererContributionCullPixels();
@@ -1141,15 +1145,15 @@ struct SunStaticSettings
 {
     bool bakedFallback;         // renderer.sunBakedFallback: the lightmaps' baked sun past the cascades
     unsigned int resolution;    // renderer.sunStaticResolution: the static cascade's texels per side
-    float normalOffset;         // renderer.sunStaticNormalOffset: receiver offset along its normal, m
-    float depthBias;            // renderer.sunStaticDepthBias: receiver offset toward the sun, m
+    float normalOffset;         // renderer.sunStaticNormalOffset: receiver offset along its normal, texels
+    float depthBias;            // renderer.sunStaticDepthBias: toward the sun, texels per (1 + the slope's tangent)
     unsigned int heightSize;    // the shadow height's texels per side
 };
 SunStaticSettings& sunStaticSettings();
 // Fills this frame's RaSunStatic (kSunStaticVec4s float4s); draws the layers first when the sun,
 // the level or a setting changed since they were drawn, or a static caster changed.
-void rendererSunStaticFrame(float* constants);
-// The static layers need drawing again (a static object added or destroyed; the sun moved).
+void rendererSunStaticFrame(float* constants, float time);
+// The static layers need drawing again (a static object added or destroyed).
 void rendererSunStaticInvalidate();
 IDirect3DTexture9* rendererSunStaticAtlas();
 void rendererSunStaticRelease();
