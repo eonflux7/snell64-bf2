@@ -99,6 +99,7 @@ struct Params
     void* heightFar; // RaFarGroundHeightFar (texture, coarse)
     void* heightEdge; // RaFarGroundHeightEdge (texture, the map's cell around its edge)
     void* color;     // RaFarGroundColor (texture)
+    void* colorFar;  // RaFarGroundColorFar (texture, the bake's land classes coloured)
 };
 
 // A square grid of nodes: node (i, j) at (origin + i * cell, origin + j * cell).
@@ -133,17 +134,19 @@ struct State
     IDirect3DTexture9* heightFarTexture;
     IDirect3DTexture9* heightEdgeTexture;
     IDirect3DTexture9* colorTexture;
+    IDirect3DTexture9* colorFarTexture;
     dx9rend::EngineTexture heightValue;
     dx9rend::EngineTexture heightFarValue;
     dx9rend::EngineTexture heightEdgeValue;
     dx9rend::EngineTexture colorValue;
+    dx9rend::EngineTexture colorFarValue;
     void*              vertexBuffer;
     void*              indexBuffer;
     void*              declaration;
     unsigned int       vertexCount;
     unsigned int       primCount;
     Params             params;
-    float              constants[8][4];
+    float              constants[9][4];
 
     // The coarse heights on the CPU (the sea test) and the sea level, when it is a sea.
     Grid               coarse;
@@ -176,6 +179,14 @@ struct State
     bool               bakeSea;   // baked with the real sea on the level's (coastal levels)
     bool               bakeHasSeaOffset;   // version 2: the level's height above sea level
     float              bakeSeaOffset;      // m: real elevation = level height + this
+    // Version 3: ESA WorldCover's land class per node (10 tree .. 100 moss, 0 none) on its own grid.
+    Grid               classGrid;
+    std::vector<unsigned char> bakeClass;
+
+    // The map's colour in linear rgb, as built into the colour texture (mapColorSize a side, row z),
+    // until the far colour has taken its class means.
+    std::vector<float> mapLinear;
+    unsigned int       mapColorSize;
 };
 
 State g;
@@ -511,22 +522,35 @@ bool loadBake()
         char         magic[8];
         unsigned int version, n;
         float        origin, cell, scale, bias, ratio, pivot, sea, seaOffset;
-        unsigned int reserved[4];
+        unsigned int classNodes;        // version 3: the land classes' nodes a side
+        float        classOrigin, classCell;
+        unsigned int reserved;
     } h;
     static_assert(sizeof(Header) == 64, "the bake's header is 64 bytes");
     bool ok = std::fread(&h, sizeof(h), 1, in) == 1 && std::memcmp(h.magic, "EONFAR1", 8) == 0
-              && (h.version == 1 || h.version == 2)
-              && h.n >= 2 && h.n <= 8192 && h.cell > 0.0f;
+              && h.version >= 1 && h.version <= 3
+              && h.n >= 2 && h.n <= 8192 && h.cell > 0.0f
+              && (h.version < 3 || (h.classNodes >= 2 && h.classNodes <= 8192 && h.classCell > 0.0f));
     std::vector<short> raw;
     if (ok)
     {
         raw.resize(static_cast<std::size_t>(h.n) * h.n);
         ok = std::fread(&raw[0], sizeof(short), raw.size(), in) == raw.size();
     }
+    g.bakeClass.clear();
+    if (ok && h.version >= 3)
+    {
+        g.bakeClass.resize(static_cast<std::size_t>(h.classNodes) * h.classNodes);
+        ok = std::fread(&g.bakeClass[0], 1, g.bakeClass.size(), in) == g.bakeClass.size();
+        g.classGrid.n = static_cast<int>(h.classNodes);
+        g.classGrid.origin = h.classOrigin;
+        g.classGrid.cell = h.classCell;
+    }
     std::fclose(in);
     if (!ok)
     {
-        ::renddx9abi::logf("[farground] %s: not a bake (version 1 or 2)", path.c_str());
+        g.bakeClass.clear();
+        ::renddx9abi::logf("[farground] %s: not a bake (version 1 to 3)", path.c_str());
         return false;
     }
     g.bake.resize(raw.size());
@@ -541,9 +565,10 @@ bool loadBake()
     g.bakeHasSeaOffset = h.version >= 2;
     g.bakeSeaOffset = h.version >= 2 ? h.seaOffset : 0.0f;
     ::renddx9abi::logf("[farground] bake %s: %ux%u of %.1f m from %.0f m; scaled variant x%.3f about %.1f m; "
-                       "%s",
+                       "%s; land classes %s",
                        path.c_str(), h.n, h.n, h.cell, h.origin, h.ratio, h.pivot,
-                       g.bakeSea ? "coastal, its sea on the level's" : "inland, no water past known ground");
+                       g.bakeSea ? "coastal, its sea on the level's" : "inland, no water past known ground",
+                       g.bakeClass.empty() ? "none" : "baked");
     return true;
 }
 
@@ -1036,6 +1061,16 @@ bool buildColor(Terrain* t, float mapHalf)
     if (texels > 0.0)
         for (int k = 0; k != 3; ++k)
             mean[k] = static_cast<float>(sum[k] / texels);
+    g.mapLinear.assign(3 * static_cast<std::size_t>(size) * size, -1.0f);   // -1: no colormap
+    g.mapColorSize = size;
+    for (unsigned int y = 0; y != size; ++y)
+    {
+        const unsigned char* row = static_cast<const unsigned char*>(locked.pBits) + y * locked.Pitch;
+        for (unsigned int x = 0; x != size; ++x)
+            if (cells[static_cast<std::size_t>(y / cellTexels) * count + x / cellTexels])
+                for (int k = 0; k != 3; ++k)
+                    g.mapLinear[3 * (static_cast<std::size_t>(y) * size + x) + k] = srgbToLinear(row[4 * x + 2 - k] / 255.0f);
+    }
     if (copied < count * count)
     {
         unsigned char fill[4] = { 0, 0, 0, 255 };
@@ -1085,6 +1120,155 @@ bool buildColor(Terrain* t, float mapHalf)
     g.constants[2][2] = static_cast<float>(size) / (2.0f * mapHalf);
     ::renddx9abi::logf("[farground] map colour: %ux%u, %d of %d patches, mean linear %.3f %.3f %.3f; detail fade: record %d",
                        size, size, copied, count * count, mean[0], mean[1], mean[2], fade);
+    return true;
+}
+
+// The land classes' colours past the map (ESA WorldCover). Each class has a reference albedo; the
+// map's colour under the bake gives them its tint and brightness (one gain per channel over the
+// classes found there), and a class well represented under the map leans toward its own mean there.
+// Levels are artistic takes on their places, so a class's own mean is only half trusted.
+struct LandClass
+{
+    unsigned char id;
+    const char*   name;
+    float         albedo[3];   // linear, a plausible reference
+};
+const LandClass kLandClasses[] = {
+    { 10, "tree",     { 0.045f, 0.070f, 0.035f } },
+    { 20, "shrub",    { 0.120f, 0.110f, 0.065f } },
+    { 30, "grass",    { 0.130f, 0.150f, 0.070f } },
+    { 40, "crop",     { 0.140f, 0.150f, 0.080f } },
+    { 50, "built",    { 0.190f, 0.180f, 0.165f } },
+    { 60, "bare",     { 0.300f, 0.255f, 0.195f } },
+    { 70, "snow",     { 0.800f, 0.800f, 0.820f } },
+    { 80, "water",    { 0.040f, 0.050f, 0.050f } },   // drawn as ground (rivers inland, a sea bed)
+    { 90, "wetland",  { 0.080f, 0.100f, 0.060f } },
+    { 95, "mangrove", { 0.040f, 0.065f, 0.030f } },
+    { 100, "moss",    { 0.150f, 0.150f, 0.100f } },
+};
+const int   kLandClassCount = sizeof(kLandClasses) / sizeof(kLandClasses[0]);
+const float kClassTrustTexels = 3000.0f;   // class texels under the map for its own mean to count fully
+const float kClassOwnShare = 0.5f;         // at most this much of a class's colour is its own mean
+const unsigned int kColorFarTexels = 2048; // the far colour, texels a side
+const float kColorFarBlend = 1500.0f;      // m past the map: the edge colour to the far colour
+
+bool buildFarColor(float mapHalf)
+{
+    g.constants[8][3] = 0.0f;
+    if (g.bakeClass.empty() || g.mapLinear.empty())
+    {
+        std::vector<float>().swap(g.mapLinear);
+        return true;
+    }
+    // The map's colour per class under it.
+    int index[256];
+    for (int i = 0; i != 256; ++i)
+        index[i] = -1;
+    for (int c = 0; c != kLandClassCount; ++c)
+        index[kLandClasses[c].id] = c;
+    double sum[kLandClassCount][3] = {};
+    double texels[kLandClassCount] = {};
+    const Grid& cg = g.classGrid;
+    const unsigned int size = g.mapColorSize;
+    for (int j = 0; j != cg.n; ++j)
+    {
+        const float z = cg.x(j);
+        if (std::fabs(z) >= mapHalf)
+            continue;
+        const unsigned int ty = (std::min)(static_cast<unsigned int>((z / (2.0f * mapHalf) + 0.5f) * size), size - 1);
+        for (int i = 0; i != cg.n; ++i)
+        {
+            const float x = cg.x(i);
+            if (std::fabs(x) >= mapHalf)
+                continue;
+            const int c = index[g.bakeClass[static_cast<std::size_t>(j) * cg.n + i]];
+            const unsigned int tx = (std::min)(static_cast<unsigned int>((x / (2.0f * mapHalf) + 0.5f) * size), size - 1);
+            const float* const rgb = &g.mapLinear[3 * (static_cast<std::size_t>(ty) * size + tx)];
+            if (c < 0 || rgb[0] < 0.0f)
+                continue;
+            for (int k = 0; k != 3; ++k)
+                sum[c][k] += rgb[k];
+            texels[c] += 1.0;
+        }
+    }
+    std::vector<float>().swap(g.mapLinear);
+    double mapSum[3] = {}, refSum[3] = {}, total = 0.0;
+    for (int c = 0; c != kLandClassCount; ++c)
+    {
+        for (int k = 0; k != 3; ++k)
+        {
+            mapSum[k] += sum[c][k];
+            refSum[k] += texels[c] * kLandClasses[c].albedo[k];
+        }
+        total += texels[c];
+    }
+    if (total < 1.0)
+    {
+        ::renddx9abi::logf("[farground] far colour: no land classes under the map; the edge colour past it");
+        return true;
+    }
+    float colour[256][3];
+    for (int i = 0; i != 256; ++i)
+        for (int k = 0; k != 3; ++k)
+            colour[i][k] = static_cast<float>(mapSum[k] / total);
+    for (int c = 0; c != kLandClassCount; ++c)
+    {
+        const float trust = kClassOwnShare * clamp01(static_cast<float>(texels[c]) / kClassTrustTexels);
+        for (int k = 0; k != 3; ++k)
+        {
+            const float ref = kLandClasses[c].albedo[k] * static_cast<float>(mapSum[k] / (std::max)(refSum[k], 1e-6));
+            const float own = texels[c] > 0.0 ? static_cast<float>(sum[c][k] / texels[c]) : ref;
+            colour[kLandClasses[c].id][k] = ref + (own - ref) * trust;
+        }
+        if (texels[c] > 0.0 || c < 7)
+            ::renddx9abi::logf("[farground] far colour: %-8s %6.0f texels under the map, linear %.3f %.3f %.3f",
+                               kLandClasses[c].name, texels[c], colour[kLandClasses[c].id][0],
+                               colour[kLandClasses[c].id][1], colour[kLandClasses[c].id][2]);
+    }
+
+    // The classes coloured at their grid, into an sRGB DXT1 texture over the bake's square.
+    std::vector<unsigned int> pixels(static_cast<std::size_t>(cg.n) * cg.n);
+    unsigned char lut[256][3];
+    for (int i = 0; i != 256; ++i)
+        for (int k = 0; k != 3; ++k)
+            lut[i][k] = static_cast<unsigned char>(linearToSrgb(clamp01(colour[i][k])) * 255.0f + 0.5f);
+    for (std::size_t p = 0; p != pixels.size(); ++p)
+    {
+        const unsigned char* const v = lut[g.bakeClass[p]];
+        pixels[p] = 0xFF000000u | (static_cast<unsigned int>(v[0]) << 16) | (static_cast<unsigned int>(v[1]) << 8) | v[2];
+    }
+    std::vector<unsigned char>().swap(g.bakeClass);
+    IDirect3DTexture9* texture = 0;
+    if (FAILED(device()->CreateTexture(kColorFarTexels, kColorFarTexels, 0, 0, D3DFMT_DXT1, D3DPOOL_MANAGED, &texture, 0)))
+    {
+        ::renddx9abi::logf("[farground] could not create the far colour texture");
+        return true;
+    }
+    IDirect3DSurface9* dst = 0;
+    const RECT rect = { 0, 0, cg.n, cg.n };
+    bool ok = SUCCEEDED(texture->GetSurfaceLevel(0, &dst))
+              && SUCCEEDED(D3DXLoadSurfaceFromMemory(dst, 0, 0, &pixels[0], D3DFMT_A8R8G8B8,
+                                                     static_cast<UINT>(4 * cg.n), 0, &rect, D3DX_FILTER_TRIANGLE, 0));
+    if (dst)
+        dst->Release();
+    ok = ok && SUCCEEDED(D3DXFilterTexture(texture, 0, 0, D3DX_FILTER_BOX));
+    if (!ok)
+    {
+        texture->Release();
+        ::renddx9abi::logf("[farground] could not fill the far colour texture");
+        return true;
+    }
+    g.colorFarTexture = texture;
+    g.colorFarValue.baseTexture = texture;
+    // [8]: far colour uv = xz * x + y (texel centres at the class nodes); z 1 / the blend from the
+    // edge colour; w 1 when drawn.
+    const float span = static_cast<float>(cg.n) * cg.cell;
+    g.constants[8][0] = 1.0f / span;
+    g.constants[8][1] = (-cg.origin / cg.cell + 0.5f) / static_cast<float>(cg.n);
+    g.constants[8][2] = 1.0f / kColorFarBlend;
+    g.constants[8][3] = 1.0f;
+    ::renddx9abi::logf("[farground] far colour: %dx%d land classes of %.0f m into %ux%u DXT1, %.0f texels under the map",
+                       cg.n, cg.n, cg.cell, kColorFarTexels, kColorFarTexels, total);
     return true;
 }
 
@@ -1257,7 +1441,7 @@ void farGroundUpdate(Terrain* terrain)
                           * terrain->m_primaryWorldScale.x;
     const float mapCell = terrain->m_primaryWorldScale.x > 0.0f ? terrain->m_primaryWorldScale.x : 4.0f;
     const bool ok = buildHeights(terrain, cluster, mapHalf, mapCell) && buildColor(terrain, mapHalf)
-                    && buildMesh(mapHalf, mapCell);
+                    && buildFarColor(mapHalf) && buildMesh(mapHalf, mapCell);
     clearRing();
     if (!ok)
     {
@@ -1274,6 +1458,7 @@ void farGroundUpdate(Terrain* terrain)
     g.params.heightFar = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeightFar"));
     g.params.heightEdge = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundHeightEdge"));
     g.params.color = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundColor"));
+    g.params.colorFar = dx9rend::effectGetShaderParameter(fx, std::string("RaFarGroundColorFar"));
     g.built = true;
     ::renddx9abi::logf("[farground] built: map half side %.0f m, %u triangles, %d levels to %.0f m",
                        mapHalf, g.primCount, kLevels, 0.5f * kCells * kCell0 * static_cast<float>(1 << (kLevels - 1)));
@@ -1340,6 +1525,8 @@ bool drawWith(Terrain* terrain, const std::string& technique)
     param(g.params.heightFar)->setValue(&g.heightFarValue, 0);
     param(g.params.heightEdge)->setValue(&g.heightEdgeValue, 0);
     param(g.params.color)->setValue(&g.colorValue, 0);
+    if (g.params.colorFar)
+        param(g.params.colorFar)->setValue(g.colorFarTexture ? &g.colorFarValue : &g.colorValue, 0);
     // The detail fade reads the terrain's atlases, as drawFinal binds them.
     const TerrainAtlases* const atlases = terrainAtlases();
     const int atlasCount = atlases ? static_cast<int>(atlases->detail.size()) : 0;
@@ -1391,6 +1578,7 @@ void releaseBuilt()
     releaseTexture(g.heightFarTexture, g.heightFarValue);
     releaseTexture(g.heightEdgeTexture, g.heightEdgeValue);
     releaseTexture(g.colorTexture, g.colorValue);
+    releaseTexture(g.colorFarTexture, g.colorFarValue);
     if (g.vertexBuffer)
         dx9rend::vertexBufferRelease(g.vertexBuffer);
     if (g.indexBuffer)
@@ -1406,6 +1594,7 @@ void releaseBuilt()
     releaseParam(g.params.heightFar);
     releaseParam(g.params.heightEdge);
     releaseParam(g.params.color);
+    releaseParam(g.params.colorFar);
     std::vector<float>().swap(g.farHeight);
     std::vector<float>().swap(g.fineE);
     std::vector<float>().swap(g.fineDist);
@@ -1414,6 +1603,8 @@ void releaseBuilt()
     std::vector<float>().swap(g.edgeMap);
     std::vector<float>().swap(g.edgeDelta);
     std::vector<float>().swap(g.bake);
+    std::vector<unsigned char>().swap(g.bakeClass);
+    std::vector<float>().swap(g.mapLinear);
     g.seaValid = false;
     g.baked = false;
     g.built = false;
