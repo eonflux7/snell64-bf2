@@ -413,15 +413,19 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   Multiple scattering: Dagor's three octaves (contribution 0.7, attenuation 0.3, eccentricity
   0.6, weights normalized to 1); the first octave takes the droplet phase, the others a dual-lobe
   HG; the light volume will store the last octave's transmittance and the include raises it to the
-  others'. Ambient: the sky from above, half desaturated (Frostbite, Dagor), and the ground from
-  below, averaged over the sphere. A test effect compiles to 113 ps_3_0 slots.
+  others'. Ambient: the sky from above and the ground from below, their mean over the sphere
+  plus the L1 band seen along the view ray through an effective anisotropy g = 0.6
+  (`Ra_CloudAmbientAlong`, contract 34; de-ringed per channel), so a cloud takes the colour of
+  the sky behind it. Frostbite's and Dagor's half desaturation is off: it greyed the dusk sky. A test effect compiles to 113 ps_3_0 slots.
 - *Cloud light* (`Atmosphere.cpp`, `buildCloudLight`, after Dagor's `clouds_light_color`),
-  built with the fit (adds about 25 ms): `RaCloudLightTable`, 64x24 `A16B16G16R16F`, managed. 8
-  altitude tiles across (layer i at (i + 0.5)/8 of 12 km above the reference height), 3 rows of
+  built with the fit (adds about 25 ms): `RaCloudLightTable`, 64x32 `A16B16G16R16F`, managed. 8
+  altitude tiles across (layer i at (i + 0.5)/8 of 12 km above the reference height), 4 rows of
   tiles down: the sun's irradiance (the sun above the atmosphere times the transmittance there),
   the sky's mean radiance from above (its cosine-weighted irradiance / π, from the sky model at
   that radius and sun cosine) and the ground's radiance from below (albedo times the ground's sun
-  and sky irradiance / π, through the air up to the layer). A tile's 8x8 texels span ±280 km
+  and sky irradiance / π, through the air up to the layer); the fourth (contract 34), the sky's
+  first moment toward the sun's azimuth / π (∫ L sin θ cos φ over the upper hemisphere), which
+  with the irradiance is the sky's L1. A tile's 8x8 texels span ±280 km
   around the level's origin, so the curvature lowers a far deck's sun. The haze is left out, and
   the ground everywhere has the level's albedo. Kashan Desert (sun 50°): sun 7.3/7.4/7.1 at
   0.75 km to 7.7/8.1/8.9 at 11 km; sky 0.07/0.15/0.36 to 0.02/0.04/0.12; ground 0.59/0.49/0.30.
@@ -496,6 +500,14 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
     defined, undersides still flat. Tried and dropped (owner, 2026-11-23): a density powder term
     (dims evenly, as Dagor's notes say), and near taps 150 m toward the sun and up (Dagor ships its
     sun taps off): rounder bases, but not the look.
+    Found (2026-11-23): at Kashan's dusk the flatness is the air, not the cloud light. Its
+    weather (visibility 20 km, dust, mixing 3500 m: 0.18/km up to 4.7 km above sea level) puts a
+    cloud 20–30 km off behind an optical depth of 4–5, so the haze's in-scatter is nearly all of
+    it; without the air in front (a debug switch) the same clouds show lit tops, blue shaded
+    sides and dark bases, and at `renderer.weatherVisibility 60000`, `weatherMixing 1500` they
+    keep them. From the ground the bases are lit mostly by the ambient (sun share small), hence
+    the view-dependent ambient (contract 34): with clear air the shaded sides away from the sun
+    go cool blue-grey instead of warm grey; under Kashan's own haze it barely shows.
   - Detail: the 32³ Worley at a 1.5 km tile erodes edges only, density − 0.2 · detail ·
     (1 − density), full to 8 km and none past 25 km (its 47 m texels alias further off).
     Subtracting 0.4 · detail outright first erased most of the field (mean densities are 0.1–0.3)
@@ -551,8 +563,9 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   sits in fog with cloud walls around. Open: the world's transparents (particles, smoke) still draw
   over clouds in front of them; the ground from altitude is the haze's flat colour past fog end
   and the map a dark slab (milestone 11's view distance, not the clouds); close up the 128 m field
-  reads as soft fog. Clouds away from the sun shade flat: the light volume's ~250 m cells
-  (Dagor's are the same) hold no shape at the detail's scale. Not measured: the GPU cost (the final GPU pass).
+  reads as soft fog. Far clouds at dusk shading flat was the haze in front (above, 2026-11-23);
+  close up the light volume's ~250 m cells (Dagor's are the same) still hold no shape at the
+  detail's scale. Not measured: the GPU cost (the final GPU pass).
 - *Coverage drives the lighting* (task 7; `SkyCube.cpp`, `Atmosphere.cpp`, `Clouds.cpp`; contract 16).
   A 256x128 panorama of the clouds from the level's origin, 2 m over the reference height
   (`RaCloudPanorama` into a small target, no history), is drawn about every 30 s and when a set
@@ -1282,6 +1295,7 @@ and add its row here.
 | 31 | The far ground's filtered heights (render milestone 17): `RaFarGround` grows to `float4[10]` ([9] 1 / the fine heights' texel, 1 / the coarse heights' texel, the vertices' height spacing per m of distance); `RaFarGroundHeight` and `RaFarGroundHeightFar` carry full box-filtered mip chains, read by `tex2Dlod` at log2(spacing / texel); the edge heights stay one level; the morph runs 18 to 28 cells |
 | 32 | One air integral (render milestone 12): the clouds' panorama, sky-light panorama and near passes get `RaTransmittanceTable`, `RaMultiScatterTable`, `RaCloudShadow` and `RaCloudShadowMap` (0 before the map's first build), as the aerial-perspective pass does; the cloud shadow map's technique is `RaCloudShadowBuild` |
 | 33 | The clouds' light bake (render milestone 12): `RaCloudBuildLight` gets `RaCloudDetail` and `RaClouds[7].z` (the detail tile, m), so the baked sun and sky visibility see the field eroded as the march erodes it near |
+| 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

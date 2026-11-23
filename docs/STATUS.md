@@ -39,6 +39,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Clouds (milestone 12, contracts 32–33): no step at the 16 km handoff and no far radial edge
   (one air integral, a cross-fade band); edge albedo and the eroded light bake. Kashan Desert,
   views `hb-owner`, `hb-owner-back`, sun `lightManager.sunDirection 0.7/-0.07/0.71`.
+- Clouds' ambient along the view (contract 34): shaded sides take the sky behind them. The dusk
+  flatness was Kashan's haze (render.md, 12, near clouds); compare with `renderer.weatherVisibility
+  60000` and `renderer.weatherMixing 1500` (the level's: 20000, 3500).
 
 ## Open issues
 
@@ -46,8 +49,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   baked noon sun term, so a dark disc round the camera and a bright map against the far ground.
   Proposed: the sun term owned at run time everywhere (render milestone 14,
   [render.md](lanes/render.md#14-gtao--lightmap-channel-ownership)); not yet planned by the owner.
-- Clouds away from the sun shade flat ([render.md](lanes/render.md#12-clouds), near clouds'
-  open notes); edge albedo and the eroded light bake helped a little, near sun taps did not.
+- Far clouds at dusk shade flat under Kashan's dust haze (visibility 20 km, mixing 3500 m): the
+  air's in-scatter, as modelled; whether that haze is right for dusk (a deep dust layer at
+  sunset) is the owner's call ([render.md](lanes/render.md#12-clouds), near clouds' notes).
 
 - The default video profile picks 8x antialiasing while the scene runs 4x. Settle on fixed 4x (a
   single-sample HUD back buffer, the scene's own 4x depth; touches device init and reset).
