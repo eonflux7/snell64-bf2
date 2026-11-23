@@ -44,6 +44,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   60000` and `renderer.weatherMixing 1500` (the level's: 20000, 3500).
 - The sky under the deck (contract 35): gaps between clouds now take the clouds' shadow on the
   haze below the deck, so they no longer glow clear past veiled clouds. Same views.
+- Far clouds near the horizon (the sky's panorama read): no 1-pixel horizontal lines. Kashan
+  Desert, `hb-owner`, `renderer.cloudCoverage 0.6`, `cloudBase 1200`, `cloudTop 3500`, sun
+  `0.7017/-0.0349/0.7117`.
 
 ## Open issues
 

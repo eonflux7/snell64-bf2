@@ -321,7 +321,7 @@ later (owner); until then it is measured, not capped.
   daSkies2, below): Perlin-Worley shape and erosion noise, the cloud light table and sky as
   ambient, aerial perspective. Near clouds are marched from the camera per screen pixel at reduced
   resolution with temporal reprojection, stopped at the scene's depth; far ones come from a
-  cloud panorama (2048x1024, read with a Catmull-Rom filter; the 192x108 sky-view table is too coarse for cloud edges),
+  cloud panorama (2048x1024, read with a Catmull-Rom filter, and near the horizon, where a row is up to 8 times thinner than a texel is wide, averaged over a texel's width in rows so the march noise does not show as 1-pixel horizontal lines; the 192x108 sky-view table is too coarse for cloud edges),
   updated over several frames, drifting with the wind. Each panorama is blended into the previous
   one (weight 0.25) with a march offset that moves per panorama, so its jitter averages out
   instead of showing as grain about five screen pixels across, changing every 8 frames. The marches are real loops: unrolled, the
