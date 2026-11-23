@@ -989,16 +989,15 @@ CloudsInfo rendererCloudsInfo();
 // [RENDER] The frame's HDR post (HdrPost.cpp, render milestone 13, contract 19): bloom, the
 // luminance histogram and auto-exposure on the resolved scene, run by the post-production
 // composite just before the final copy, which it hands the exposure and the bloom (RaGrade on the
-// FSQuadDrawer effect). Thermals skip it. renderer.bloom, bloomStrength, exposure (auto 1, manual
-// 0: exposureBias stops), exposureBias, exposureMin, exposureMax (stops), exposureSpeed,
-// encodeSrgb. The targets go at a device reset.
+// FSQuadDrawer effect), and the sRGB encode. Thermals skip it (exposure 1, no bloom, the 2.2
+// encode). renderer.bloomStrength, exposureBias, exposureMin, exposureMax (stops), exposureSpeed.
+// The targets go at a device reset.
 void rendererHdrPost(EngineTexture* scene);
 // The particle effects' RaExposureParticle and RaExposureState (their emissives undo the exposure).
 void rendererHdrPostBindParticles(void* effect);
-// True while the bloom stands in for retail's glow passes (not under thermals).
+// True while the bloom stands in for retail's glow passes (everywhere but thermals).
 bool rendererBloomReplacesGlow();
 void rendererHdrPostRelease();
-bool& rendererBloomEnabled();
 // renderer.farGround (render milestone 17, Geom/FarGround.cpp): 0 the retail ring, 1 the far ground
 // where the level has a bake, 2 the far ground everywhere.
 int& rendererFarGround();
@@ -1007,15 +1006,13 @@ bool& rendererFarGroundScaled();
 // renderer.hexTiling (render milestone 19, Geom/TerrainDraw.cpp): the terrain's detail layers hex-tiled.
 bool& rendererHexTiling();
 float& rendererBloomStrength();
-bool& rendererExposureAuto();
 float& rendererExposureBias();
 float& rendererExposureMin();
 float& rendererExposureMax();
 float& rendererExposureSpeed();
-bool& rendererEncodeSrgb();
 struct HdrPostInfo
 {
-    bool ran, thermal, bloom, exposureAuto, encodeSrgb, lastSnap;
+    bool ran, thermal, lastSnap;
     float bloomStrength, exposureBias, exposureMin, exposureMax, exposureSpeed;
     float key, evLow, evRange, lowPercentile, highPercentile, rateLight, rateDark;
     unsigned int frames, sceneW, sceneH, levels;

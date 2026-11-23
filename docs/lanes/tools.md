@@ -429,7 +429,7 @@ The managed tables are locked where they are; the atlas is read back from its re
 `<outputDir>/<map>/exposure/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
 `RendDX9/ToolsAtmosphere.cpp`: the HDR post as the last frame left it. Fails before it has run.
 
-- `[settings]`: the `renderer.exposure*`, `bloom*` and `encodeSrgb` values, the adaptation rates
+- `[settings]`: the `renderer.exposure*` and `bloomStrength` values, the adaptation rates
   and the key. `[frame]`: frames run, whether the last ran (or thermals skipped it), its dt and
   whether it snapped, the scene's size.
 - `[state]`: adapted and metered EV (and luminance), the exposure as a multiplier and in stops.

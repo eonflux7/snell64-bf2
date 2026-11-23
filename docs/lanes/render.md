@@ -694,7 +694,7 @@ As built:
 
 ### 13. HDR bloom + auto-exposure
 
-Tasks 1–5 built (2026-11-22), in game, awaiting the owner's look; 6 dropped. Everything runs in
+Accepted by the owner, 2026-11-23, by eye; no GPU timing (owner). Task 6 dropped. Everything runs in
 `HdrPost.cpp` (effect `Shaders/RaHdrPost`, contract 19), called by the post-production composite
 (`postProductionFinish`) on the resolved single-sample float scene just before the final copy
 (FSQuadDrawer pass 0, the grade), after tinnitus, flashbang and gas mask; skipped when TV draws
@@ -703,10 +703,9 @@ the 2.2 encode, as before. Under water it all applies. Every pass is a full-scre
 a target of its own, unrolled by hand (no shader loops: they came out wrong under DXVK).
 
 1. **Dither and the encode.** The grade adds triangular noise of one 8-bit step (two interleaved
-   gradient noise values, offset each frame) after the encode. The encode is the sRGB curve
-   (`renderer.encodeSrgb 1`, the curve the samplers decode colour textures with) or the 2.2 power
-   (0, as before, the curve authored tints are decoded with); they part below 0.0031 linear, where
-   sRGB is darker. Tonemap and encode are now separate (`RGrade_Apply`, `RGrade_Encode`).
+   gradient noise values, offset each frame) after the encode. The encode is the sRGB curve (the
+   curve the samplers decode colour textures with), darker than retail's 2.2 power below 0.0031
+   linear; thermals keep the 2.2 power. Tonemap and encode are now separate (`RGrade_Apply`, `RGrade_Encode`).
 2. **Scene luminance.** The bloom's down chain runs (to its fourth level, 1/16 of the scene) even
    with the bloom off; that level, bilinear, down to 64 x 32 log2 luminances with a centre weight
    (1 at the centre to 0.25 at the corners). The 64-bin histogram over −14 to +10 EV is a gather,
@@ -720,7 +719,7 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    log2(key / adapted) + `renderer.exposureBias`, clamped to `renderer.exposureMin`/`Max`
    (−4, +4). The key is 0.42, calibrated, not 0.18: Muttrah City's reference views meter −1.0 to
    −1.3 EV, and 0.42 (−1.25 EV) shows them at milestone 11's accepted look (0 stops). The ceiling
-   is what keeps night dark (task 5). `renderer.exposure 0`: a fixed `exposureBias` stops.
+   is what keeps night dark (task 5). `renderer.exposureBias` adds stops over it.
    Particle emissives read the state per vertex (`RaExposureParticle`, `RaExposureState`) and
    divide by the exposure, so an emissive tint reaches the tonemap at its authored value, as
    retail showed it, by day and by night; one frame late (the state is written at the frame's end).
@@ -729,26 +728,25 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    1 / (1 + luminance)) and every scene sample's luminance capped at 100; up with a 3x3 tent of
    one smaller-level texel, added (blend ONE, ONE) into the level above; the grade takes level 0's
    tent at full size, divided by the level count, and mixes it in before the exposure:
-   lerp(scene, bloom, `renderer.bloomStrength` 0.04). While `renderer.bloom` is on (and not in
-   thermals) retail's glow is off: `postProductionSetGlowEnabled` keeps the owner's glow byte 0,
+   lerp(scene, bloom, `renderer.bloomStrength` 0.04). Outside thermals retail's glow is off: `postProductionSetGlowEnabled` keeps the owner's glow byte 0,
    so neither the scene glow (`GlowMaterial`) nor the `RSMTGlow` queue nor their composite runs,
-   as with retail's glow off; the night-vision distortion skips its glow part. Facing the sun the
+   as with retail's glow off; the night-vision distortion skips its glow part. Thermals, which
+   skip the HDR post, keep retail's glow until their rewrite. Facing the sun the
    disc gets a small halo, nothing tuned per source.
 5. **Night.** The Falklands' night layer (`gpm_cq 32`, view `w0`) meters −9 EV and sits on the
    ceiling: at +4 stops its terrain draws at about 25/255 (2.2 encode at 0 stops: 8/255; retail
    about 30/255, reached at +4.5, where the scene starts to read as an overcast dusk). The toe is
-   not changed. Night particles: not yet looked at there.
+   not changed. Accepted at +4.
 6. **Compressed (Karis) resolve: dropped** (owner, 2026-11-22). The owner sees no aliasing at
    bright edges with auto-exposure and bloom on. It would have meant every scene pixel shader
    writing compressed colour through an engine-owned register flag, an expansion pass at the
    resolve, and every pass blending before the resolve (decals, particles, water, first-person
    transparents, additive light passes) blending compressed values.
-7. **Judged by eye** on Muttrah City (street to open ground), Fallujah West (interiors), Saaremaa,
-   The Falklands (water glitter, night); GPU cost with the final GPU pass.
+7. **Judged by eye** and accepted (owner, 2026-11-23); no GPU timing.
 
 `tools.exposure` ([tools.md](tools.md#exposure)) dumps the state, histogram, meter and bloom.
-On acceptance: `renderer.exposure` and `renderer.encodeSrgb` (the A/B switches) and retail's glow
-passes are deleted, with `renderer.bloom` kept only if the owner wants bloom optional.
+On acceptance the A/B switches `renderer.exposure`, `renderer.encodeSrgb` and `renderer.bloom`
+were deleted (bloom always on, owner 2026-11-23); `bloomStrength` and the `exposure*` limits stay.
 
 ### 14. GTAO + lightmap channel ownership
 
@@ -934,7 +932,7 @@ Tasks:
    Seen on Kashan Desert `fg-corner`, `fg-corner2`.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
-   pass.
+   pass. Tasks 1–5 seen by the owner and fine for now (2026-11-23).
 
 ### 18. Atmosphere rework
 

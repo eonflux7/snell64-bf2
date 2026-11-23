@@ -59,15 +59,12 @@ const double kSnapSeconds = 0.5;
 
 struct State
 {
-    bool bloom = true;
     float bloomStrength = 0.04f;
-    bool exposureAuto = true;
-    float exposureBias = 0.0f;         // stops; the manual exposure while exposureAuto is off
+    float exposureBias = 0.0f;         // stops, over the auto-exposure
     // The ceiling keeps night dark: The Falklands' night layer meters -9 EV and sits on it; at +4
     // its terrain draws at about 25/255 (retail about 30, at +4.5).
     float exposureMin = -4.0f, exposureMax = 4.0f;
     float exposureSpeed = 1.0f;
-    bool encodeSrgb = true;
 
     unsigned int w = 0, h = 0;          // the scene's size the targets were made for
     unsigned int levelW[kLevels] = {}, levelH[kLevels] = {};
@@ -287,15 +284,14 @@ bool runPasses(EngineTexture* scene)
     stateManagerPush();
     stateManagerSetDepthStencilSurface(0);
 
-    // Down: all six levels for the bloom, to the meter's level for the exposure alone
-    const unsigned int down = s.bloom ? kLevels : (s.exposureAuto ? kMeterLevel + 1 : 0);
+    // Down: all six levels
     bool ok = p.draw("RaBloomDownKaris", sceneTexture, scene->width, scene->height, s.level[0]);
-    for (unsigned int i = 1; ok && i < down; ++i)
+    for (unsigned int i = 1; ok && i < kLevels; ++i)
         ok = p.draw("RaBloomDown", s.level[i - 1], s.levelW[i - 1], s.levelH[i - 1], s.level[i]);
 
     // Metering and adaptation, before the up chain adds into the meter's level
     bool metered = false;
-    if (ok && s.exposureAuto)
+    if (ok)
     {
         const int next = s.live == 0 ? 1 : 0;
         if (p.history)
@@ -313,7 +309,7 @@ bool runPasses(EngineTexture* scene)
 
     // Up: each level's tent added into the one above
     bool bloomed = false;
-    if (ok && s.bloom)
+    if (ok)
     {
         bloomed = true;
         for (unsigned int i = kLevels - 1; bloomed && i > 0; --i)
@@ -333,7 +329,7 @@ bool runPasses(EngineTexture* scene)
         savedDepth->Release();
     effectRelease(static_cast<Effect*>(effect));
     ++s.frames;
-    return ok && (bloomed || !s.bloom) && (metered || !s.exposureAuto);
+    return ok && bloomed && metered;
 }
 
 } // anonymous namespace
@@ -342,7 +338,7 @@ void rendererHdrPost(EngineTexture* scene)
 {
     State& s = st();
     s.thermal = thermalView();
-    s.ran = !s.thermal && (s.bloom || s.exposureAuto) && runPasses(scene);
+    s.ran = !s.thermal && runPasses(scene);
     if (s.thermal)
         s.stateLiveForParticles = false;
 
@@ -351,11 +347,11 @@ void rendererHdrPost(EngineTexture* scene)
     ID3DXEffect* const d3dx = fsq ? static_cast<ID3DXEffect*>(effectD3dxHandle(fsq)) : 0;
     if (!d3dx)
         return;
-    const bool autoExposure = s.ran && s.exposureAuto && s.live >= 0;
-    const bool bloom = s.ran && s.bloom;
+    const bool autoExposure = s.ran && s.live >= 0;
+    const bool bloom = s.ran;
     float g[2][4] = {
         { autoExposure ? 1.0f : 0.0f, bloom ? s.bloomStrength : 0.0f,
-          (s.encodeSrgb && !s.thermal) ? 1.0f : 0.0f, static_cast<float>(s.frames % 64) },
+          s.thermal ? 0.0f : 1.0f, static_cast<float>(s.frames % 64) },
         { bloom ? 1.0f / s.levelW[0] : 0.0f, bloom ? 1.0f / s.levelH[0] : 0.0f,
           s.thermal ? 0.0f : s.exposureBias, 1.0f / kLevels },
     };
@@ -373,7 +369,7 @@ void rendererHdrPostBindParticles(void* effect)
     ID3DXEffect* const d3dx = effect ? static_cast<ID3DXEffect*>(effectD3dxHandle(effect)) : 0;
     if (!d3dx)
         return;
-    const bool autoExposure = s.exposureAuto && s.stateLiveForParticles && s.live >= 0;
+    const bool autoExposure = s.stateLiveForParticles && s.live >= 0;
     const float c[4] = { autoExposure ? 1.0f : 0.0f, s.thermal ? 0.0f : s.exposureBias, 0.0f, 0.0f };
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaExposureParticle"))
         d3dx->SetVector(h, reinterpret_cast<const D3DXVECTOR4*>(c));
@@ -383,7 +379,7 @@ void rendererHdrPostBindParticles(void* effect)
 
 bool rendererBloomReplacesGlow()
 {
-    return st().bloom && !thermalView();
+    return !thermalView();
 }
 
 void rendererHdrPostRelease()
@@ -391,14 +387,11 @@ void rendererHdrPostRelease()
     releaseAll();
 }
 
-bool& rendererBloomEnabled() { return st().bloom; }
 float& rendererBloomStrength() { return st().bloomStrength; }
-bool& rendererExposureAuto() { return st().exposureAuto; }
 float& rendererExposureBias() { return st().exposureBias; }
 float& rendererExposureMin() { return st().exposureMin; }
 float& rendererExposureMax() { return st().exposureMax; }
 float& rendererExposureSpeed() { return st().exposureSpeed; }
-bool& rendererEncodeSrgb() { return st().encodeSrgb; }
 
 HdrPostInfo rendererHdrPostInfo()
 {
@@ -406,9 +399,6 @@ HdrPostInfo rendererHdrPostInfo()
     HdrPostInfo i;
     i.ran = s.ran;
     i.thermal = s.thermal;
-    i.bloom = s.bloom;
-    i.exposureAuto = s.exposureAuto;
-    i.encodeSrgb = s.encodeSrgb;
     i.bloomStrength = s.bloomStrength;
     i.exposureBias = s.exposureBias;
     i.exposureMin = s.exposureMin;

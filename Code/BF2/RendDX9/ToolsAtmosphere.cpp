@@ -932,11 +932,10 @@ bool toolsWriteExposure(const char* base, const char*& message)
     }
     std::string failed;
     std::fprintf(f, "# tools.exposure (render milestone 13): bloom and auto-exposure, the last frame's\n");
-    std::fprintf(f, "[settings] exposure %s, bias %.2f, min %.2f, max %.2f stops, speed %.2f (into light %.1f/s, "
-                    "dark %.1f/s); key %.3f; bloom %s, strength %.3f; encode %s\n",
-                 e.exposureAuto ? "auto" : "manual", e.exposureBias, e.exposureMin, e.exposureMax, e.exposureSpeed,
-                 e.rateLight * e.exposureSpeed, e.rateDark * e.exposureSpeed, e.key, e.bloom ? "on" : "off",
-                 e.bloomStrength, e.encodeSrgb ? "sRGB" : "2.2");
+    std::fprintf(f, "[settings] exposure bias %.2f, min %.2f, max %.2f stops, speed %.2f (into light %.1f/s, "
+                    "dark %.1f/s); key %.3f; bloom strength %.3f\n",
+                 e.exposureBias, e.exposureMin, e.exposureMax, e.exposureSpeed,
+                 e.rateLight * e.exposureSpeed, e.rateDark * e.exposureSpeed, e.key, e.bloomStrength);
     std::fprintf(f, "[frame] %u frames, last ran %s%s, dt %.4f s%s; scene %ux%u, %u bloom levels\n", e.frames,
                  e.ran ? "yes" : "no", e.thermal ? " (thermal view: skipped)" : "", e.lastDt,
                  e.lastSnap ? " (snapped)" : "", e.sceneW, e.sceneH, e.levels);
@@ -1013,7 +1012,7 @@ bool toolsWriteExposure(const char* base, const char*& message)
     }
 
     Table bloom;
-    if (e.bloom && e.bloomTop && readTable(e.bloomTop, bloom, why))
+    if (e.bloomTop && readTable(e.bloomTop, bloom, why))
     {
         writeStats(f, "bloom", bloom);
         float scale;

@@ -1511,16 +1511,10 @@ void setHexTiling(bool value) { rendererHexTiling() = value; }
 BF2_CONSOLE_PROPERTY_FN(hexTiling, bool, true, getHexTiling(), setHexTiling, kRendererConsoleTag)
 
 // [RENDER] Bloom and auto-exposure (render milestone 13, HdrPost.cpp).
-bool getBloom() { return rendererBloomEnabled(); }
-void setBloom(bool value) { rendererBloomEnabled() = value; }
-BF2_CONSOLE_PROPERTY_FN(bloom, bool, true, getBloom(), setBloom, kRendererConsoleTag)
 float getBloomStrength() { return rendererBloomStrength(); }
 void setBloomStrength(float value) { rendererBloomStrength() = clampf(value, 0.0f, 0.5f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(bloomStrength, float, true, getBloomStrength(), setBloomStrength, 0.0f, 0.5f,
                                  kRendererConsoleTag)
-bool getExposure() { return rendererExposureAuto(); }
-void setExposure(bool value) { rendererExposureAuto() = value; }
-BF2_CONSOLE_PROPERTY_FN(exposure, bool, true, getExposure(), setExposure, kRendererConsoleTag)
 float getExposureBias() { return rendererExposureBias(); }
 void setExposureBias(float value) { rendererExposureBias() = clampf(value, -8.0f, 8.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureBias, float, true, getExposureBias(), setExposureBias, -8.0f, 8.0f,
@@ -1537,9 +1531,6 @@ float getExposureSpeed() { return rendererExposureSpeed(); }
 void setExposureSpeed(float value) { rendererExposureSpeed() = clampf(value, 0.05f, 20.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureSpeed, float, true, getExposureSpeed(), setExposureSpeed, 0.05f, 20.0f,
                                  kRendererConsoleTag)
-bool getEncodeSrgb() { return rendererEncodeSrgb(); }
-void setEncodeSrgb(bool value) { rendererEncodeSrgb() = value; }
-BF2_CONSOLE_PROPERTY_FN(encodeSrgb, bool, true, getEncodeSrgb(), setEncodeSrgb, kRendererConsoleTag)
 
 } // anonymous namespace
 
@@ -1576,14 +1567,11 @@ const char* rendererVariableHelp(const char* name)
         { "farGround", "Far ground past the map, to about 32 km: 0 the surrounding ring, 1 on levels with a baked terrain file (the ring elsewhere), 2 on every level" },
         { "farGroundScaled", "Far ground's baked real terrain: its heights scaled to the map's relief (about the sea, or the map's median height); off, real heights" },
         { "hexTiling", "Detail textures hex-tiled (each hexagon shifted at random), terrain and the static meshes the list names: no repeating grid; off, tiled on a square grid as retail" },
-        { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
-        { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
-        { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },
-        { "exposureBias", "Exposure compensation in stops (the fixed exposure while auto-exposure is off)" },
+        { "bloomStrength", "Bloom (the scene's light scattered in the lens, replacing retail's glow): its share of the scene (0-0.5)" },
+        { "exposureBias", "Exposure compensation in stops, over the auto-exposure" },
         { "exposureMin", "Auto-exposure: the lowest exposure, in stops (how far bright scenes are darkened)" },
         { "exposureMax", "Auto-exposure: the highest exposure, in stops (keeps night dark)" },
         { "exposureSpeed", "Auto-exposure: adaptation speed, times 3/s into light and 1/s into dark" },
-        { "encodeSrgb", "Display encode: the sRGB curve (darker deep shadows); off, a plain 2.2 power" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },
