@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused | Milestone 17 (far terrain): tasks 1–5 built and seen by the owner (fine for now); 6, bakes for more levels | [render.md](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -14,11 +14,19 @@ design and as-built facts live in the lane's document, the story in commit messa
 | `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
 | `fix` | G–O, Q, R fixed | A, C–F open (packaging, build) | [fix.md](lanes/fix.md) |
 
-## Current: `render` milestone 17, far terrain
+## Current: `render` milestone 14, run-time sun term
 
-Design and as built in [render.md](lanes/render.md#17-far-terrain). Tasks 1–5 built and seen by the
-owner (2026-11-23: fine for now); Kunar Province, Kashan Desert and Muttrah City baked. Next: 6, bakes
-for the other levels; 7, judged from a jet, cost with the final GPU pass.
+Tasks 0–4 built and checked by an agent (2026-11-23); design, as built and what was seen in
+[render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped). Open: the
+owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fallback and
+`renderer.sunBakedFallback` deleted). Left out, for the owner: overgrowth in the static cascade
+(it streams round the camera), static meshes placed during a round (deployables).
+
+## Paused: `render` milestone 17, far terrain
+
+Tasks 1–5 built and seen by the owner (2026-11-23: fine for now); Kunar Province, Kashan Desert and
+Muttrah City baked. Next: 6, bakes for the other levels; 7, judged from a jet, cost with the final
+GPU pass ([render.md](lanes/render.md#17-far-terrain)).
 
 ## Paused: `render` milestone 12, clouds
 
@@ -36,6 +44,12 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
+- The run-time sun (milestone 14): `renderer.sunBakedFallback 1` is the old baked sun past the
+  cascades, 0 (the default) the new. Kashan Desert, `lightManager.sunDirection 0.7/-0.07/0.71`
+  (4°), views `kas_high`, `kas_here`, `m14-above` (buildings from above; `renderer.sunShadows 0`
+  shows the static cascade alone); Muttrah City `sun`, `ridges` at the level's sun; Saaremaa
+  `water`. `tools.sun` dumps the layers.
+
 - Clouds (milestone 12, contracts 32–33): no step at the 16 km handoff and no far radial edge
   (one air integral, a cross-fade band); edge albedo and the eroded light bake. Kashan Desert,
   views `hb-owner`, `hb-owner-back`, sun `lightManager.sunDirection 0.7/-0.07/0.71`.
@@ -47,11 +61,6 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 
 ## Open issues
 
-- Sun moved off the level's own (`lightManager.sunDirection`): past the cascades the map keeps the
-  baked noon sun term, so a dark disc round the camera and a bright map against the far ground.
-  Planned as render milestone 14 (owner, 2026-11-23: the lightmaps' sun channel dropped, the sun
-  term owned at run time; nothing authored, so each round's sun differs and the sun layers are drawn
-  at load; [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped)).
 - Far clouds at dusk shade flat under Kashan's dust haze (visibility 20 km, mixing 3500 m): the
   air's in-scatter, as modelled; whether that haze is right for dusk (a deep dust layer at
   sunset) is the owner's call ([render.md](lanes/render.md#12-clouds), near clouds' notes).

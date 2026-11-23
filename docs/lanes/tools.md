@@ -437,6 +437,17 @@ The managed tables are locked where they are; the atlas is read back from its re
 - `[meter]`: the 64 x 32 log2 luminances' range and mean, and a sparse grid of them.
 - `[bloom]`: level 0 after the up chain, statistics and `<NAME>-bloom.png`.
 
+## Sun
+
+`tools.sun [NAME]` (render milestone 14; `tools(sun)`) writes `<outputDir>/<map>/sun/<NAME>.txt`
+at the console call, NAME as for `tools.atmosphere`, from `RendDX9/SunStatic.cpp`: the sun's static
+layers as last drawn. Fails before they are drawn.
+
+- `[settings]`, `[sun]`: the `renderer.sunStatic*` values, the sun they were drawn for.
+- `[RaSunStatic i]`: the drawn rows (the per-frame offsets and flag excluded).
+- `[static]`: the light depth's range, the share of texels with a caster, `<NAME>-static.png`
+  (1024 wide, white = none). `[height]`: the shadow height's range, `<NAME>-height.png`.
+
 ## Clouds
 
 `tools.clouds [NAME]` (render milestone 12, task 2; `tools(clouds)`) writes

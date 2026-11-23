@@ -833,27 +833,58 @@ which pass 1), water (`rashaderwaterbase.fx`), grass (`GetGrassSunTerm`, `underg
 layers go inside those functions, so every receiver that calls them gets them, vehicles and decals
 included. Particles stay on the hemi map's alpha: out of scope. Thermals keep the baked term.
 
-Budget, the first constraint: the reserved samplers s8–s15 are all taken (water waves, aerial, sky
-cube, sky BRDF, water scene, cascades, cloud shadow, depth) and the engine-owned pixel constants fill
-c188–c223, the top of ps_3_0's range. Candidates: s12 outside the water pass (only water reads it);
-for the static cascade's rows (about four float4s), engine-owned registers moved below c188, checked
-against every effect's own allocation.
-
 Accepted loss: the baked soft building shadows at range; far shadows are hard-edged and about 1 m.
+
+**As built** (2026-11-23, `SunStatic.cpp`, contract 36; waiting on the owner's look):
+
+- **Budget.** `RaSunStatic`, eight engine-owned pixel registers c180–c187 below the old range
+  (`kEngineRegisterBegin` 180), published with `RASM`, zero outside the main world pass. Checked
+  against every effect's own allocation: the 611 cached Ra effects (the `.cfx` cache decoded, its
+  ps_3_0 constant tables read) use at most c15 for their own constants, the 25 legacy effects with
+  bytecode at most c53 (`tools.survey`, which reports any effect constant in c180–c223). Both
+  layers share one R32F atlas on s12, bound as the world pass publishes (the frame steps before it
+  take s12 for their own samplers), and on s3 while water draws (its s12 is the scene copy).
+- **Receivers.** `Ra_SunVisibility` (`rasunshadow.fxh`) behind `Ra_ResolveSunVisibility`,
+  `Ra_ResolveSunCosine`, grass and water: while `RaSunStatic[4].w` is 1 (`renderer.sunBakedFallback
+  0`) it replaces the baked term everywhere with the round's N.L, the cascades near, the static
+  cascade past them, unshadowed past both, all times the shadow height. The far ground takes the
+  round's N.L and the shadow height.
+- **Static cascade.** Orthographic over the level's box in light space (the map's square, its
+  lowest ground − 20 m to its highest + 150 m), 4096² (`renderer.sunStaticResolution`); its axes
+  scale separately, so at a low sun the up axis, along which the ground recedes, is the finer
+  (Kashan at 4°: 1.41 m across, 0.16 m along). Casters: terrain at full detail and the static
+  meshes of objects without mobile physics (`ObjectDrawer::submitShadowCasters`, `staticOnly`), at
+  the LOD a fixed distance gives (one camera pixel per texel at the screen's height, about 1100 m
+  at 1.4 m texels; `rendererCasterLodDistance`). Overgrowth streams round the camera and is left
+  out. Receiver offsets in texels: along the normal (`renderer.sunStaticNormalOffset` 1) and
+  toward the sun (`renderer.sunStaticDepthBias` 1) times 1 + the receiver's slope to the sun (tan,
+  at most 8). Small casters (walls, tents) keep a shadow at 30°; acne free on Kashan. A destroyed
+  state (`StaticMesh::setGeom`) or a static mesh's destruction redraws the static cascade alone, at
+  most once a second; static meshes created during a round are not reported (overgrowth's pools
+  create them as the camera moves), so deployables placed in a round cast nothing past 400 m.
+- **Shadow height.** 512² over the far ground's coarse heights (70 km, 141 m texels), marched on
+  the CPU (8 threads; the step 0.5 cell + 1 % of the distance): per texel the highest h(s) − rise·s
+  toward the sun from 1.5 cells out, less 1 m + rise · cell; on the map only terrain off it.
+  Bilinear in the shader with a soft band of rise × texel (at least 2 m). None without a far
+  ground.
+- **Cost at a sun change** (Kashan Desert, CPU): the static cascade 2–20 ms to gather (Muttrah
+  City, 5520 casters, 19.6 ms), the height march 4 ms at noon and 95 ms at a 4° sun. Memory: the
+  atlas 4096 × 4608 R32F, 75 MB; its D24S8 depth (64 MB) only while drawing. GPU time not taken
+  (with the final GPU pass).
+- **Seen by the agent.** Kashan Desert at a 4° sun from 600 m: the map no longer a bright slab
+  against the far ground, ridges throw long shadows (`m14-4deg-baked` / `m14-4deg-run`). Static
+  cascade alone (`renderer.sunShadows 0`) at a 30° sun, view `m14-above`: wall, hut and tower
+  shadows as the cascades draw them, coarser. Muttrah City `sun`, `ridges` at the level's sun:
+  the same as baked, the soft baked building shadows at range gone. Saaremaa `water` at a low sun
+  (clouds off): the glint as baked, the island's shadow over the bay.
 
 Tasks:
 
-0. Budget: the samplers and constant registers for the two layers, written into the shader
-   contract (a new version).
-1. Run-time N.L past the cascades, unshadowed, behind `renderer.sunBakedFallback` (0 run time, 1
-   baked) for A/B. Kashan Desert at a 4° sun shows no disc. The owner looks here.
-2. Static cascade: fixed-LOD caster list, fitted projection, own bias, drawn at load and on sun
-   change, region redraw on destruction; read in the receiver functions above.
-3. Far ground shadow height: the march at load, read by the far ground and by the receivers past
-   the static cascade.
-4. Checks: Kashan Desert at a 4° sun (no disc, no bright map against the far ground); the level's
-   own sun against `renderer.sunBakedFallback 1` on the reference views; the static cascade's
-   memory and draw time at load stated; frame time with the final GPU pass.
+0. Budget: done (contract 36).
+1. Run-time N.L past the cascades, behind `renderer.sunBakedFallback`: done.
+2. Static cascade: done, without overgrowth and without casters added during a round.
+3. Far ground shadow height: done.
+4. Checks: done as above, but frame time with the final GPU pass.
 5. On acceptance: the baked sun fallback and `renderer.sunBakedFallback` deleted.
 
 ### 20. GTAO
@@ -1367,9 +1398,10 @@ and add its row here.
 | 33 | The clouds' light bake (render milestone 12): `RaCloudBuildLight` gets `RaCloudDetail` and `RaClouds[7].z` (the detail tile, m), so the baked sun and sky visibility see the field eroded as the march erodes it near |
 | 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
 | 35 | The sky under the deck (render milestone 12): the main panorama's a (`RaClouds[4].w` ≥ half `RA_PANO_H`; not the sky cube's) is the clouds' transmittance times the dimming of the clear sky's air under the slab by the clouds' shadow and light (luminance); `RaSkyClouds.z` no longer read by the sky pass |
+| 36 | The run-time sun (render milestone 14): pixel registers c180–c187 `RaSunStatic` (engine-owned, published with `RASM`, zero outside the main world pass; layout in the shaders' `RaSunShadow.fxh`): the round's sun and a run-time flag, the static cascade's rows and the shadow height's mapping; their R32F atlas on the reserved sampler s12 in the world pass and s3 while water draws (point, clamp) |
 
-Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
-c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
+Samplers 9–15 are reserved for renderer frame resources (and 3–8 in water effects, contracts 17–18 and 36), and pixel registers
+c180–c223 for `RaSunStatic`, `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
 over between effects, so neither value is left to default. The engine binds s9–s15 (and s6–s8 for water) with it FALSE.
@@ -1386,7 +1418,9 @@ directory no longer carries it (`_3153_0`).
 | s4–s5 | Water's foam maps, the two finer wave cascades (contract 18) | `R16F`, mipmapped | During the water queue only, while `RaWaterFoam.x` > 0 |
 | s6–s8 | Water's slope maps, one per wave cascade (contract 17) | `A16B16G16R16F`, mipmapped | During the water queue only, while `RaWaterSsr.w` > 0 |
 | s9 | Aerial-perspective atlas (2080x32: 32 in-scatter and 32 transmittance slices of 32x32 screen tiles, then the sky block, contract 27) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
+| s3 | The sun's static layers in water effects (contract 36) | `R32F` | During the water queue only |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`), mipmapped | During the water queue only, while `RaWaterSsr.x` > 0 |
+| s12 | The sun's static layers, the static cascade over the shadow height (contract 36) | `R32F` | The world pass outside the water queue; read while `RaSunStatic[5].zw` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
 | s14 | Cloud shadow map (contract 16) | `A16B16G16R16F` | From the clouds' frame step (before the prepass), rest of the frame; read while `RaCloudShadow[0].w` > 0 |
 | s15 | Linear view depth | `R32F` | After the prepass, rest of the frame; particles read it only while `RaSoftParticles.x` > 0 |
