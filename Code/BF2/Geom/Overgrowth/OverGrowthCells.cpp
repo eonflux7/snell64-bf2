@@ -550,6 +550,16 @@ void constructCellBase(OverGrowthCell& cell)
 // Vertices use SHORT4 position, D3DCOLOR normal, and SHORT2 texcoord (16 bytes total).
 // Failed engine allocations leave the corresponding stream null.
 OverGrowthCell::OverGrowthCell()
+    : OverGrowthCell(static_cast<const OverGrowth*>(dx9rend::g_OverGrowth)->m_streamVertexCounts[0],
+                     static_cast<const OverGrowth*>(dx9rend::g_OverGrowth)->m_streamIndexCounts[0],
+                     static_cast<const OverGrowth*>(dx9rend::g_OverGrowth)->m_streamVertexCounts[1],
+                     static_cast<const OverGrowth*>(dx9rend::g_OverGrowth)->m_streamIndexCounts[1])
+{
+}
+
+// [RENDER] Milestone 22: the streams sized by the caller (one patch's far geometry).
+OverGrowthCell::OverGrowthCell(unsigned int leafVertices, unsigned int leafIndices,
+                               unsigned int trunkVertices, unsigned int trunkIndices)
     : farList()
 {
     constructCellBase(*this);
@@ -568,16 +578,13 @@ OverGrowthCell::OverGrowthCell()
     elements.push_back(&s_normal);
     elements.push_back(&s_texCoord);
 
-    const OverGrowth* const owner = static_cast<const OverGrowth*>(dx9rend::g_OverGrowth);
     void* const leafMemory = ::renddx9abi::engineAlloc(sizeof(OverGrowthCellMesh));
     leaf = leafMemory
-        ? ::new (leafMemory) OverGrowthCellMesh(owner->m_streamVertexCounts[0],
-                                                owner->m_streamIndexCounts[0], elements)
+        ? ::new (leafMemory) OverGrowthCellMesh(leafVertices, leafIndices, elements)
         : 0;
     void* const trunkMemory = ::renddx9abi::engineAlloc(sizeof(OverGrowthCellMesh));
     trunk = trunkMemory
-        ? ::new (trunkMemory) OverGrowthCellMesh(owner->m_streamVertexCounts[1],
-                                                 owner->m_streamIndexCounts[1], elements)
+        ? ::new (trunkMemory) OverGrowthCellMesh(trunkVertices, trunkIndices, elements)
         : 0;
 }
 
@@ -657,11 +664,19 @@ OverGrowthCell* createOverGrowthCell()
     return memory ? ::new (memory) OverGrowthCell() : 0;
 }
 
+// [RENDER] Milestone 22: counts = leaf vertices, leaf indices, trunk vertices, trunk indices.
+OverGrowthCell* createOverGrowthCell(const unsigned int* counts)
+{
+    void* const memory = ::renddx9abi::engineAlloc(sizeof(OverGrowthCell));
+    return memory ? ::new (memory) OverGrowthCell(counts[0], counts[1], counts[2], counts[3]) : 0;
+}
+
 namespace {
 
 
-// Updates the camera-centred ring of cells, reseating changed slots and building visible cells.
-// World-cell coordinates truncate toward zero; generation seeds depend on cell coordinates.
+// Places each slot on its patch once, measures the camera's distance and builds unbuilt cells
+// ([RENDER] milestone 22; retail re-seated a camera-centred ring). Generation seeds depend on cell
+// coordinates.
 
 void baseUpdateCells(OverGrowth* self, IRenderView* view)
 {
@@ -673,19 +688,15 @@ void baseUpdateCells(OverGrowth* self, IRenderView* view)
     self->m_cameraPosition.y = camera->m[13];
     self->m_cameraPosition.x = camera->m[12];
     self->m_cameraPosition.z = camera->m[14];
-    const float inverseCellSize = 1.0f / self->m_cellSize;
-    const float viewDistance = self->m_viewDistance;
-    const int cameraCellX = static_cast<int>(inverseCellSize * self->m_cameraPosition.x);
-    const int cameraCellZ = static_cast<int>(inverseCellSize * self->m_cameraPosition.z);
     for (int z = 0; z < self->m_gridSize; ++z)
     {
-        const float inverseViewDistance = 1.0f / viewDistance;                    // 0x1015EF51, per row
         for (int x = 0; x < self->m_gridSize; ++x)
         {
             OverGrowthCell* const cell = self->getCell(x, z);                     // vslot +0x20
-            const int n = self->m_gridSize;
-            const int cellX = n / 2 - (100 * n + x + cameraCellX) % n + cameraCellX;
-            const int cellZ = n / 2 - (100 * n + z + cameraCellZ) % n + cameraCellZ;
+            // [RENDER] Milestone 22: slot (x, z) is patch (x, z) for good; retail re-seated a ring of
+            // slots round the camera's cell (n / 2 - (100 n + x + camera) % n + camera).
+            const int cellX = x - self->m_patchCountX / 2;
+            const int cellZ = z - self->m_patchCountZ / 2;
             const bool moved = cellX != cell->cellX || cellZ != cell->cellZ
                                || self->m_reseatCells != 0;
             const bool built = cell->built != 0 && !moved;
@@ -708,13 +719,11 @@ void baseUpdateCells(OverGrowth* self, IRenderView* view)
             const float dy = cell->corner.y - self->m_cameraPosition.y;
             const float dz = (half + cell->corner.z) - self->m_cameraPosition.z;
             cell->cameraDistance = std::sqrt(dz * dz + dy * dy + dx * dx);
-            const float reach = cellDistanceToPoint(cell, &self->m_cameraPosition) * inverseViewDistance;
-            const bool inRange = reach < 1.0f;
-            const float fadeBand = self->m_fadeBand;
-            if (fadeBand == 0.0f || !(1.0f - fadeBand < reach))
-                cell->fadeFactor = 1.0f;
-            else
-                cell->fadeFactor = clampFloat((1.0f - reach) / fadeBand, 0.0f, 1.0f);
+            // [RENDER] Milestone 22: every cell is in range and unfaded; the far cut is the view
+            // distance's (update). Retail ended the cells at Overgrowth.viewDistance, dissolving over
+            // its last m_fadeBand.
+            const bool inRange = true;
+            cell->fadeFactor = 1.0f;
             bool visible = false;
             if (g_overGrowthBuildEveryCell || inRange)
             {
@@ -794,7 +803,7 @@ void OverGrowth::update(IRenderView* view)
 
     // [RENDER] For the world view while the view-distance cut is on (render milestone 11 task 5),
     // the frustum out to the scenery distance: retail's far plane (the view distance) cut the cells
-    // by view depth. Overgrowth then ends at its own range (Overgrowth.viewDistance).
+    // by view depth. Since milestone 22 that is where overgrowth ends (no range of its own).
     const Frustum* cellFrustum = view->getFrustumPtr();                           // vslot +0x74
     float cellFarPlane = view->getFarPlane();                                     // vslot +0x3C
     if (view == dx9rend::rendererGetRenderView())
@@ -936,7 +945,7 @@ void OverGrowth::updateCells(IRenderView* view)
     if (!m_patches)
         return;
     m_closeDistance = view->getZoom() * m_qualityScale * m_closeDistPercentage
-                      * overGrowthLevelRange(this);   // vslot +0x28; [RENDER] the level's, not renderer.overgrowthRange
+                      * m_viewDistance;                                           // vslot +0x28
     for (int z = 0; z < m_gridSize; ++z)
     {
         for (int x = 0; x < m_gridSize; ++x)

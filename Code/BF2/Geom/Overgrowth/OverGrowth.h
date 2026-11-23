@@ -312,14 +312,6 @@ private:
 
 OverGrowth* createOverGrowth();
 
-// [RENDER] renderer.overgrowthRange (render lane, test): metres of far overgrowth round the camera;
-// 0 keeps the level's Overgrowth.viewDistance. A longer range widens the grid of cells at the level's
-// cell size (retail grows the cells instead: viewDistance / 4 on a fixed 10 x 10 grid), read at
-// level load (OverGrowth::initialize). The near, full meshes keep the level's range.
-float& overGrowthRangeOverride();
-// The level's Overgrowth.viewDistance, whatever the override: the near meshes' range scales by it.
-float overGrowthLevelRange(const OverGrowth* self);
-
 // Re-orthonormalises a basis in place keeping its y row: rows 1 and 2 are normalised, then
 // row 0 = row1 x row2 and row 2 = row0 x row1. The w column is untouched (OverGrowthCells.cpp).
 void orthonormalizeKeepingY(Mat4& matrix);

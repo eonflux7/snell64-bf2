@@ -492,22 +492,10 @@ OverGrowthPatch::OverGrowthPatch()
 }
 
 
-namespace {
-float s_rangeOverride = 0.0f;   // [RENDER] renderer.overgrowthRange
-float s_levelRange = 0.0f;      // the level's Overgrowth.viewDistance, kept while the override applies
-float s_appliedRange = 0.0f;    // the range the override set, 0 when none
-}
-
-float& overGrowthRangeOverride() { return s_rangeOverride; }
-float overGrowthLevelRange(const OverGrowth* self)
-{
-    return s_appliedRange != 0.0f && self->getViewDistance() == s_appliedRange ? s_levelRange
-                                                                               : self->getViewDistance();
-}
-
 // Initializes maps and geometry indices from the primary heightmap, then applies view distance.
-// PE 0x1015F5F0
 // Requires heightmap singletons; missing raw maps retain zero density/full shadow defaults.
+
+// PE 0x1015F5F0
 void OverGrowth::initialize()
 {
     IBase* const cluster = ::dice::hfe::classManager->getSingleton(
@@ -571,25 +559,10 @@ void OverGrowth::initialize()
                      bytes, bytesRead);
     }
 
-    // [RENDER] renderer.overgrowthRange: past the level's range the grid grows, not the cells; the
-    // grid is not resized under live cells.
+    // [RENDER] Milestone 22: the cell size comes from retail's 10 x 10 grid (viewDistance / 4); the
+    // whole-map grid replaces it in postLoadResources. Not resized under live cells.
     if (!m_cells)
-    {
-        if (s_appliedRange == 0.0f || m_viewDistance != s_appliedRange)
-            s_levelRange = m_viewDistance;
         m_gridSize = 10;
-        m_viewDistance = s_levelRange;
-        s_appliedRange = 0.0f;
-        const float range = overGrowthRangeOverride();
-        if (s_levelRange > 0.0f && range > s_levelRange)
-        {
-            const float cellSize = s_levelRange / 4.0f;
-            const int half = static_cast<int>(std::ceil(range / cellSize));
-            m_gridSize = 2 * (half + 1);
-            m_viewDistance = static_cast<float>(half) * cellSize;
-            s_appliedRange = m_viewDistance;
-        }
-    }
     setViewDistance(m_viewDistance);                                                  // vtable +0x0C
 
     std::vector<OverGrowthMaterial>& layers = m_materials;
@@ -767,20 +740,53 @@ void OverGrowth::postLoadResources()
         }
     }
 
-    // [RENDER] renderer.overgrowthRange: what the wider grid holds.
-    if (s_appliedRange != 0.0f)
+    // [RENDER] Milestone 22: far overgrowth over the whole map. Retail kept a 10 x 10 ring of cells
+    // round the camera, rebuilt as it crossed cell boundaries, each sized for the densest patch
+    // above. Now one cell per patch, placed once (baseUpdateCells), each sized to its own patch: the
+    // placed instances' "_lod" meshes, plus the density estimate only where the editor generates.
+    m_gridSize = m_patchCountX > m_patchCountZ ? m_patchCountX : m_patchCountZ;
+    std::vector<unsigned int> patchCounts(static_cast<unsigned int>(m_patchCountX * m_patchCountZ) * 4u, 10u);
+    double bufferBytes = 0.0;
+    unsigned int largest = 0;
+    for (int z = 0; z < m_patchCountZ; ++z)
     {
-        const double bytes = static_cast<double>(m_gridSize) * m_gridSize
-            * (16.0 * (m_streamVertexCounts[0] + m_streamVertexCounts[1])
-               + 2.0 * (m_streamIndexCounts[0] + m_streamIndexCounts[1]));
-        std::fprintf(stderr, "[OVERGROWTH] range %.0f m (level %.0f): %d x %d cells of %.0f m, patches %d x %d; "
-                     "per cell leaf %u vertices / %u indices, trunk %u / %u; buffers %.0f MB%s\n",
-                     m_viewDistance, s_levelRange, m_gridSize, m_gridSize, m_cellSize, m_patchCountX,
-                     m_patchCountZ, m_streamVertexCounts[0], m_streamIndexCounts[0], m_streamVertexCounts[1],
-                     m_streamIndexCounts[1], bytes / 1048576.0,
-                     (m_streamVertexCounts[0] > 65535 || m_streamVertexCounts[1] > 65535)
-                         ? " - OVER the 16-bit index range" : "");
+        for (int x = 0; x < m_patchCountX; ++x)
+        {
+            const OverGrowthPatch* const patch = m_patches + (m_patchCountX * z + x);
+            unsigned int* const counts = &patchCounts[static_cast<unsigned int>(m_patchCountX * z + x) * 4u];
+            for (unsigned int j = 0; j < 2; ++j)
+            {
+                unsigned int vertices = 0;
+                unsigned int indices = 0;
+                if (m_editorEnable)
+                    for (unsigned int l = 0; l < 16; ++l)
+                    {
+                        vertices += static_cast<int>(static_cast<float>(layerVertices[l * 2 + j]) *
+                                                     patch->coverage[l]);
+                        indices += static_cast<int>(static_cast<float>(layerIndices[l * 2 + j]) *
+                                                    patch->coverage[l]);
+                    }
+                const OverGrowthInstanceVector& instances = patch->instances;
+                for (unsigned int k = 0; k < instances.size(); ++k)
+                {
+                    const OverGrowthInstance& instance = instances[k];
+                    if (instance.generated && !m_editorEnable)
+                        continue;
+                    const OverGrowthGeometryPair& pair = m_geometries.data()[instance.geometryIndex];
+                    vertices += pair.lod.vertexCounts[j];
+                    indices += pair.lod.indexCounts[j];
+                }
+                if (vertices > largest)
+                    largest = vertices;
+                counts[j * 2] = vertices > 10u ? vertices : 10u;
+                counts[j * 2 + 1] = indices > 10u ? indices : 10u;
+                bufferBytes += 16.0 * counts[j * 2] + 2.0 * counts[j * 2 + 1];
+            }
+        }
     }
+    std::fprintf(stderr, "[OVERGROWTH] %d x %d cells of %.0f m over the map; buffers %.1f MB; the largest "
+                 "stream %u vertices%s\n", m_patchCountX, m_patchCountZ, m_cellSize, bufferBytes / 1048576.0,
+                 largest, largest > 65535u ? " - PAST the 16-bit index range" : "");
 
     // the N x N cells
     const int gridSize = m_gridSize;
@@ -791,7 +797,11 @@ void OverGrowth::postLoadResources()
         for (int x = 0; x < m_gridSize; ++x)
         {
             OverGrowthCell** const slot = m_cells + (m_gridSize * z + x);
-            *slot = createOverGrowthCell();
+            // [RENDER] Milestone 22: slot (x, z) holds patch (x, z); slots past a narrow side, none.
+            static const unsigned int kNone[4] = { 10u, 10u, 10u, 10u };
+            const unsigned int* const counts = x < m_patchCountX && z < m_patchCountZ
+                ? &patchCounts[static_cast<unsigned int>(m_patchCountX * z + x) * 4u] : kNone;
+            *slot = createOverGrowthCell(counts);
         }
     }
 
@@ -889,7 +899,7 @@ void OverGrowth::save()
 {
     OverGrowth* const self = this;
     std::ostringstream out;
-    out << "Overgrowth.viewDistance " << overGrowthLevelRange(self) << std::endl;   // [RENDER] not the override
+    out << "Overgrowth.viewDistance " << self->m_viewDistance << std::endl;
     out << "Overgrowth.viewDistanceScale " << self->m_viewDistanceScale << std::endl;
     out << "Overgrowth.closeDistPercentage " << self->m_closeDistPercentage << std::endl;
     out << std::endl;

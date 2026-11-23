@@ -61,6 +61,8 @@ public:
 struct OverGrowthCell
 {
     OverGrowthCell();                                                 // 100D0C90 (+ base 1015E6D0)
+    OverGrowthCell(unsigned int leafVertices, unsigned int leafIndices,   // [RENDER] milestone 22
+                   unsigned int trunkVertices, unsigned int trunkIndices);
     ~OverGrowthCell();                                                // 100D18B0, reached through destroy
 
     virtual void* destroy(unsigned char flags);                       // +0x00
@@ -99,6 +101,9 @@ struct OverGrowthCell
 // The allocation postLoadResources makes per grid slot (0x100CD6DE..0x100CD6FB): operator new(0x2AC),
 // then the constructor when the heap answered (OverGrowthCells.cpp).
 OverGrowthCell* createOverGrowthCell();
+// [RENDER] Milestone 22: a cell whose streams hold counts[0] / [1] leaf vertices / indices and
+// counts[2] / [3] trunk ones.
+OverGrowthCell* createOverGrowthCell(const unsigned int* counts);
 
 // sub_1015EEB0 - the abstract base's updateCells: the camera ring of N x N cells and each cell's build.
 // OverGrowth::updateCells calls it first; render calls it directly when +0xD5 is clear
