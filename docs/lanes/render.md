@@ -1011,7 +1011,7 @@ The lattice is the shaders' `RaHex.fxh`, shared by the terrain and static meshes
 - **No turn.** The reference turns each hexagon too; on PR's rock and sand that points their
   streaks every way (Muttrah City `mountain`: hairy, blotchy), so hexagons are only shifted, top
   plane and sides alike. Strata stay level.
-- **Cost.** Up to three reads per plane where one was; not timed (the GPU pass waits for the end).
+- **Cost.** Up to three reads per plane where one was; not timed (owner, 2026-11-23: not needed).
 
 Tasks:
 1. Terrain and far ground (built 2026-11-23): every detail layer's planes in `RaTerrain`, and the
@@ -1021,7 +1021,7 @@ Tasks:
    the terrain kept on the grid (owner, 2026-11-23); `RaShaderSTM`'s detail by whole sheet, by
    strip, and in grid steps. Muttrah City `roofs` (city_paving_de and mecity_01_de's panels on the
    roofs, its plaster on the walls), `market`.
-3. Judged by eye; GPU cost with the final GPU pass.
+3. Judged by eye: accepted on Muttrah City (owner, 2026-11-23); no GPU timing (owner).
 
 ## Frame
 

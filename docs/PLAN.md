@@ -28,7 +28,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 14. GTAO + lightmap channel ownership | Not started | — |
 | 17. Far terrain | In progress: tasks 1–4 built; per-level bakes next (no generated ground) | `git log --grep 'milestone 17'` |
 | 18. Atmosphere rework (one atmosphere, weather per level) | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 18'` |
-| 19. Hex-tiled detail textures | In progress: task 1 (terrain, far ground) built | `git log --grep 'milestone 19'` |
+| 19. Hex-tiled detail textures | Accepted | `git log --grep 'milestone 19'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,
