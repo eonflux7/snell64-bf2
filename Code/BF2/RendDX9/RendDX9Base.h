@@ -1004,6 +1004,8 @@ bool& rendererBloomEnabled();
 int& rendererFarGround();
 // renderer.farGroundScaled: the bake's heights scaled to the map's relief (1) or real (0).
 bool& rendererFarGroundScaled();
+// renderer.hexTiling (render milestone 19, Geom/TerrainDraw.cpp): the terrain's detail layers hex-tiled.
+bool& rendererHexTiling();
 float& rendererBloomStrength();
 bool& rendererExposureAuto();
 float& rendererExposureBias();

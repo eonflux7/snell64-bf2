@@ -1505,6 +1505,11 @@ bool getFarGroundScaled() { return rendererFarGroundScaled(); }
 void setFarGroundScaled(bool value) { rendererFarGroundScaled() = value; }
 BF2_CONSOLE_PROPERTY_FN(farGroundScaled, bool, true, getFarGroundScaled(), setFarGroundScaled, kRendererConsoleTag)
 
+// [RENDER] Hex-tiled terrain detail (render milestone 19, TerrainDraw.cpp).
+bool getHexTiling() { return rendererHexTiling(); }
+void setHexTiling(bool value) { rendererHexTiling() = value; }
+BF2_CONSOLE_PROPERTY_FN(hexTiling, bool, true, getHexTiling(), setHexTiling, kRendererConsoleTag)
+
 // [RENDER] Bloom and auto-exposure (render milestone 13, HdrPost.cpp).
 bool getBloom() { return rendererBloomEnabled(); }
 void setBloom(bool value) { rendererBloomEnabled() = value; }
@@ -1570,6 +1575,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "farGround", "Far ground past the map, to about 32 km: 0 the surrounding ring, 1 on levels with a baked terrain file (the ring elsewhere), 2 on every level" },
         { "farGroundScaled", "Far ground's baked real terrain: its heights scaled to the map's relief (about the sea, or the map's median height); off, real heights" },
+        { "hexTiling", "Terrain detail textures hex-tiled (each hexagon turned and shifted at random): no repeating grid; off, tiled on a square grid as retail" },
         { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
         { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
         { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },

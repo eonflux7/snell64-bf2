@@ -64,6 +64,11 @@ void  rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, in
                                    unsigned int minIndex, unsigned int numVertices,
                                    unsigned int startIndex);               // StateManager.cpp, sub_10005820
 
+// [RENDER] renderer.hexTiling (render milestone 19): the detail layers hex-tiled (1) or tiled on a
+// square grid as retail (0).
+bool g_hexTiling = true;
+bool& rendererHexTiling() { return g_hexTiling; }
+
 } // namespace dx9rend
 
 namespace geom {
@@ -1061,7 +1066,7 @@ void setRaTerrainPatch(Terrain* t, QuadPatch* patch, const TerrainAtlases& atlas
         atlas[count][0] = static_cast<float>(topEntry.atlas);
         atlas[count][1] = static_cast<float>(sideEntry.atlas);
         atlas[count][2] = planar ? 1.0f : 0.0f;
-        atlas[count][3] = 0.0f;
+        atlas[count][3] = dx9rend::rendererHexTiling() ? 1.0f : 0.0f;   // contract 30
         ++count;
     }
     const Terrain::RaTerrainHandles& h = t->m_raTerrain;
