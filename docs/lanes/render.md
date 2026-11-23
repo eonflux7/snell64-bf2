@@ -186,8 +186,11 @@ transmittance comes from the tile; its light from a 33rd block, per tile column 
 (contract 20), by each pixel's own ray: in full haze far land takes the sky's colour right behind
 it, so the sky's quick change just above the horizon no longer shows as a band across the mountains
 a tile off the horizon. View- and clip-space callers (particles, decals) keep the tile's light
-(`Ra_GetAerialView`). The sky and the clouds are not hazed: at any realistic visibility the haze
-along a ray out of its layer hides the clouds 10–30° up (tried, 2026-11-22). Retail's fog
+(`Ra_GetAerialView`). The clear sky is not hazed (its light is the haze's). The clouds are, each to
+its own distance with the density falling with height along the way, in the same air-light
+function as Earth's air (contract 25), so near and far clouds fade alike and match the ground at
+the same distance. Hazing the whole ray to infinity instead hid every far cloud under a crisp
+near bank (tried, 2026-11-22 and 2026-11-23). Retail's fog
 curve stays under water, in first person and in thermals. The sky is one full-screen pass at the
 far plane in the dome's place (`SkyDome.fx` technique `RaSky`): the sky view plus a limb-darkened sun
 disc capped for the MSAA resolve; under water the water's fog colour. The painted dome, its cloud
@@ -1115,6 +1118,7 @@ and add its row here.
 | 22 | The far ground's heights in two textures and its detail fade (render milestone 17, tasks 3–4): `RaFarGround` grows to `float4[8]` ([1] the fine heights' uv scale and offset, the fine square's half side, 1 / the blend to the coarse; [2] the map's half side, colour uv per m, colour texels per m; [3].z the fine cell; [4].xy the coarse heights' uv scale and offset; [5] the detail fade's atlas cell; [6] its atlas (-1 none), uv per m, the distance it is gone at, 1 / its range; [7].rgb 1 / its decoded mean), texture `RaFarGroundHeightFar` (R32F, vertex and pixel shaders); `RaFarGroundColor` carries the detail layers' mean; the terrain's `RaTerrainAtlas0`–`2` are bound while it draws. Layout in the shaders' `TerrainShader_FarGround.fxh` |
 | 23 | The far ground meets the map's edge (render milestone 17 task 5): `RaFarGroundLevels` grows to `float4[10]` (slot 9 the strip under the map's edge: origin 0, cell 1; its vertices carry x, z and in w their depth under the edge, which every vertex subtracts); `RaFarGround[3].w` the edge square's half side, `[4].zw` the edge heights' uv scale and offset; texture `RaFarGroundHeightEdge` (R32F at the map's cell over the map and 256 m past it, vertex and pixel shaders); the curvature drop starts 2 km past the map; vertices inside the map sink half their cell and the far ground's pixels reach max(1 m, 0.4 % of their distance) into it (clip() drops whole pixels under MSAA) |
 | 24 | The far ground's depth (render milestone 17): technique `RaFarGroundDepth` on the terrain effect (pass 0, depth GREATER (reversed) and written), the lit pass's vertex shader and clip, linear view depth out; the engine draws it after the map's `RaDepthPrepass` with the same parameters as `RaFarGround`, so s15 holds the far ground for the near clouds, soft particles, the transparents' depth rebuild and the water's thickness. Optional: without it s15 is empty (infinitely far) there |
+| 25 | The clouds in the ground haze (render milestone 12): `RaClouds[18].zw` in the panorama's and the near clouds' passes, the haze's density at the reference height (1/m) and 1 / its falloff (0, 0 before the first fit); the clouds' air (`Ra_PanoAirTau`, `Ra_PanoAirTauInfinite`) includes it. The sky pass no longer hazes |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

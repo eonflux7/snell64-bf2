@@ -1156,6 +1156,7 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.fogEnd = g.inputs.fogEnd;
     i.skyGain = static_cast<float>(g.skyGain);
     i.hazeDensity = hazeDensity();
+    i.hazeFalloff = g_hazeFalloff;
     for (int k = 0; k < 3; ++k)
     {
         i.toSun[k] = g.inputs.toSun[k];

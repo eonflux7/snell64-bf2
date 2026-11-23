@@ -893,6 +893,7 @@ struct AtmosphereInfo
     IDirect3DTexture9* cloudLight;      // 64 x 24: 8 altitudes x (sun, sky, ground) tiles of 8 x 8
     IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
     float fitMs, refHeight, fogEnd, hazeDensity;
+    float hazeFalloff;                  // m: the haze's density falls by e over this height
     float toSun[3];                     // world, unit
     float skyGain;                      // the authored horizon over the model's (not applied)
     float sunTop[3];
