@@ -888,7 +888,12 @@ Tasks:
    (Kunar: 3.3 m off on average, 21 m at most). A strip 30 m deep under the edge closes gaps
    where the two surfaces simplify differently at range; the far ground reaches a pixel into the
    map, sunk under it (clip() drops whole pixels under MSAA); the curvature drop starts 2 km past
-   the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. Open: colour past the
+   the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. The sky's clouds behind the
+   haze (2026-11-23, shader side only, contract 9's `RaAerialHaze` read by the sky pass): the haze
+   layer the ground is seen through, whole along each sky ray (optical depth A H / sin, a spherical
+   layer's air mass at grazing angles), toward the sky's own light, so the clear sky is unchanged
+   and clouds fade into it at the horizon as the far ground does (Kunar Province `horizon`; before,
+   the far ridges cut a hard line against bright clouds). Open: colour past the
    map is still the map's edge colour, blurred, with seams along the map's corner lines from
    above (WorldCover classes next).
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
