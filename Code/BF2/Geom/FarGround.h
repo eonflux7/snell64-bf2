@@ -13,9 +13,12 @@
 //   unknown, as are ring nodes under the sea deeper than the map's lowest point (filler), and
 //   everything past the ring.
 // - Heights, two R32F textures: a fine one over the ring's square (three map spans a side, at the
-//   ring's cell) and a coarse one out past the mesh's reach. Known ground is kept; elsewhere a
-//   placeholder until the level's bake fills it (render milestone 17 task 5): the known heights
-//   pulled out (pull-push), falling off to the level's base height.
+//   ring's cell) and a coarse one out past the mesh's reach. Known ground is kept; past it, the
+//   known heights pulled out (pull-push) blend over 3 km to the level's bake: real terrain in the
+//   level's datum, from <mod>/settings/eon64-farground/<level>.bin (written by a tool outside this
+//   tree; layout at loadBake). renderer.farGroundScaled picks its variant, real heights or scaled
+//   about a pivot to the map's relief, and the heights are rebuilt on the CPU when it changes.
+//   Without a bake, a placeholder: the pulled-out heights falling off to the level's base height.
 // - The sea: a sea only when its level lies near the map's height range (levels set -50, -10000
 //   and the like for none). Water cells past the map draw only where the heights are under it
 //   (farGroundSeaIn).

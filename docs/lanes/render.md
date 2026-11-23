@@ -865,8 +865,20 @@ Tasks:
    in-game map overlaid, the fit only refining. Placed: Kunar Province, Kashan Desert, Muttrah City
    (all heading 0, scale 1). The least-squares height ratio means nothing where the shapes do not
    correlate (Kunar 0.19): the scaled variant takes the ratio of the reliefs; on sea levels the
-   offset is pinned so the level's sea lands on 0 m. Next: the bake file and its reader. The sea past the map then gets the far ground's curvature drop (the surrounding
-   water technique's vertex shader), so the two meet at their coasts to the horizon.
+   offset is pinned so the level's sea lands on 0 m.
+   The bake file and its reader as built (2026-11-23): `<mod>/settings/eon64-farground/<level>.bin`
+   (layout at `FarGround.cpp` `loadBake`), int16 heights in the level's datum on a 60 m grid out
+   to 36 km past the map's half side (about 1270 nodes a side, 3.2 MB), the GLO-90 ground at the
+   placement resampled at 45 m. Datum: on a coastal level the real sea lands on the level's sea,
+   with a sea bed 3 to 40 m under it by the distance from the coast; inland, the real ground's
+   median under the known ground lands on the level's. The scaled variant (`renderer.farGroundScaled
+   1`; 0 real heights, the default) is about a pivot (the sea, or the known ground's median) times
+   the ratio of the reliefs above it (98th percentiles): Muttrah City x0.58, Kashan x0.15, Kunar
+   x0.17. Past known ground the pulled-out known heights reach the bake over 3 km. An inland bake
+   has no water past known ground (Kunar Province's river level at 36 m would flood the real
+   valleys). The load logs the bake's correlation with the map, as placed and mirrored, to check
+   the placement's orientation. Colour past the map is still the map's edge colour, blurred:
+   WorldCover classes next.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.

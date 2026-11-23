@@ -970,6 +970,8 @@ bool& rendererBloomEnabled();
 // renderer.farGround (render milestone 17, Geom/FarGround.cpp): 0 the retail ring, 1 the far ground
 // where the level has a bake, 2 the far ground everywhere.
 int& rendererFarGround();
+// renderer.farGroundScaled: the bake's heights scaled to the map's relief (1) or real (0).
+bool& rendererFarGroundScaled();
 float& rendererBloomStrength();
 bool& rendererExposureAuto();
 float& rendererExposureBias();

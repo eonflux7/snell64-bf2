@@ -17,8 +17,10 @@
 #include "QuadPatch.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -49,6 +51,9 @@ void  rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, in
 // ring elsewhere; 2 the far ground everywhere (without a bake, its placeholder heights).
 int g_farGround = 1;
 int& rendererFarGround() { return g_farGround; }
+// renderer.farGroundScaled: the bake's heights about its pivot times its relief ratio (1), or real (0).
+bool g_farGroundScaled = false;
+bool& rendererFarGroundScaled() { return g_farGroundScaled; }
 } // namespace dx9rend
 
 namespace geom {
@@ -73,6 +78,7 @@ const int   kFarNodes = 1024;                                      // the coarse
 const float kFarReach = 34000.0f;                                  // m past the map's half side
 const float kFineBlend = 1500.0f;                                  // m inside the fine square's edge: fine to coarse
 const float kBaseFall = 6000.0f;                                   // m past known ground: at the base height
+const float kBakeBlend = 3000.0f;                                  // m past known ground: on the bake
 const float kSeaNear = 10.0f;                                      // m: a sea level under the map's lowest by more is none
 const float kFillerDepth = 5.0f;                                   // m under the map's lowest: ring filler
 const float kFlatSector = 1.0f;                                    // m: a sector with less relief is a placeholder
@@ -114,7 +120,7 @@ struct State
 
     Terrain*           pending;
     bool               built;
-    bool               baked;     // the level has a bake (task 5: none has yet)
+    bool               baked;     // the level has a bake file
     IDirect3DTexture9* heightTexture;
     IDirect3DTexture9* heightFarTexture;
     IDirect3DTexture9* colorTexture;
@@ -134,6 +140,25 @@ struct State
     std::vector<float> farHeight;
     bool               seaValid;
     float              seaLevel;
+
+    // What composeHeights needs to rebuild the heights (the bake's variant changing): the known
+    // heights pulled out on both grids, each node's distance past known ground (0 on it).
+    Grid               fine;
+    std::vector<float> fineE;
+    std::vector<float> fineDist;
+    std::vector<float> farE;
+    std::vector<float> farDist;
+    float              base;
+    bool               seaNear;   // the level's sea lies near the map's heights
+    int                variant;   // the bake's variant the heights were composed with (-1 none)
+
+    // The level's bake (<mod>/settings/eon64-farground/<level>.bin): heights in the level's datum
+    // on a square grid, and the scaled variant's ratio and pivot.
+    Grid               bakeGrid;
+    std::vector<float> bake;
+    float              bakeRatio;
+    float              bakePivot;
+    bool               bakeSea;   // baked with the real sea on the level's (coastal levels)
 };
 
 State g;
@@ -299,16 +324,9 @@ struct Field
     float            seaLevel;
 };
 
-// A node past known ground, until the level's bake fills it (render milestone 17 task 5): the
-// pulled-out known height `e` falling to the base height over kBaseFall.
-float placeholder(const Field& f, float e, float d)
-{
-    return e + (f.base - e) * smoothstep(0.0f, kBaseFall, d);
-}
-
 bool uploadHeights(const std::vector<float>& value, int n, IDirect3DTexture9*& texture, dx9rend::EngineTexture& engineValue)
 {
-    if (FAILED(device()->CreateTexture(n, n, 1, 0, D3DFMT_R32F, D3DPOOL_MANAGED, &texture, 0)))
+    if (!texture && FAILED(device()->CreateTexture(n, n, 1, 0, D3DFMT_R32F, D3DPOOL_MANAGED, &texture, 0)))
     {
         ::renddx9abi::logf("[farground] could not create the %dx%d height texture", n, n);
         texture = 0;
@@ -341,6 +359,155 @@ inline float percentile(std::vector<float>& v, float p)
     const std::size_t k = static_cast<std::size_t>(p * static_cast<float>(v.size() - 1));
     std::nth_element(v.begin(), v.begin() + k, v.end());
     return v[k];
+}
+
+// The bake's height at world (x, z), in the level's datum: real, or about its pivot times its
+// ratio (renderer.farGroundScaled). Past the bake's square it holds its edge.
+float bakeHeight(float x, float z, bool scaled)
+{
+    const float h = sampleGrid(g.bake, g.bakeGrid, x, z);
+    return scaled ? g.bakePivot + (h - g.bakePivot) * g.bakeRatio : h;
+}
+
+// A node `d` metres past known ground, whose pulled-out known height is `e`: with a bake, the
+// bake's height reached over kBakeBlend; without, the placeholder.
+float pastKnown(float e, float d, float x, float z, bool scaled)
+{
+    if (!g.baked)
+        return e + (g.base - e) * smoothstep(0.0f, kBaseFall, d);
+    return e + (bakeHeight(x, z, scaled) - e) * smoothstep(0.0f, kBakeBlend, d);
+}
+
+// The heights from what buildHeights kept, for the bake's current variant; uploads both textures.
+bool composeHeights()
+{
+    const bool scaled = dx9rend::rendererFarGroundScaled();
+    const std::size_t farCount = g.farE.size(), fineCount = g.fineE.size();
+    g.farHeight.assign(farCount, 0.0f);
+    int farWater = 0;
+    for (int j = 0; j != g.coarse.n; ++j)
+        for (int i = 0; i != g.coarse.n; ++i)
+        {
+            const std::size_t k = static_cast<std::size_t>(j) * g.coarse.n + i;
+            g.farHeight[k] = g.farDist[k] > 0.0f
+                                 ? pastKnown(g.farE[k], g.farDist[k], g.coarse.x(i), g.coarse.x(j), scaled)
+                                 : g.farE[k];
+            farWater += g.seaNear && g.farHeight[k] < g.seaLevel;
+        }
+    std::vector<float> fineHeight(fineCount, 0.0f);
+    for (int j = 0; j != g.fine.n; ++j)
+        for (int i = 0; i != g.fine.n; ++i)
+        {
+            const std::size_t k = static_cast<std::size_t>(j) * g.fine.n + i;
+            fineHeight[k] = g.fineDist[k] > 0.0f
+                                ? pastKnown(g.fineE[k], g.fineDist[k], g.fine.x(i), g.fine.x(j), scaled)
+                                : g.fineE[k];
+        }
+    if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
+        || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue))
+        return false;
+    // An inland bake has no water past known ground: the level's water (a river, Kunar Province's at
+    // 36 m) would flood the real valleys under it. The CPU copy, the sea test's only input.
+    if (g.baked && !g.bakeSea)
+    {
+        farWater = 0;
+        for (std::size_t k = 0; k != farCount; ++k)
+        {
+            if (g.farDist[k] > 0.0f)
+                g.farHeight[k] = (std::max)(g.farHeight[k], g.seaLevel);
+            farWater += g.seaNear && g.farHeight[k] < g.seaLevel;
+        }
+    }
+    g.seaValid = g.seaNear && farWater > 0;
+    g.variant = scaled ? 1 : 0;
+    return true;
+}
+
+// Reads the level's bake, if it has one. Layout (little-endian, 64-byte header): "EONFAR1\0",
+// u32 version (1), u32 n (nodes a side), f32 origin (world x and z of node 0), f32 cell (m),
+// f32 height scale and bias (height = bias + scale * value), f32 the scaled variant's ratio and
+// pivot, f32 the sea level it was baked for, 5 reserved words; then n x n int16 rows of z, x
+// across a row.
+bool loadBake()
+{
+    std::string mod, level;
+    dx9rend::readStringSettingDefault("GSModDirectory", "mods/bf2", mod);
+    dx9rend::readStringSetting("GSLoadLevel", level);
+    if (level.empty())
+        return false;
+    for (std::size_t i = 0; i != level.size(); ++i)
+        level[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(level[i])));
+    if (!mod.empty() && mod[mod.size() - 1] != '/' && mod[mod.size() - 1] != '\\')
+        mod += '/';
+    const std::string path = mod + "settings/eon64-farground/" + level + ".bin";
+    std::FILE* in = std::fopen(path.c_str(), "rb");
+    if (!in)
+    {
+        ::renddx9abi::logf("[farground] no bake for %s (%s)", level.c_str(), path.c_str());
+        return false;
+    }
+    struct Header
+    {
+        char         magic[8];
+        unsigned int version, n;
+        float        origin, cell, scale, bias, ratio, pivot, sea;
+        unsigned int reserved[5];
+    } h;
+    static_assert(sizeof(Header) == 64, "the bake's header is 64 bytes");
+    bool ok = std::fread(&h, sizeof(h), 1, in) == 1 && std::memcmp(h.magic, "EONFAR1", 8) == 0 && h.version == 1
+              && h.n >= 2 && h.n <= 8192 && h.cell > 0.0f;
+    std::vector<short> raw;
+    if (ok)
+    {
+        raw.resize(static_cast<std::size_t>(h.n) * h.n);
+        ok = std::fread(&raw[0], sizeof(short), raw.size(), in) == raw.size();
+    }
+    std::fclose(in);
+    if (!ok)
+    {
+        ::renddx9abi::logf("[farground] %s: not a bake (version 1)", path.c_str());
+        return false;
+    }
+    g.bake.resize(raw.size());
+    for (std::size_t k = 0; k != raw.size(); ++k)
+        g.bake[k] = h.bias + h.scale * static_cast<float>(raw[k]);
+    g.bakeGrid.n = static_cast<int>(h.n);
+    g.bakeGrid.origin = h.origin;
+    g.bakeGrid.cell = h.cell;
+    g.bakeRatio = h.ratio;
+    g.bakePivot = h.pivot;
+    g.bakeSea = h.sea > -1.0e8f;
+    ::renddx9abi::logf("[farground] bake %s: %ux%u of %.1f m from %.0f m; scaled variant x%.3f about %.1f m; "
+                       "%s",
+                       path.c_str(), h.n, h.n, h.cell, h.origin, h.ratio, h.pivot,
+                       g.bakeSea ? "coastal, its sea on the level's" : "inland, no water past known ground");
+    return true;
+}
+
+// How the bake meets the map (a check on its placement): over the map, the mean difference and
+// the correlation of the bake's real heights with the map's, as placed and mirrored or turned.
+void logBakeFit(world::IHeightmapCluster* cluster, float mapHalf)
+{
+    const float sx[4] = { 1.0f, -1.0f, 1.0f, -1.0f }, sz[4] = { 1.0f, 1.0f, -1.0f, -1.0f };
+    double corr[4], meanDiff = 0.0;
+    for (int o = 0; o != 4; ++o)
+    {
+        double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, n = 0;
+        for (float z = -mapHalf + 32.0f; z < mapHalf; z += 64.0f)
+            for (float x = -mapHalf + 32.0f; x < mapHalf; x += 64.0f)
+            {
+                const double a = cluster->getHeightInWorldCoords(x, z);
+                const double b = bakeHeight(sx[o] * x, sz[o] * z, false);
+                sa += a; sb += b; saa += a * a; sbb += b * b; sab += a * b; n += 1;
+            }
+        const double va = saa - sa * sa / n, vb = sbb - sb * sb / n;
+        corr[o] = va > 0 && vb > 0 ? (sab - sa * sb / n) / std::sqrt(va * vb) : 0.0;
+        if (o == 0)
+            meanDiff = (sb - sa) / n;
+    }
+    ::renddx9abi::logf("[farground] bake over the map: %+.1f m against it on average; correlation %.2f as "
+                       "placed (mirrored x %.2f, z %.2f, turned 180 %.2f)",
+                       meanDiff, corr[0], corr[1], corr[2], corr[3]);
 }
 
 // The heights: known ground, the fine and coarse grids filled and uploaded.
@@ -449,35 +616,27 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
             farE[k] = sampleGrid(fineE, fine, x, z);
             farWeight[k] = 1.0f;
         }
-    std::vector<float> farKnown(farWeight);
     pullPush(farE, farWeight, coarse.n);
 
-    // The unknown nodes.
-    g.farHeight.assign(farCount, 0.0f);
-    int farWater = 0;
-    for (int j = 0; j != coarse.n; ++j)
-        for (int i = 0; i != coarse.n; ++i)
-        {
-            const std::size_t k = static_cast<std::size_t>(j) * coarse.n + i;
-            g.farHeight[k] = farKnown[k] > 0.0f ? farE[k] : placeholder(f, farE[k], farDist[k]);
-            farWater += f.seaValid && g.farHeight[k] < f.seaLevel;
-        }
-    std::vector<float> fineHeight(fineCount, 0.0f);
+    // Kept for composeHeights: each node's distance past known ground.
+    std::vector<float> fineDist(fineCount, 0.0f);
     for (int j = 0; j != fine.n; ++j)
         for (int i = 0; i != fine.n; ++i)
-        {
-            const std::size_t k = static_cast<std::size_t>(j) * fine.n + i;
-            const float x = fine.x(i), z = fine.x(j);
-            const float d = distanceToKnown(f.known, x, z);
-            fineHeight[k] = d <= 0.0f ? fineE[k] : placeholder(f, fineE[k], d);
-        }
-
-    if (!uploadHeights(fineHeight, fine.n, g.heightTexture, g.heightValue)
-        || !uploadHeights(g.farHeight, coarse.n, g.heightFarTexture, g.heightFarValue))
-        return false;
+            fineDist[static_cast<std::size_t>(j) * fine.n + i] = distanceToKnown(f.known, fine.x(i), fine.x(j));
+    g.fine = fine;
     g.coarse = coarse;
-    g.seaValid = f.seaValid && farWater > 0;
+    g.fineE.swap(fineE);
+    g.fineDist.swap(fineDist);
+    g.farE.swap(farE);
+    g.farDist.swap(farDist);
+    g.base = f.base;
+    g.seaNear = f.seaValid;
     g.seaLevel = f.seaLevel;
+    g.variant = -1;
+    if (!composeHeights())
+        return false;
+    if (g.baked)
+        logBakeFit(cluster, mapHalf);
 
     // [1]: fine uv = xz * x + y; z its half side (m); w 1 / the blend to the coarse grid.
     // [3].z the fine cell (m); [4]: coarse uv = xz * x + y.
@@ -491,9 +650,10 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf)
 
     ::renddx9abi::logf("[farground] heights: fine %dx%d of %.1f m, coarse %dx%d of %.1f m; %d of 8 sectors data; "
                        "base %.1f m; "
-                       "sea %.1f m %s (map %.1f..%.1f m, %d ring nodes filler), %d coarse nodes under it",
+                       "sea %.1f m %s (map %.1f..%.1f m, %d ring nodes filler), %s past the map",
                        fine.n, fine.n, fine.cell, coarse.n, coarse.n, coarse.cell, usable, f.base,
-                       f.seaLevel, f.seaValid ? "is a sea" : "is none", mapLowest, mapHighest, filler, farWater);
+                       f.seaLevel, f.seaValid ? "is a sea" : "is none", mapLowest, mapHighest, filler,
+                       g.seaValid ? "water" : "no water");
     return true;
 }
 
@@ -908,6 +1068,7 @@ void farGroundUpdate(Terrain* terrain)
     if (!fx || !cluster)
         return;
     std::memset(g.constants, 0, sizeof(g.constants));
+    g.baked = loadBake();
     const float mapHalf = 0.5f * static_cast<float>(terrain->m_patchCount * terrain->m_patchSize)
                           * terrain->m_primaryWorldScale.x;
     const bool ok = buildHeights(terrain, cluster, mapHalf) && buildColor(terrain, mapHalf) && buildMesh();
@@ -957,6 +1118,10 @@ bool farGroundDraw(Terrain* terrain)
 {
     if (!farGroundActive() || !terrain->m_effect
         || !dx9rend::effectHasTechnique(terrain->m_effect, techniqueName()))
+        return false;
+
+    // The bake's variant changed (renderer.farGroundScaled): the heights again.
+    if (g.baked && g.variant != (dx9rend::rendererFarGroundScaled() ? 1 : 0) && !composeHeights())
         return false;
 
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderViewDup();
@@ -1028,7 +1193,13 @@ void releaseBuilt()
     releaseParam(g.params.heightFar);
     releaseParam(g.params.color);
     std::vector<float>().swap(g.farHeight);
+    std::vector<float>().swap(g.fineE);
+    std::vector<float>().swap(g.fineDist);
+    std::vector<float>().swap(g.farE);
+    std::vector<float>().swap(g.farDist);
+    std::vector<float>().swap(g.bake);
     g.seaValid = false;
+    g.baked = false;
     g.built = false;
 }
 

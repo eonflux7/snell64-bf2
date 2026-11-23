@@ -1489,6 +1489,9 @@ BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWate
 int getFarGround() { return rendererFarGround(); }
 void setFarGround(int value) { rendererFarGround() = value < 0 ? 0 : (value > 2 ? 2 : value); }
 BF2_CONSOLE_PROPERTY_FN(farGround, int, true, getFarGround(), setFarGround, kRendererConsoleTag)
+bool getFarGroundScaled() { return rendererFarGroundScaled(); }
+void setFarGroundScaled(bool value) { rendererFarGroundScaled() = value; }
+BF2_CONSOLE_PROPERTY_FN(farGroundScaled, bool, true, getFarGroundScaled(), setFarGroundScaled, kRendererConsoleTag)
 
 // [RENDER] Bloom and auto-exposure (render milestone 13, HdrPost.cpp).
 bool getBloom() { return rendererBloomEnabled(); }
@@ -1552,6 +1555,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudMidCoverage", "Sky clouds' mid layer: coverage, 0 clear to 1 overcast; -1 the preset's (cloudCoverage times 0.8 desert, 0.6 maritime)" },
         { "cloudNear", "Sky clouds marched per pixel (in front of the scene) out to this many metres; the panorama beyond; 0 panorama only" },
         { "farGround", "Far ground past the map, to about 32 km: 0 the surrounding ring, 1 on levels with a baked terrain file (the ring elsewhere), 2 on every level" },
+        { "farGroundScaled", "Far ground's baked real terrain: its heights scaled to the map's relief (about the sea, or the map's median height); off, real heights" },
         { "bloom", "Bloom: the scene's light scattered in the lens, mixed in before the exposure; replaces retail's glow" },
         { "bloomStrength", "Bloom: its share of the scene (0-0.5)" },
         { "exposure", "Auto-exposure from the scene's luminance histogram; off, a fixed exposureBias stops" },

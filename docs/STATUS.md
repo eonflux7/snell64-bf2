@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah placed by hand, the bake file and reader next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -43,9 +43,11 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-- Far ground (render milestone 17, tasks 2–4, [render.md](lanes/render.md#17-far-terrain)): drawn
-  only on levels with a bake (none yet: the retail ring everywhere); `renderer.farGround 2` forces
-  it with placeholder heights past known ground. Look at with 2: Fallujah West `ft-2000` (no sea
+- Far ground (render milestone 17, tasks 2–5, [render.md](lanes/render.md#17-far-terrain)): drawn
+  on levels with a bake: Muttrah City, Kashan Desert, Kunar Province (real heights; A/B
+  `renderer.farGroundScaled 1`, and `renderer.farGround 0` for the retail ring). Colour past the
+  map is still the edge colour. Elsewhere `renderer.farGround 2` forces it with placeholder heights
+  past known ground. Look at with 2: Fallujah West `ft-2000` (no sea
   past the river's mouth), Muttrah City `ft-top` (the sea only by the bay), Kashan Desert
   `ft-1000-y0` (the map's colour at its edge with its detail layers' mean, the detail texture
   close to the camera). Procedural ground was built and dropped on the owner's look.
