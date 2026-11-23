@@ -18,7 +18,7 @@ This is a work in progress. A successful build is not a playable game; where eac
   MSAA with LOD crossfades, draw submission without D3DX's per-draw overhead (instanced),
   single-pass terrain. In progress: a physical sky and aerial perspective with a radial view
   distance. Planned: sky reflections, clouds, bloom with auto-exposure, GTAO. See
-  [render.md](docs/lanes/render.md).
+  [docs/render/](docs/render/README.md).
 - **Loads faster.** A PR map load, menu to spawn screen, went from about 190 s to 14 s (effect
   caches, worker compiles, file prefetch). See [perf-load.md](docs/lanes/perf-load.md).
 - **Has in-game tools.** An ImGui debug menu, performance overlay and console
@@ -76,7 +76,7 @@ B2BF/OpenBF2 ─► kr4uzi/OpenBF2 ─► + realitymod/OpenBF2 PR #1 ─► open
 
 OpenBF2 reconstructs the Battlefield 2 1.50 engine from the shipped binaries; this project would not
 exist without it. It is no longer merged in. Its documentation remains under [docs/archive/](docs/archive/README.md)
-as reference; this project's own is in [docs/](docs/) ([STATUS.md](docs/STATUS.md), [PLAN.md](docs/PLAN.md), [lanes/](docs/lanes/)).
+as reference; this project's own is in [docs/](docs/) ([STATUS.md](docs/STATUS.md), [PLAN.md](docs/PLAN.md), [render/](docs/render/README.md), [milestones/](docs/milestones/), [lanes/](docs/lanes/)).
 
 ## Contributing
 
