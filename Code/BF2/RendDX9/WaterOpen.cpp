@@ -979,6 +979,8 @@ bool toolsWriteWater(const char* base, const char*& message)
                         "K = a + b_b (r g b) %.4f %.4f %.4f /m, b_b %.5f %.5f %.5f /m\n",
                      rendererWaterType(), rendererWaterTypeName(rendererWaterType()), rendererWaterConstituent(0),
                      rendererWaterConstituent(1), rendererWaterConstituent(2), m[0], m[1], m[2], m[4], m[5], m[6]);
+        std::fprintf(f, "[surf] %.3g g/m^3 per metre of breaker height; per g/m^3 K + %.5f %.5f %.5f /m, "
+                        "b_b + %.5f %.5f %.5f /m\n", m[11], m[8], m[9], m[10], m[12], m[13], m[14]);
     }
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     double bins[6] = { 0, 0, 0, 0, 0, 0 };

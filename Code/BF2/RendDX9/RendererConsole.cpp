@@ -1538,6 +1538,11 @@ float getWaterSediment() { return rendererWaterConstituent(2); }
 void setWaterSediment(float value) { rendererSetWaterConstituent(2, clampf(value, 0.0f, 1000.0f)); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterSediment, float, true, getWaterSediment(), setWaterSediment, 0.0f, 1000.0f,
                                  kRendererConsoleTag)
+// [RENDER] render milestone 23 task 5: the surf's stirred sediment, g/m^3 per metre of breaker height.
+float getWaterSurfSediment() { return rendererWaterSurfSediment(); }
+void setWaterSurfSediment(float value) { rendererSetWaterSurfSediment(clampf(value, 0.0f, 500.0f)); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterSurfSediment, float, true, getWaterSurfSediment(), setWaterSurfSediment, 0.0f,
+                                 500.0f, kRendererConsoleTag)
 // [RENDER] render milestone 23 task 2's A/B switch, until acceptance: the open-water map bound.
 bool getWaterOpen() { return rendererWaterOpen(); }
 void setWaterOpen(bool value) { rendererWaterOpen() = value; }

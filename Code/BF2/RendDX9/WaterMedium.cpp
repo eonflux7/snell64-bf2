@@ -29,7 +29,14 @@
 // renderer.waterChlorophyll, renderer.waterCdom and renderer.waterSediment change one constituent
 // (waterType then reads -1, custom). A level's type is in its weather file (Weather.cpp); a level
 // without one is coastal 1, clear coastal water. Published as RaWaterMedium (kWaterMediumRegister,
-// two float4s: K, b_b) every frame from rendererWaterFrame.
+// four float4s: K, b_b, and per g/m^3 of sediment stirred up by the surf (task 5) what it adds to
+// each, with renderer.waterSurfSediment) every frame from rendererWaterFrame.
+//
+// Surf turbidity (task 5): breaking waves hold fine sediment in suspension, a mineral like the
+// constituent above. Its increments to K and b_b per g/m^3 are the medium's with kSurfReference
+// g/m^3 more sediment, less the medium's, over kSurfReference (linear in the concentration but
+// for each channel's band mean). The shader sets the concentration from the breakers' height
+// (RaShore.fxh, Ra_SurfSediment): renderer.waterSurfSediment g/m^3 per metre of it.
 #ifdef BF2_IMAGE_RENDDX9
 
 #define NOMINMAX
@@ -85,9 +92,11 @@ struct State
     float chlorophyll = kPresets[kDefaultPreset].chlorophyll;
     float cdom = kPresets[kDefaultPreset].cdom;
     float sediment = kPresets[kDefaultPreset].sediment;
+    float surf = 40.0f;   // g/m^3 per metre of breaker height (renderer.waterSurfSediment)
     bool dirty = true;
-    float medium[8] = {};
+    float medium[16] = {};
 };
+const double kSurfReference = 50.0;   // g/m^3 added to find the surf sediment's increments
 State g_state;
 
 double lobe(double l, double mu, double s1, double s2)
@@ -108,21 +117,23 @@ void response(double l, double rgb[3])
     rgb[2] = std::max(0.0, 0.0557 * x - 0.2040 * y + 1.0570 * z);
 }
 
-void compute(State& s)
+// K and b_b per channel (rgb), with Extra g/m^3 of sediment added
+void channels(const State& s, double extra, double kOut[3], double bbOut[3])
 {
     const double kDepth = 3.0;   // metres over which a channel's mean transmittance is matched
     const double c = std::max(static_cast<double>(s.chlorophyll), 0.0);
+    const double sediment = s.sediment + extra;
     double weight[3] = {}, transmit[3] = {}, back[3] = {};
     for (int i = 0; i < kBands; ++i)
     {
         const double l = 400.0 + 10.0 * i;
         const double a = kPureWater[i] + (c > 0.0 ? 0.0654 * std::pow(c, 0.728) * kPhytoShape[i] : 0.0) +
                          s.cdom * std::exp(-0.015 * (l - 440.0)) +
-                         0.031 * s.sediment * std::exp(-0.0123 * (l - 443.0));
+                         0.031 * sediment * std::exp(-0.0123 * (l - 443.0));
         const double bw = 0.00288 * std::pow(l / 500.0, -4.32);
         const double bp = c > 0.0 ? 0.30 * std::pow(c, 0.62) * (550.0 / l) : 0.0;
         const double ratio = 0.002 + 0.01 * (0.5 - 0.25 * std::log10(std::max(c, 1e-3)));
-        const double bm = 0.51 * s.sediment * std::pow(555.0 / l, 0.5);
+        const double bm = 0.51 * sediment * std::pow(555.0 / l, 0.5);
         const double bb = 0.5 * bw + ratio * bp + 0.0183 * bm;
         double w[3];
         response(l, w);
@@ -133,13 +144,29 @@ void compute(State& s)
             back[k] += w[k] * bb;
         }
     }
-    for (int k = 0; k < 3; ++k)
+    for (int j = 0; j < 3; ++j)
     {
-        s.medium[k] = static_cast<float>(-std::log(transmit[k] / weight[k]) / kDepth);
-        s.medium[4 + k] = static_cast<float>(back[k] / weight[k]);
+        kOut[j] = -std::log(transmit[j] / weight[j]) / kDepth;
+        bbOut[j] = back[j] / weight[j];
+    }
+}
+
+void compute(State& s)
+{
+    double k[3], bb[3], kSurf[3], bbSurf[3];
+    channels(s, 0.0, k, bb);
+    channels(s, kSurfReference, kSurf, bbSurf);
+    for (int j = 0; j < 3; ++j)
+    {
+        s.medium[j] = static_cast<float>(k[j]);
+        s.medium[4 + j] = static_cast<float>(bb[j]);
+        s.medium[8 + j] = static_cast<float>((kSurf[j] - k[j]) / kSurfReference);
+        s.medium[12 + j] = static_cast<float>((bbSurf[j] - bb[j]) / kSurfReference);
     }
     s.medium[3] = 0.0f;
     s.medium[7] = 0.0f;
+    s.medium[11] = s.surf;
+    s.medium[15] = 0.0f;
     s.dirty = false;
 }
 
@@ -174,6 +201,13 @@ void rendererSetWaterConstituent(int which, float value)
     slot = value;
     g_state.type = -1;
     g_state.dirty = true;
+}
+
+float rendererWaterSurfSediment() { return g_state.surf; }
+void rendererSetWaterSurfSediment(float value)
+{
+    g_state.surf = value;
+    g_state.medium[11] = value;
 }
 
 const float* rendererWaterMedium()

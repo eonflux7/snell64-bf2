@@ -884,7 +884,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 42
+#define RA_CONTRACT_VERSION 43
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -1201,10 +1201,12 @@ const unsigned int kSunStaticRegister = 180;
 const unsigned int kSunStaticVec4s = 8;
 // [RENDER] Render milestone 23 task 4 (contract 42): RaWaterMedium in c176..c177, the water type's
 // diffuse attenuation K = a + b_b (rgb, per metre) and backscattering b_b (rgb, per metre), per
-// screen channel (WaterMedium.cpp), written every frame by rendererWaterMediumFrame.
+// screen channel (WaterMedium.cpp), written every frame by rendererWaterMediumFrame. Task 5 (contract
+// 43): c178..c179 what a g/m^3 of sediment stirred up by the surf adds to each (rgb), c178.w
+// renderer.waterSurfSediment (g/m^3 per metre of breaker height, 0 none).
 const unsigned int kWaterMediumRegister = 176;
-const unsigned int kWaterMediumVec4s = 2;
-void stateManagerSetWaterMedium(const float* value /* RaWaterMedium, two float4s */);
+const unsigned int kWaterMediumVec4s = 4;
+void stateManagerSetWaterMedium(const float* value /* RaWaterMedium, four float4s */);
 // renderer.waterType (a preset, -1 custom) and its constituents (0 chlorophyll mg/m^3, 1 CDOM's
 // absorption at 440 nm per m, 2 sediment g/m^3); setting a constituent makes the type custom.
 int rendererWaterType();
@@ -1213,7 +1215,9 @@ int rendererWaterTypeCount();
 const char* rendererWaterTypeName(int type);
 float rendererWaterConstituent(int which);
 void rendererSetWaterConstituent(int which, float value);
-const float* rendererWaterMedium();   // the eight floats published
+float rendererWaterSurfSediment();
+void rendererSetWaterSurfSediment(float value);
+const float* rendererWaterMedium();   // the sixteen floats published
 void rendererWaterMediumFrame();
 const unsigned int kEngineRegisterBegin = 176;
 const unsigned int kEngineRegisterEnd = 224;   // c176..c223 dropped from effect writes
