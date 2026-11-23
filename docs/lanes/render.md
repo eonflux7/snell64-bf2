@@ -925,6 +925,9 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    moves hue, not brightness) and the shadows and highlights a saturation over the global one
    (`gradeShadowSaturation`, `gradeHighlightSaturation`). All 1 by default: no change.
    `tools.exposure` prints them (`[grade ranges]`).
+   Seen by an agent (2026-11-23): Kashan Desert `hb-owner`, sun at 7°, grey haze (40 km, 2 km):
+   shadows `0.85/1.0/1.2` and highlights `1.1/1.0/0.85` cool the dune's shaded side and warm the
+   sun's glow; mid grey unmoved.
 3. **A 3D LUT** (planned): the grade baked to a 32³ table when a variable changes, one fetch in the
    pass; per-level looks.
 4. **Low light** (planned, optional): a small blue, desaturated shift near the exposure ceiling.
