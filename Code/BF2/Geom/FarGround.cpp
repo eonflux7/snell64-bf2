@@ -446,8 +446,12 @@ bool composeHeights()
             float& h = edgeHeight[static_cast<std::size_t>(j) * g.edge.n + i];
             if (h != h)
             {
+                // Sampled at least one fine cell past the map, so the map's own nodes do not mix in
                 const float x = g.edge.x(i), z = g.edge.x(j);
-                h = sampleGrid(fineHeight, g.fine, x, z) + edgeMeet(x, z);
+                const float reach = g.mapHalf + g.fine.cell;
+                const float sx = std::fabs(x) > g.mapHalf && std::fabs(x) < reach ? (x > 0.0f ? reach : -reach) : x;
+                const float sz = std::fabs(z) > g.mapHalf && std::fabs(z) < reach ? (z > 0.0f ? reach : -reach) : z;
+                h = sampleGrid(fineHeight, g.fine, sx, sz) + edgeMeet(x, z);
             }
         }
     if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
