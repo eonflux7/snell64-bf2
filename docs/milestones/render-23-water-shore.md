@@ -1,4 +1,4 @@
-# Render milestone 23: water at the shore, water types, whitecaps
+# Render milestone 23: water at the shore, water types, caustics, rivers, whitecaps
 
 Design, tasks and checks of an open milestone; its order and state are in
 [PLAN.md](../PLAN.md#render), the renderer it builds on in [render/](../render/README.md). On
@@ -64,16 +64,31 @@ Tasks:
    seas), the height ×0.1. `tools.water` dumps it. Muttrah City `ssr-shore`: wind from 60°
    (east-north-east, onshore), mean effective fetch 22 km, the bay's lee smooth from the
    breakwater's tip; the long breakwater's lee stays calm right behind it. Kunar's rivers not yet looked
-   at (task 6).
-3. **Shore waves (Dagor).** Wave fronts travelling up the distance map's gradient, breaking where
-   the depth falls under their height, foam from the break; run-up sheets on the beach and a wet
-   sand band on the terrain above the waterline. Replaces the fixed shore strip.
+   at (task 9).
+3. **Shore waves (Dagor).** The spectrum's waves feel the depth from the distance map: shorter and
+   slower in shallow water (the finite-depth dispersion, ω² = g k tanh(k d)), turning toward the
+   shore's normal (refraction), and lower where the water is too shallow to carry them (a
+   depth-limited, TMA-style spectrum), so the open sea's pattern no longer reaches the waterline
+   unchanged. On top, wave fronts travelling up the distance map's gradient, breaking where the
+   depth falls under their height, foam from the break; run-up sheets on the beach and a wet sand
+   band on the terrain above the waterline. Replaces the fixed shore strip.
 4. **Water types.** Pure water's absorption built in, and turbidity (scattering and its tint) as a
    water type from Jerlov's classification, chosen from where the level is set (the Gulf of Oman
    for Muttrah City, a glacial river for Kunar), not fitted to retail. `renderer.waterColor` is
    no longer read (owner, 2026-11-24: physically correct, not judged by retail). Each level's type
    is map data in the mod's `settings/`, like its views, with a console variable to override it
    and a clear coastal type when a level has none. Rivers get their own type.
-5. **Whitecaps.** Wind gusts varying over hundreds of metres, and breaking weighted by the 503 m
+5. **Surf turbidity.** Breaking waves stir up sediment: the water's scattering rises with task 3's
+   breaking energy and falls with distance from the break, the brown band along a real beach,
+   in the sediment's tint over the water type's.
+6. **Caustics.** The sun focused by the waves onto the bed in shallow water, from the slopes the
+   FFT already makes (the refracted sun's convergence), fading with depth as the focus blurs and
+   with the water type's extinction; on the terrain and objects under the water.
+7. **Rivers.** A current: the waves' ripples and foam advected downstream, the current shifting
+   the spectrum's frequencies, standing waves and foam behind rocks and banks. The water is one
+   flat plane per level, so the flow's line comes from the channel's axis in the open-water map
+   and its sense (downstream) is map data in the mod's `settings/`, like the water type; its
+   speed from the channel's width.
+8. **Whitecaps.** Wind gusts varying over hundreds of metres, and breaking weighted by the 503 m
    cascade's crests too, so no scale reads as a tile.
-6. **Checks.** Muttrah City `ssr-shore`, `seahigh`; The Falklands; Kunar's rivers; GPU cost.
+9. **Checks.** Muttrah City `ssr-shore`, `seahigh`; The Falklands; Kunar's rivers; GPU cost.

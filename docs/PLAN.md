@@ -34,7 +34,7 @@ Open milestones: [milestones/](milestones/); accepted ones are folded into the r
 | 20. GTAO (split out of 14: small-scale occlusion; owner, 2026-11-23) | Not planned | — |
 | 21. Tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 deferred | `git log --grep 'milestone 21'` |
 | 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | In progress: task 1 built (the whole map, one cell per patch) | `git log --grep 'milestone 22'` |
-| 23. Water at the shore, water types, whitecaps | In progress: task 1 built (the dark shore patches) | `git log --grep 'milestone 23'` |
+| 23. Water at the shore, water types, caustics, rivers, whitecaps | In progress: tasks 1, 2 built | `git log --grep 'milestone 23'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,

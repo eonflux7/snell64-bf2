@@ -20,7 +20,7 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
-| `render` 23, water at the shore | In progress: tasks 1, 2 built (2026-11-24) | 3 (shore waves) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
+| `render` 23, water at the shore | In progress: tasks 1, 2 built (2026-11-24) | 3 (shore waves, depth-limited waves) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
 | `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
 | `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
