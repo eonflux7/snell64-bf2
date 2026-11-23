@@ -760,6 +760,8 @@ public:
         void* underWater;    // RaTerrainUnderWater (bool)
         void* atlas[3];      // RaTerrainAtlas0..2 (texture)
         void* weight[2];     // RaTerrainWeight0..1 (texture)
+        void* shoreMap;      // RaShoreMap (texture): the open-water and shore maps (contract 41)
+        void* shore;         // RaShore (float4): 1 / the map's side, the waves' loop seconds, the sea level
     };
     RaTerrainHandles m_raTerrain;
     // [RENDER] Not retail: the sea past the view distance (render milestone 11 task 5). Per

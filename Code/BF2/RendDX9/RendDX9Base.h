@@ -806,6 +806,12 @@ bool rendererWaterOpenWind(double& x, double& z);
 float rendererWaterOpenBind();
 bool& rendererWaterOpen();   // renderer.waterOpen, milestone 23's A/B switch (1)
 void rendererWaterOpenUnbind();
+// Contract 41: the open-water texture as an effect texture value for the terrain's swash, with
+// shore = (1 / the map's side in m, the waves' loop seconds, the sea level the map was baked at, 0);
+// 0 (shore all zero) without it. rendererWaterLoopSeconds (Water.cpp): the waves' time in their
+// loop, false before the first spectrum.
+const void* rendererWaterShoreValue(float shore[4]);
+bool rendererWaterLoopSeconds(float& seconds);
 void rendererWaterSceneBegin();
 void rendererWaterSceneEnd();
 void rendererFirstPersonPrepass();
@@ -878,7 +884,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 40
+#define RA_CONTRACT_VERSION 41
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

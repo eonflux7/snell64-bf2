@@ -37,8 +37,9 @@
 //
 //   r   the depth under the sea level, metres (negative on land)
 //   g   the phase of the level's peak wave refracted by the bed (shoreBake: an eikonal solve from the
-//       deep water's plane wave), radians modulo kShorePhaseWrap; land next to the water continues it
-//   b a its direction of travel, unit; zero where no train runs (land, water the march missed)
+//       deep water's plane wave), radians modulo kShorePhaseWrap; land up the beach continues it
+//       (under kShoreLandHeight above the sea, the swash's reach), and the open-water map's fetch
+//   b a its direction of travel, unit; zero where no train runs (higher land, water the march missed)
 //
 // Two rows below the map hold a table over log2 fetch, kTable entries from kTableFirst (one per
 // octave), written by Water.cpp whenever the spectrum changes (rendererWaterOpenTable): row 0 each
@@ -60,6 +61,7 @@
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "RendDX9Base.h"
 #include "ToolsAtmosphere.h"
+#include "Texture.h"
 #include "../Geom/Terrain.h"
 #include "../Physics/HeightmapCluster.h"
 
@@ -97,6 +99,8 @@ const double kShoreDeep = kPi;       // k0 d past which the bed is not felt (d >
 const double kShoreMinDepth = 0.2;   // m: the train's depth at the waterline (a bore's speed, not zero)
 const double kShorePhaseWrap = 8.0 * kPi;   // the stored phase's period (16-bit floats)
 const double kShoreGroupWaves = 7.0; // waves to a group
+const float kShoreLandHeight = 4.0f; // m above the sea the train's phase is carried up the beach (the swash's reach)
+const int kShoreLandRings = 128;     // and at most this many texels in from the water
 
 struct Bake
 {
@@ -484,29 +488,57 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
     b.shore.assign(count * 4, 0.0f);
     std::vector<double> filled(phi);
     std::vector<unsigned char> has(count);
+    std::vector<std::size_t> front, next;
     for (std::size_t c = 0; c < count; ++c)
-        has[c] = water[c] && known[c] == 1;
-    for (int ring = 0; ring < 2; ++ring)
     {
-        std::vector<unsigned char> next(has);
-        for (int j = 0; j < kSide; ++j)
-            for (int i = 0; i < kSide; ++i)
+        has[c] = water[c] && known[c] == 1;
+        if (has[c])
+            front.push_back(c);
+    }
+    // Land up the beach (contract 41: the swash runs on the waterline's train) takes, ring by ring,
+    // the mean phase of its neighbours already filled, and the open-water map's fetch with it,
+    // while it lies under kShoreLandHeight above the sea, at most kShoreLandRings texels in
+    std::vector<unsigned char> ring(count, 0);
+    std::vector<std::vector<std::size_t> > rings;
+    for (int r = 1; r <= kShoreLandRings && !front.empty(); ++r)
+    {
+        next.clear();
+        for (std::size_t f = 0; f < front.size(); ++f)
+        {
+            const std::size_t c = front[f];
+            const int i = static_cast<int>(c % kSide), j = static_cast<int>(c / kSide);
+            const std::size_t around[4] = { i > 0 ? c - 1 : c, i + 1 < kSide ? c + 1 : c,
+                                            j > 0 ? c - kSide : c, j + 1 < kSide ? c + kSide : c };
+            for (int n = 0; n < 4; ++n)
             {
-                const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
-                if (has[c])
+                const std::size_t a = around[n];
+                if (has[a] || ring[a] || water[a] || b.heights[a] - b.sea > kShoreLandHeight)
                     continue;
-                double sum = 0.0, n = 0.0;
-                if (i > 0 && has[c - 1]) { sum += filled[c - 1]; n += 1.0; }
-                if (i + 1 < kSide && has[c + 1]) { sum += filled[c + 1]; n += 1.0; }
-                if (j > 0 && has[c - kSide]) { sum += filled[c - kSide]; n += 1.0; }
-                if (j + 1 < kSide && has[c + kSide]) { sum += filled[c + kSide]; n += 1.0; }
-                if (n > 0.0)
-                {
-                    filled[c] = sum / n;
-                    next[c] = 1;
-                }
+                ring[a] = static_cast<unsigned char>(r);
+                next.push_back(a);
             }
-        has.swap(next);
+        }
+        for (std::size_t f = 0; f < next.size(); ++f)
+        {
+            const std::size_t c = next[f];
+            const int i = static_cast<int>(c % kSide), j = static_cast<int>(c / kSide);
+            const std::size_t around[4] = { i > 0 ? c - 1 : c, i + 1 < kSide ? c + 1 : c,
+                                            j > 0 ? c - kSide : c, j + 1 < kSide ? c + kSide : c };
+            double sum = 0.0, fetch = 0.0, n = 0.0;
+            for (int k = 0; k < 4; ++k)
+                if (around[k] != c && has[around[k]])
+                {
+                    sum += filled[around[k]];
+                    fetch += b.texels[around[k] * 4 + 3];
+                    n += 1.0;
+                }
+            filled[c] = sum / n;   // a ring's texel touches the ring before it
+            b.texels[c * 4 + 3] = static_cast<float>(fetch / n);
+        }
+        for (std::size_t f = 0; f < next.size(); ++f)
+            has[next[f]] = 1;
+        rings.push_back(next);
+        front.swap(next);
     }
     for (int j = 0; j < kSide; ++j)
         for (int i = 0; i < kSide; ++i)
@@ -529,35 +561,32 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
                 p[3] = static_cast<float>(gz / len);
             }
         }
-    // The land ring that took a phase takes its neighbours' direction too (the train runs to the
-    // waterline), ring by ring
-    for (int ring = 0; ring < 2; ++ring)
-    {
-        std::vector<float> next(b.shore);
-        for (int j = 0; j < kSide; ++j)
-            for (int i = 0; i < kSide; ++i)
+    // The land that took a phase takes the mean direction of its neighbours a ring nearer the water
+    // (the train runs to the waterline and the swash up the beach)
+    for (std::size_t r = 0; r < rings.size(); ++r)
+        for (std::size_t f = 0; f < rings[r].size(); ++f)
+        {
+            const std::size_t c = rings[r][f];
+            const int i = static_cast<int>(c % kSide), j = static_cast<int>(c / kSide);
+            const std::size_t around[4] = { i > 0 ? c - 1 : c, i + 1 < kSide ? c + 1 : c,
+                                            j > 0 ? c - kSide : c, j + 1 < kSide ? c + kSide : c };
+            float x = 0.0f, z = 0.0f;
+            for (int n = 0; n < 4; ++n)
             {
-                const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
-                float* const p = &next[c * 4];
-                if (!has[c] || p[2] != 0.0f || p[3] != 0.0f)
-                    continue;
-                float x = 0.0f, z = 0.0f;
-                const std::size_t around[4] = { i > 0 ? c - 1 : c, i + 1 < kSide ? c + 1 : c,
-                                                j > 0 ? c - kSide : c, j + 1 < kSide ? c + kSide : c };
-                for (int n = 0; n < 4; ++n)
+                const std::size_t a = around[n];
+                if (a != c && (water[a] || (ring[a] && ring[a] <= r)))   // ring r + 1 is this one's
                 {
-                    x += b.shore[around[n] * 4 + 2];
-                    z += b.shore[around[n] * 4 + 3];
-                }
-                const float len = std::sqrt(x * x + z * z);
-                if (len > 1e-6f)
-                {
-                    p[2] = x / len;
-                    p[3] = z / len;
+                    x += b.shore[a * 4 + 2];
+                    z += b.shore[a * 4 + 3];
                 }
             }
-        b.shore.swap(next);
-    }
+            const float len = std::sqrt(x * x + z * z);
+            if (len > 1e-6f)
+            {
+                b.shore[c * 4 + 2] = x / len;
+                b.shore[c * 4 + 3] = z / len;
+            }
+        }
 }
 
 void runBake(Bake& b)
@@ -881,6 +910,22 @@ float rendererWaterOpenBind()
     d->SetSamplerState(kWaterOpenSampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
     d->SetSamplerState(kWaterOpenSampler, D3DSAMP_SRGBTEXTURE, FALSE);
     return s.scale;
+}
+
+const void* rendererWaterShoreValue(float shore[4])
+{
+    static EngineTexture value;
+    OpenState& s = st();
+    float seconds = 0.0f;
+    shore[0] = shore[1] = shore[2] = shore[3] = 0.0f;
+    if (!g_waterOpen || !s.texture || s.scale <= 0.0f || !s.haveTable || s.tableNew
+        || !rendererWaterLoopSeconds(seconds))
+        return 0;
+    value.baseTexture = s.texture;
+    shore[0] = s.scale;
+    shore[1] = seconds;
+    shore[2] = s.info.sea;
+    return &value;
 }
 
 void rendererWaterOpenUnbind()

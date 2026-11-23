@@ -807,11 +807,20 @@ bool rendererWaterBindWaves()
         }
         foam[0] = 1.0f;
         foam[1] = static_cast<float>(std::max(s.liveHs / 0.78, 0.3));
-        foam[2] = static_cast<float>(std::fmod(s.lastSeconds, kLoopSeconds));
     }
+    // z the waves' time even with foam off: the shore's train and swash run on it (contract 41)
+    foam[2] = static_cast<float>(std::fmod(s.lastSeconds, kLoopSeconds));
     // The open-water map (milestone 23, contract 38): w 1 / its side in metres while bound
     foam[3] = rendererWaterOpenBind();
     stateManagerSetWaterFoam(foam);
+    return true;
+}
+
+bool rendererWaterLoopSeconds(float& seconds)
+{
+    if (!g_state || !g_state->ready)
+        return false;
+    seconds = static_cast<float>(std::fmod(g_state->lastSeconds, kLoopSeconds));
     return true;
 }
 

@@ -1125,6 +1125,13 @@ void Terrain::drawFinal()
     const int atlasCount = static_cast<int>(atlases->detail.size());
     for (int i = 0; i < 3; ++i)
         param(m_raTerrain.atlas[i])->setValue(terrainAtlasDetailValue(i < atlasCount ? i : 0), 0);
+    {
+        // The swash up the beach (render milestone 23, contract 41) reads the water's shore map
+        float shore[4];
+        const void* const map = dx9rend::rendererWaterShoreValue(shore);
+        param(m_raTerrain.shoreMap)->setValue(map, 0);
+        param(m_raTerrain.shore)->setValue(shore, 0);
+    }
 
     dx9rend::effectSetTechniqueByName(m_effect, raTerrainTechniqueName());
     dx9rend::effectBegin(m_effect);

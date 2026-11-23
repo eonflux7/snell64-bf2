@@ -811,6 +811,8 @@ void Terrain::init()
     TERRAIN_PARAM(m_raTerrain.atlas[2],           "RaTerrainAtlas2");
     TERRAIN_PARAM(m_raTerrain.weight[0],          "RaTerrainWeight0");
     TERRAIN_PARAM(m_raTerrain.weight[1],          "RaTerrainWeight1");
+    TERRAIN_PARAM(m_raTerrain.shoreMap,           "RaShoreMap");             // [RENDER] contract 41
+    TERRAIN_PARAM(m_raTerrain.shore,              "RaShore");
     TERRAIN_PARAM(m_hSpotLight,                 "SPOTLIGHT");
     TERRAIN_PARAM(m_hTerrainWaterColor,         "TerrainWaterColor");
     TERRAIN_PARAM(m_hWaterHeight,               "WaterHeight");
