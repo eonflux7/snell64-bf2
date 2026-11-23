@@ -1295,10 +1295,14 @@ bool farGroundSeaIn(float x0, float z0, float x1, float z1)
     return false;
 }
 
-bool farGroundDraw(Terrain* terrain)
+namespace {
+
+// Sets the far ground's parameters for this frame's view and draws it through `technique`; false
+// when it is off, not built, or the effect lacks the technique.
+bool drawWith(Terrain* terrain, const std::string& technique)
 {
     if (!farGroundActive() || !terrain->m_effect
-        || !dx9rend::effectHasTechnique(terrain->m_effect, techniqueName()))
+        || !dx9rend::effectHasTechnique(terrain->m_effect, technique))
         return false;
 
     // The bake's variant changed (renderer.farGroundScaled): the heights again.
@@ -1336,7 +1340,7 @@ bool farGroundDraw(Terrain* terrain)
     for (int i = 0; atlasCount && i < 3; ++i)
         param(terrain->m_raTerrain.atlas[i])->setValue(terrainAtlasDetailValue(i < atlasCount ? i : 0), 0);
 
-    dx9rend::effectSetTechniqueByName(terrain->m_effect, techniqueName());
+    dx9rend::effectSetTechniqueByName(terrain->m_effect, technique);
     dx9rend::effectBegin(terrain->m_effect);
     dx9rend::vertexDeclarationBind(g.declaration);
     dx9rend::vertexBufferBindStream(g.vertexBuffer, 0);
@@ -1345,6 +1349,19 @@ bool farGroundDraw(Terrain* terrain)
     dx9rend::rendererDrawIndexedPrimitive(g.primCount, D3DPT_TRIANGLELIST, 0, 0u, g.vertexCount, 0u);
     dx9rend::effectEnd(terrain->m_effect);
     return true;
+}
+
+} // namespace
+
+bool farGroundDraw(Terrain* terrain)
+{
+    return drawWith(terrain, techniqueName());
+}
+
+void farGroundDrawDepth(Terrain* terrain)
+{
+    static const std::string name("RaFarGroundDepth");
+    drawWith(terrain, name);
 }
 
 void farGroundRelease()

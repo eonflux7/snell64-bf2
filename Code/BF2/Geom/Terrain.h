@@ -473,7 +473,8 @@ public:
     // effect parameter RaShadowViewProj (semantic) = `viewProjection`, into the bound target.
     void  gatherShadowCasters(const Frustum& volume);
     void  drawShadowCasters(const float* viewProjection, const dx9rend::ShadowCascadeCull& cull);
-    void  drawDepthPrepass();                                        // [RENDER] technique RaDepthPrepass
+    void  drawDepthPrepass();                                        // [RENDER] the map's and the far ground's depth
+    void  drawMainDepthPrepass();                                    // [RENDER] technique RaDepthPrepass
     // [RENDER] The point lights reaching each patch, for RaTerrain's per-patch list (the sources of
     // retail's light passes, sub_100DF990 and sub_100DE5B0).
     void  gatherPointLights();

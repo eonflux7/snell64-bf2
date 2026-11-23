@@ -916,6 +916,18 @@ void Terrain::drawShadowCasters(const float* viewProjection, const dx9rend::Shad
 
 void Terrain::drawDepthPrepass()
 {
+    drawMainDepthPrepass();
+    // The far ground after the map, where renderWorldPassEnd draws it.
+    if (m_flag359 && m_effect)
+    {
+        dx9rend::stateManagerPush();
+        farGroundDrawDepth(this);
+        dx9rend::stateManagerPop();
+    }
+}
+
+void Terrain::drawMainDepthPrepass()
+{
     static const std::string technique("RaDepthPrepass");
     if (!m_drawMain || !m_effect
         || !dx9rend::effectHasTechnique(m_effect, technique))

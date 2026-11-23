@@ -56,6 +56,9 @@ void farGroundUpdate(Terrain* terrain);
 // Draws the far ground; false when it is off (renderer.farGround 0) or not built, so the caller
 // draws the ring instead.
 bool farGroundDraw(Terrain* terrain);
+// Draws the far ground's linear view depth (technique RaFarGroundDepth) in the depth prepass, after
+// the map's terrain, so what reads the scene's depth sees it; nothing when it is off or not built.
+void farGroundDrawDepth(Terrain* terrain);
 // Whether the far ground is built and on; then the sea past the map follows farGroundSeaIn.
 bool farGroundActive();
 // Whether the far ground's heights fall under the sea anywhere in the world xz box (the box is
