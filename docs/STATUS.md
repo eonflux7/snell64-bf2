@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework) planned | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework): tasks 1–2 built, 3 next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -27,12 +27,23 @@ Design and as built in [render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
 6. Compressed (Karis) resolve: dropped (owner, 2026-11-22: no aliasing seen at bright edges).
 7. Judged by eye; GPU cost with the final GPU pass.
 
-## Planned: `render` milestone 18, atmosphere rework
+## In progress: `render` milestone 18, atmosphere rework
 
 One atmosphere with its aerosol from the weather (visibility, type, mixing height, the level's
-altitude) in place of the ground-haze layer; weather per level. Design and tasks 1–6 in
-[render.md](lanes/render.md#18-atmosphere-rework), reviewed 2026-11-23 (no A/B: tasks 1 and 2 land
-together). Not started.
+altitude) in place of the ground-haze layer; weather per level. Design, as built and tasks in
+[render.md](lanes/render.md#18-atmosphere-rework).
+
+1. The model (aerosol, altitude from the bake, the sun against the reference air, tables on a
+   worker, the camera's sky view by height band): built.
+2. Aerial perspective from the model to 40 km (contract 27), the ground haze deleted: built.
+3. Clouds through the same air: next (their separate haze is zeroed meanwhile).
+4–6 as planned.
+
+Open for the owner: above the mixing layer the aerosol falls at 1.2 km (the design's), so 1 km
+over the layer's top it keeps 43 %: from a jet (Kunar Province `jet`) the ground 20 km off is
+under an optical depth of about 2, washed to the horizon's blue, and at 5 km visibility the
+surfaces' sun drops to 0.15 / 0.09 / 0.04 (Muttrah City, sun at 43°). A sharper top (a real
+inversion) would thin both.
 
 ## Paused: `render` milestone 12, clouds
 
@@ -55,8 +66,7 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   `renderer.farGroundScaled 1`, and `renderer.farGround 0` for the retail ring). Colour past the
   map is still the edge colour. Where it meets the map and the clouds behind the haze: Kunar
   Province `edge-low`, `edge-e`, `horizon`; it is in the depth prepass (contract 24), so the near
-  clouds no longer draw over it. Clouds are hazed to their own distance (contract 25): A/B
-  `renderer.hazeVisibility` 8000 against 40000 at `horizon`. Elsewhere `renderer.farGround 2` forces it with placeholder heights
+  clouds no longer draw over it. Elsewhere `renderer.farGround 2` forces it with placeholder heights
   past known ground. Look at with 2: Fallujah West `ft-2000` (no sea
   past the river's mouth), Muttrah City `ft-top` (the sea only by the bay), Kashan Desert
   `ft-1000-y0` (the map's colour at its edge with its detail layers' mean, the detail texture
@@ -67,12 +77,12 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   halo); The Falklands `gpm_cq 32` view `w0` (night: `renderer.exposureMax` 4 now, 4.5 matches
   retail's brightness). Bloom strength `renderer.bloomStrength` (0.04).
 
-- Haze (render milestone 11 follow-up, 2026-11-22): realistic visibility `renderer.hazeVisibility`
-  (8 km, was 2.7 km on Muttrah City) with `renderer.hazeFalloff` 1200 m, and the haze's light per
-  pixel (contract 20: no band across far mountains at the horizon). Muttrah City `street`, `ridges`;
-  A/B `renderer.hazeVisibility 2700`, `renderer.hazeFalloff 400` (the old look). Things now dissolve
-  at fog end in clearer air (about 70 % contrast left at 700 m): judge in play. The final defaults
-  were tuned live on the previous build; not yet seen on this one (the GPU driver needs a reboot).
+- One atmosphere (render milestone 18, tasks 1–2): the haze is the air's aerosol, from
+  `renderer.weatherVisibility` (25 km default), `weatherAerosol` (0 continental, 1 maritime, 2 dust,
+  3 smoke), `weatherMixing` (1500 m), `weatherAltitude` (from the bake). Kunar Province `horizon`
+  at 100, 25, 8, 5 km (shots `m18-horizon-<n>k`), `ft-1500`, `jet` (above the haze layer);
+  Muttrah City `sun`, `antisun` (bright warm haze toward the sun, bluer away). No A/B: the old
+  haze is gone. A rebuild takes about 0.3 s after a change.
 
 ## Open issues
 

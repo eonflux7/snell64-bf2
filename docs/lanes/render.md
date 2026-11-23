@@ -163,7 +163,7 @@ for PR's fog end (0.5–2 km) would turn the sky into haze:
 - *Sky atmosphere:* Earth's air on every level (Rayleigh, Mie, ozone at Earth's densities), clear
   until milestone 12's clouds. Sunlight above it = the authored sun / the transmittance at the sun's
   elevation, clamped to at least 0.1 per channel (low suns, night layers).
-- *Ground haze:* density from a visibility, the same on every level (`renderer.hazeVisibility`,
+- *Ground haze* (replaced by [milestone 18](#18-atmosphere-rework)'s aerosol): density from a visibility, the same on every level (`renderer.hazeVisibility`,
   8 km: a level ray at the reference height keeps 2 % contrast there, 3.912 / V per metre), albedo
   from the authored fog colour, density falling with height (`renderer.hazeFalloff`, 1200 m).
   Realistic, mostly in the distance (owner, 2026-11-22); it was optical depth 1 at fog end (400 m
