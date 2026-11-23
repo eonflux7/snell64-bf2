@@ -31,7 +31,8 @@ Design and as built in [render.md](lanes/render.md#13-hdr-bloom--auto-exposure).
 
 One atmosphere with its aerosol from the weather (visibility, type, mixing height, the level's
 altitude) in place of the ground-haze layer; weather per level. Design and tasks 1–6 in
-[render.md](lanes/render.md#18-atmosphere-rework). Not started.
+[render.md](lanes/render.md#18-atmosphere-rework), reviewed 2026-11-23 (no A/B: tasks 1 and 2 land
+together). Not started.
 
 ## Paused: `render` milestone 12, clouds
 
