@@ -14,11 +14,14 @@ This is a work in progress. A successful build is not a playable game; where eac
   as `dice_py.dll`, PR's built-in Python modules, HUD variables, the launcher handshake. See
   [compat.md](docs/lanes/compat.md).
 - **Replaces the renderer.** BF2's forward, gamma-space, lightmap-lit renderer becomes a linear HDR
-  pipeline. Done: reversed-Z, a depth prepass, cascaded sun shadows, linear particle lighting, 4x
-  MSAA with LOD crossfades, draw submission without D3DX's per-draw overhead (instanced),
-  single-pass terrain. In progress: a physical sky and aerial perspective with a radial view
-  distance. Planned: sky reflections, clouds, bloom with auto-exposure, GTAO. See
-  [docs/render/](docs/render/README.md).
+  pipeline. Done: reversed-Z, a depth prepass, cascaded sun shadows with the sun term computed at
+  run time (no baked sun), linear particle lighting, 4x MSAA with LOD crossfades, draw submission
+  without D3DX's per-draw overhead (instanced), single-pass terrain with hex-tiled detail textures,
+  a physical atmosphere (sky, aerial perspective, sky-lit ambient and reflections) with weather per
+  level, rewritten water (FFT waves, foam, screen-space reflections), HDR bloom with
+  auto-exposure, and a shader pipeline that recompiles only what changed. In progress: a new
+  tonemap and colour grade, and trees over the whole map. Paused: volumetric clouds and terrain
+  past the map's edge. See [docs/render/](docs/render/README.md).
 - **Loads faster.** A PR map load, menu to spawn screen, went from about 190 s to 14 s (effect
   caches, worker compiles, file prefetch). See [perf-load.md](docs/lanes/perf-load.md).
 - **Has in-game tools.** An ImGui debug menu, performance overlay and console
