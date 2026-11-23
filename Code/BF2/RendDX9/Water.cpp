@@ -666,7 +666,7 @@ void rendererWaterFrame()
             double omegaPeak;
             jonswap(1.0, s.live, omegaPeak);
             rendererWaterOpenTable(s.openTable, s.openSpreading, s.live.fetch,
-                                   2.0 * kPi * kGravity / (omegaPeak * omegaPeak));
+                                   2.0 * kPi * kGravity / (omegaPeak * omegaPeak), s.hs, kLoopSeconds);
             s.liveSince = secondsSince(s.start);
             s.foamChecked = false;
             s.haveLive = true;

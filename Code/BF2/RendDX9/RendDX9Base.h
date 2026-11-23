@@ -782,7 +782,8 @@ bool rendererWaterWaveWind(float& x, float& z);
 // open water, log2 of the effective fetch upwind), with kWaterOpenTableRows rows below holding a
 // table over log2 fetch (kWaterOpenTable entries from kWaterOpenTableFirst, one per octave) that
 // Water.cpp writes with each spectrum (rendererWaterOpenTable): [0] the cascades' slope amplitude
-// and the significant height's ratio, [1].x the whitecap coverage's ratio; with it the spectrum's
+// and the significant height's ratio, [1].x the whitecap coverage's ratio; beside the map the
+// shore map (task 3, contract 40: depth, the refracted peak wave's phase, its direction); with it the spectrum's
 // directional spreading weighted by energy at kWaterOpenRadials angles kWaterOpenRadialStep apart
 // about the wind, the level's fetch and its sea's peak wavelength (m). rendererWaterOpenFrame (from rendererWaterFrame, with
 // the wind's direction, or automatic) bakes and uploads; rendererWaterOpenWind gives the direction
@@ -798,7 +799,8 @@ void rendererWaterOpenRelease();
 const int kWaterOpenRadials = 31;
 const double kWaterOpenRadialStep = 6.0;   // degrees: the radials span +-90 degrees
 void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4],
-                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength);
+                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength,
+                            double significantHeight, double loopSeconds);
 void rendererWaterOpenFrame(bool automatic, double windX, double windZ);
 bool rendererWaterOpenWind(double& x, double& z);
 float rendererWaterOpenBind();
@@ -876,7 +878,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 39
+#define RA_CONTRACT_VERSION 40
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

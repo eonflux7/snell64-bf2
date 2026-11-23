@@ -33,10 +33,19 @@
 // inland). The mean energy over the water is linear in the radials', so each direction is swept
 // once and every candidate's score is its radials' mean energies weighted by the spreading.
 //
+// Beside it (columns kSide to 2 kSide - 1) the shore map (task 3, contract 40):
+//
+//   r   the depth under the sea level, metres (negative on land)
+//   g   the phase of the level's peak wave refracted by the bed (shoreBake: an eikonal solve from the
+//       deep water's plane wave), radians modulo kShorePhaseWrap; land next to the water continues it
+//   b a its direction of travel, unit; zero where no train runs (land, water the march missed)
+//
 // Two rows below the map hold a table over log2 fetch, kTable entries from kTableFirst (one per
 // octave), written by Water.cpp whenever the spectrum changes (rendererWaterOpenTable): row 0 each
 // wave cascade's slope amplitude against the level's fetch and the significant height's ratio;
-// row 1 the whitecap coverage's ratio. The texture is A16B16G16R16F, kSide x (kSide + 2), managed,
+// row 1 the whitecap coverage's ratio. Row 0's texel kShoreConstants holds the shore train's angular
+// frequency, its groups' (both whole cycles of the waves' loop) and the level's significant height.
+// The texture is A16B16G16R16F, 2 kSide x (kSide + 2), managed,
 // one level; while the water queue draws with waves it is on kWaterOpenSampler (bilinear, clamp)
 // and RaWaterFoam.w is 1 / the map's side in metres (0 without it). The map is centred on the
 // world's origin, row j at z, column i at x.
@@ -59,6 +68,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
+#include <queue>
 #include <string>
 #include <thread>
 #include <vector>
@@ -72,13 +83,20 @@ extern void* g_rendererBase;
 namespace {
 
 const int kSide = 1024;              // the map's texels per side
+const int kTexWidth = 2 * kSide;     // the open-water map, then the shore map
 const int kTexRows = kSide + 2;      // and the table's two rows
+const int kShoreConstants = kWaterOpenTable;   // the shore train's constants: this column of the table's first row
 const int kRadials = kWaterOpenRadials;   // about the wind, kWaterOpenRadialStep apart
 const int kWindCandidates = 60;      // automatic wind directions, kWaterOpenRadialStep apart
 const double kEnergyPower = 4.0 / 3.0 - 0.22;   // a fetch-limited JONSWAP sea's variance ~ F^this
 const double kOpenRun = 1000.0;      // m of water along a map edge that continues as open sea past it
 const float kOpenFetch = 1.0e6f;     // m: open sea's fetch, past renderer.waterFetch's range
 const double kPi = 3.14159265358979323846;
+const double kGravity = 9.81;
+const double kShoreDeep = kPi;       // k0 d past which the bed is not felt (d > half the peak wavelength)
+const double kShoreMinDepth = 0.2;   // m: the train's depth at the waterline (a bore's speed, not zero)
+const double kShorePhaseWrap = 8.0 * kPi;   // the stored phase's period (16-bit floats)
+const double kShoreGroupWaves = 7.0; // waves to a group
 
 struct Bake
 {
@@ -88,8 +106,11 @@ struct Bake
     double dirX, dirZ;
     double fetch;                    // the level's, m
     double wavelength;               // its sea's peak, m
+    double omega;                    // the shore train's angular frequency (the peak's, whole cycles of the loop)
     float spreading[kWaterOpenRadials];
     std::vector<float> texels;       // kSide^2 x 4, the map's r g b a
+    std::vector<float> shore;        // kSide^2 x 4, the shore map's r g b a
+    double deepShare;                // of the water, deep enough to start the train
     double waterShare, meanLog2Fetch, ms;
     int openEdges;                   // edge runs taken as open sea
 };
@@ -108,11 +129,13 @@ struct OpenState
     bool building;
     Bake bake;                       // the worker's while building
     std::vector<float> map;          // the last bake's texels (kept for tools.water)
+    std::vector<float> shore;        // and its shore map
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
     float table[kWaterOpenTableRows][kWaterOpenTable][4];
     float spreading[kWaterOpenRadials];
     double fetch, wavelength;
+    double hs, omega, omegaGroup;    // the level's significant height, the train's frequencies
     bool haveTable, tableNew;
     IDirect3DTexture9* texture;
     float scale;                     // 1 / the uploaded map's side, m
@@ -347,6 +370,196 @@ void fetchSweep(const std::vector<unsigned char>& water, const std::vector<unsig
     }
 }
 
+// The wavenumber of a wave of angular frequency omega over depth d (finite-depth dispersion,
+// omega^2 = g k tanh(k d)): Fenton and McKee's approximation, then two Newton steps
+double shoreWavenumber(double omega, double d)
+{
+    const double k0 = omega * omega / kGravity;
+    if (k0 * d > 10.0)
+        return k0;
+    double k = k0 / std::pow(std::tanh(std::pow(k0 * d, 0.75)), 2.0 / 3.0);
+    for (int n = 0; n < 2; ++n)
+    {
+        const double t = std::tanh(k * d);
+        const double f = k * t - k0;
+        const double df = t + k * d * (1.0 - t * t);
+        k -= f / df;
+    }
+    return k;
+}
+
+// The shore map (task 3): per texel the depth under the sea level and the phase of the level's peak
+// wave refracted by the bed. The phase solves the eikonal equation |grad phi| = k(d) (geometric
+// optics: crests are its level sets, rays its gradient, so the waves shorten and turn toward the
+// shore's normal as the water shallows) by fast marching (Sethian 1996, first order, four
+// neighbours) over the water from the deep water (k0 d > kShoreDeep), where it is the open sea's
+// plane wave from the wind, k0 (wind . x); a point is reached by its first arrival, round a
+// breakwater's tip as by Huygens. On a map with no deep water (a river) the deepest half starts it.
+// Water the march never reaches (a lake) and land have no direction: no train.
+void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
+{
+    const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
+    const double omega = b.omega;
+    const double k0 = omega * omega / kGravity;
+    std::vector<double> k(count, 0.0), phi(count, 1e300);
+    std::vector<unsigned char> known(count, 0);
+    double deepest = 0.0;
+    for (std::size_t c = 0; c < count; ++c)
+        if (water[c])
+            deepest = std::max(deepest, static_cast<double>(b.sea - b.heights[c]));
+    const double start = std::min(kShoreDeep / k0, 0.5 * deepest);
+    typedef std::pair<double, std::size_t> Entry;
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry> > heap;
+    std::size_t wet = 0, deep = 0;
+    for (int j = 0; j < kSide; ++j)
+        for (int i = 0; i < kSide; ++i)
+        {
+            const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
+            if (!water[c])
+                continue;
+            ++wet;
+            const double d = b.sea - b.heights[c];
+            k[c] = shoreWavenumber(omega, std::max(d, kShoreMinDepth));
+            if (d >= start && start > 0.0)
+            {
+                const double x = -b.half + (i + 0.5) * cell, z = -b.half + (j + 0.5) * cell;
+                phi[c] = k0 * (b.dirX * x + b.dirZ * z);
+                known[c] = 1;
+                ++deep;
+            }
+        }
+    b.deepShare = wet ? static_cast<double>(deep) / wet : 0.0;
+    // The march's front: the shallow neighbours of the deep water
+    auto update = [&](int i, int j) {
+        const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
+        if (!water[c] || known[c] == 1)
+            return;
+        double a = 1e300, bz = 1e300;
+        if (i > 0 && known[c - 1] == 1) a = std::min(a, phi[c - 1]);
+        if (i + 1 < kSide && known[c + 1] == 1) a = std::min(a, phi[c + 1]);
+        if (j > 0 && known[c - kSide] == 1) bz = std::min(bz, phi[c - kSide]);
+        if (j + 1 < kSide && known[c + kSide] == 1) bz = std::min(bz, phi[c + kSide]);
+        const double f = k[c] * cell;
+        double v;
+        if (a > 1e299 && bz > 1e299)
+            return;
+        if (a > 1e299 || bz > 1e299 || std::fabs(a - bz) >= f)
+            v = std::min(a, bz) + f;
+        else
+            v = 0.5 * (a + bz + std::sqrt(2.0 * f * f - (a - bz) * (a - bz)));
+        if (v < phi[c])
+        {
+            phi[c] = v;
+            known[c] = 2;
+            heap.push(Entry(v, c));
+        }
+    };
+    for (int j = 0; j < kSide; ++j)
+        for (int i = 0; i < kSide; ++i)
+            if (known[static_cast<std::size_t>(j) * kSide + i] == 1)
+            {
+                if (i > 0) update(i - 1, j);
+                if (i + 1 < kSide) update(i + 1, j);
+                if (j > 0) update(i, j - 1);
+                if (j + 1 < kSide) update(i, j + 1);
+            }
+    while (!heap.empty())
+    {
+        const Entry e = heap.top();
+        heap.pop();
+        const std::size_t c = e.second;
+        if (known[c] == 1 || e.first > phi[c])
+            continue;
+        known[c] = 1;
+        const int i = static_cast<int>(c % kSide), j = static_cast<int>(c / kSide);
+        if (i > 0) update(i - 1, j);
+        if (i + 1 < kSide) update(i + 1, j);
+        if (j > 0) update(i, j - 1);
+        if (j + 1 < kSide) update(i, j + 1);
+    }
+
+    // The direction the waves travel: the phase's gradient over the reached water (one-sided at
+    // the shore). Land next to reached water takes its phase, so the shader's filter across the
+    // waterline stays continuous
+    b.shore.assign(count * 4, 0.0f);
+    std::vector<double> filled(phi);
+    std::vector<unsigned char> has(count);
+    for (std::size_t c = 0; c < count; ++c)
+        has[c] = water[c] && known[c] == 1;
+    for (int ring = 0; ring < 2; ++ring)
+    {
+        std::vector<unsigned char> next(has);
+        for (int j = 0; j < kSide; ++j)
+            for (int i = 0; i < kSide; ++i)
+            {
+                const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
+                if (has[c])
+                    continue;
+                double sum = 0.0, n = 0.0;
+                if (i > 0 && has[c - 1]) { sum += filled[c - 1]; n += 1.0; }
+                if (i + 1 < kSide && has[c + 1]) { sum += filled[c + 1]; n += 1.0; }
+                if (j > 0 && has[c - kSide]) { sum += filled[c - kSide]; n += 1.0; }
+                if (j + 1 < kSide && has[c + kSide]) { sum += filled[c + kSide]; n += 1.0; }
+                if (n > 0.0)
+                {
+                    filled[c] = sum / n;
+                    next[c] = 1;
+                }
+            }
+        has.swap(next);
+    }
+    for (int j = 0; j < kSide; ++j)
+        for (int i = 0; i < kSide; ++i)
+        {
+            const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
+            float* const p = &b.shore[c * 4];
+            p[0] = b.sea - b.heights[c];
+            p[1] = has[c] ? static_cast<float>(filled[c] - kShorePhaseWrap * std::floor(filled[c] / kShorePhaseWrap)) : 0.0f;
+            if (!water[c] || known[c] != 1)
+                continue;
+            auto reached = [&](std::size_t n) { return water[n] && known[n] == 1; };
+            const bool l = i > 0 && reached(c - 1), r = i + 1 < kSide && reached(c + 1);
+            const bool d = j > 0 && reached(c - kSide), u = j + 1 < kSide && reached(c + kSide);
+            const double gx = (r ? phi[c + 1] : phi[c]) - (l ? phi[c - 1] : phi[c]);
+            const double gz = (u ? phi[c + kSide] : phi[c]) - (d ? phi[c - kSide] : phi[c]);
+            const double len = std::sqrt(gx * gx + gz * gz);
+            if (len > 1e-9)
+            {
+                p[2] = static_cast<float>(gx / len);
+                p[3] = static_cast<float>(gz / len);
+            }
+        }
+    // The land ring that took a phase takes its neighbours' direction too (the train runs to the
+    // waterline), ring by ring
+    for (int ring = 0; ring < 2; ++ring)
+    {
+        std::vector<float> next(b.shore);
+        for (int j = 0; j < kSide; ++j)
+            for (int i = 0; i < kSide; ++i)
+            {
+                const std::size_t c = static_cast<std::size_t>(j) * kSide + i;
+                float* const p = &next[c * 4];
+                if (!has[c] || p[2] != 0.0f || p[3] != 0.0f)
+                    continue;
+                float x = 0.0f, z = 0.0f;
+                const std::size_t around[4] = { i > 0 ? c - 1 : c, i + 1 < kSide ? c + 1 : c,
+                                                j > 0 ? c - kSide : c, j + 1 < kSide ? c + kSide : c };
+                for (int n = 0; n < 4; ++n)
+                {
+                    x += b.shore[around[n] * 4 + 2];
+                    z += b.shore[around[n] * 4 + 3];
+                }
+                const float len = std::sqrt(x * x + z * z);
+                if (len > 1e-6f)
+                {
+                    p[2] = x / len;
+                    p[3] = z / len;
+                }
+            }
+        b.shore.swap(next);
+    }
+}
+
 void runBake(Bake& b)
 {
     LARGE_INTEGER t0;
@@ -455,6 +668,7 @@ void runBake(Bake& b)
                 logSum += p[3];
         }
     b.meanLog2Fetch = wet ? logSum / wet : 0.0;
+    shoreBake(b, water, cell);
     b.ms = msSince(t0);
 }
 
@@ -465,7 +679,7 @@ bool ensureTexture(OpenState& s)
     if (s.texture)
         return true;
     IDirect3DDevice9* const d = device();
-    if (!d || d->CreateTexture(kSide, kTexRows, 1, 0, D3DFMT_A16B16G16R16F, D3DPOOL_MANAGED, &s.texture, 0) < 0)
+    if (!d || d->CreateTexture(kTexWidth, kTexRows, 1, 0, D3DFMT_A16B16G16R16F, D3DPOOL_MANAGED, &s.texture, 0) < 0)
     {
         s.texture = 0;
         return false;
@@ -473,9 +687,9 @@ bool ensureTexture(OpenState& s)
     return true;
 }
 
-bool uploadRows(OpenState& s, int row0, int rows, int width, const float* texels)
+bool uploadRows(OpenState& s, int row0, int rows, int width, const float* texels, int x0 = 0)
 {
-    RECT r = { 0, row0, width, row0 + rows };
+    RECT r = { x0, row0, x0 + width, row0 + rows };
     D3DLOCKED_RECT locked;
     if (s.texture->LockRect(0, &locked, &r, 0) < 0)
         return false;
@@ -512,6 +726,8 @@ void rendererWaterOpenRelease()
     std::vector<float>().swap(s.bake.heights);
     std::vector<float>().swap(s.bake.texels);
     std::vector<float>().swap(s.map);
+    std::vector<float>().swap(s.shore);
+    std::vector<float>().swap(s.bake.shore);
     if (s.texture)
         s.texture->Release();
     s.texture = 0;
@@ -524,9 +740,17 @@ void rendererWaterOpenRelease()
 }
 
 void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4],
-                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength)
+                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength,
+                            double significantHeight, double loopSeconds)
 {
     OpenState& s = st();
+    // The peak's frequency, and a group's (kShoreGroupWaves waves), each a whole number of cycles of
+    // the loop so the train wraps with the spectrum
+    const double peak = std::sqrt(2.0 * kPi * kGravity / std::max(peakWavelength, 0.1));
+    const double cycle = 2.0 * kPi / loopSeconds;
+    s.omega = std::max(std::floor(peak / cycle + 0.5), 1.0) * cycle;
+    s.omegaGroup = std::max(std::floor(peak / (kShoreGroupWaves * cycle) + 0.5), 1.0) * cycle;
+    s.hs = significantHeight;
     std::memcpy(s.table, table, sizeof(s.table));
     std::memcpy(s.spreading, spreading, sizeof(s.spreading));
     s.fetch = fetch;
@@ -552,17 +776,19 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
     {
         joinBake(s);
         s.map.swap(s.bake.texels);
+        s.shore.swap(s.bake.shore);
         std::vector<float>().swap(s.bake.heights);
         std::vector<float>().swap(s.bake.texels);
+        std::vector<float>().swap(s.bake.shore);
         s.info = s.bake;
         s.haveDir = true;
         s.mapNew = true;
         std::fprintf(stderr, "[WATER] open-water map: %d x %d over %.0f m, sea level %.2f m, wind toward "
                      "(%.2f, %.2f)%s, level fetch %.0f km: water %.1f %% of the map, %d edge runs open sea, mean effective fetch "
-                     "%.0f m; baked in %.0f ms\n", kSide, kSide, 2.0 * s.info.half, s.info.sea,
+                     "%.0f m, %.0f %% of it deep enough to start the shore's waves; baked in %.0f ms\n", kSide, kSide, 2.0 * s.info.half, s.info.sea,
                      s.info.dirX, s.info.dirZ, s.info.automatic ? " (from the open sea)" : "",
                      s.info.fetch / 1000.0, 100.0 * s.info.waterShare, s.info.openEdges,
-                     std::exp2(s.info.meanLog2Fetch), s.info.ms);
+                     std::exp2(s.info.meanLog2Fetch), 100.0 * s.info.deepShare, s.info.ms);
     }
 
     // A new level, a new sea (the spreading and the level's fetch come with each spectrum) or the
@@ -596,6 +822,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
             b.dirZ = windZ;
             b.fetch = s.fetch;
             b.wavelength = s.wavelength;
+            b.omega = s.omega;
             std::memcpy(b.spreading, s.spreading, sizeof(s.spreading));
             b.heights.resize(static_cast<std::size_t>(kSide) * kSide);
             const float cell = 2.0f * half / kSide, inside = half - 0.01f;
@@ -621,12 +848,19 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         bool ok = true;
         if (s.mapNew)
         {
-            ok = uploadRows(s, 0, kSide, kSide, s.map.data());
+            ok = uploadRows(s, 0, kSide, kSide, s.map.data()) && uploadRows(s, 0, kSide, kSide, s.shore.data(), kSide);
             s.mapNew = !ok;
             s.scale = ok ? 0.5f / s.info.half : 0.0f;
         }
         if (s.tableNew && s.haveTable && ok)
-            s.tableNew = !uploadRows(s, kSide, kWaterOpenTableRows, kWaterOpenTable, &s.table[0][0][0]);
+        {
+            // The shore train's constants beside the table: its angular frequency and its groups'
+            // (whole cycles of the waves' loop), the level's significant height
+            const float constants[4] = { static_cast<float>(s.omega), static_cast<float>(s.omegaGroup),
+                                         static_cast<float>(s.hs), 0.0f };
+            s.tableNew = !(uploadRows(s, kSide, kWaterOpenTableRows, kWaterOpenTable, &s.table[0][0][0])
+                           && uploadRows(s, kSide, 1, 1, constants, kShoreConstants));
+        }
     }
 }
 
@@ -690,6 +924,9 @@ bool toolsWriteWater(const char* base, const char*& message)
     std::fprintf(f, "\n");
     std::fprintf(f, "[bake] water %.2f %% of the map, %d edge runs open sea, %.0f ms\n",
                  100.0 * s.info.waterShare, s.info.openEdges, s.info.ms);
+    std::fprintf(f, "[shore] train period %.2f s (groups %.1f s), significant height %.2f m, deep water (starts it) "
+                    "%.1f %% of the water\n", s.omega > 0.0 ? 2.0 * kPi / s.omega : 0.0,
+                 s.omegaGroup > 0.0 ? 2.0 * kPi / s.omegaGroup : 0.0, s.hs, 100.0 * s.info.deepShare);
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     double bins[6] = { 0, 0, 0, 0, 0, 0 };
     static const double kBinTop[6] = { 100.0, 1000.0, 5000.0, 20000.0, 100000.0, 1e30 };
@@ -719,7 +956,7 @@ bool toolsWriteWater(const char* base, const char*& message)
 
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
-    for (int image = 0; image < 2 && ok; ++image)
+    for (int image = 0; image < 3 && ok && !(image == 2 && s.shore.empty()); ++image)
     {
         IDirect3DSurface9* surface = 0;
         ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
@@ -729,16 +966,23 @@ bool toolsWriteWater(const char* base, const char*& message)
             for (int j = 0; j < kSide; ++j)
                 for (int i = 0; i < kSide; ++i)
                 {
-                    const float* const p = &s.map[(static_cast<std::size_t>(j) * kSide + i) * 4];
+                    const std::size_t c = (static_cast<std::size_t>(j) * kSide + i) * 4;
+                    const float* const p = &s.map[c];
+                    const float* const q = image == 2 ? &s.shore[c] : p;
+                    // The shore map: the crests (cos of the phase) where the train runs, dimmer the
+                    // deeper (to half the peak wavelength), land black
                     const float t = image == 0 ? 0.5f + p[0] / 512.0f
-                                  : p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f;
+                                  : image == 1 ? (p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f)
+                                  : (q[0] > 0.0f && (q[2] != 0.0f || q[3] != 0.0f))
+                                    ? (0.5f + 0.5f * std::cos(q[1])) * (1.0f - 0.75f * std::min(q[0] / static_cast<float>(0.5 * s.info.wavelength), 1.0f))
+                                    : 0.0f;
                     const unsigned int g = static_cast<unsigned int>(std::min(std::max(t, 0.0f), 1.0f) * 255.0f);
                     // Rows from z high at the top: north up
                     reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(locked.pBits)
                         + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
                 }
             surface->UnlockRect();
-            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : "-fetch.png")).c_str(),
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : "-shore.png")).c_str(),
                                         D3DXIFF_PNG, surface, 0, 0) >= 0;
         }
         else
