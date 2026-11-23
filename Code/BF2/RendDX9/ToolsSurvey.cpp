@@ -555,7 +555,7 @@ struct EffectWalk
 // [RENDER] The engine-owned pixel registers' names (RendDX9Base.h, kEngineRegisterBegin..End).
 bool engineOwnedConstant(const char* name)
 {
-    static const char* const kOwned[] = { "RaSunStatic", "RaWaterFoam", "RaCloudShadow", "RaWaterSsr",
+    static const char* const kOwned[] = { "RaWaterMedium", "RaSunStatic", "RaWaterFoam", "RaCloudShadow", "RaWaterSsr",
         "RaSkySH", "RaSunFactor", "RASM", "RaLodDither", "RaAerial" };
     for (size_t i = 0; name && i < sizeof(kOwned) / sizeof(kOwned[0]); ++i)
         if (std::strcmp(name, kOwned[i]) == 0)

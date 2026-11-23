@@ -106,12 +106,28 @@ Tasks:
      `beach-e` (the rocks: a thin wet band).
    - Open: the deep-water start is everywhere deep, so a harbour behind a breakwater starts its own
      plane wave from the wind (its height is the fetch map's, small).
-4. **Water types.** Pure water's absorption built in, and turbidity (scattering and its tint) as a
-   water type from Jerlov's classification, chosen from where the level is set (the Gulf of Oman
-   for Muttrah City, a glacial river for Kunar), not fitted to retail. `renderer.waterColor` is
-   no longer read (owner, 2026-11-24: physically correct, not judged by retail). Each level's type
-   is map data in the mod's `settings/`, like its views, with a console variable to override it
-   and a clear coastal type when a level has none. Rivers get their own type.
+4. **Water types:** built (`WaterMedium.cpp`, contract 42, 2026-11-24). The medium is pure water
+   plus three constituents, each from a published bio-optical model: pure water's absorption (Pope
+   and Fry 1997) and scattering (Morel 1974); chlorophyll's phytoplankton absorption (Bricaud et
+   al. 1998) and particle scattering (Gordon and Morel 1983, backscattered by Morel and
+   Maritorena's ratio); dissolved organic matter's absorption (CDOM, e^(-0.015 (λ - 440)));
+   mineral sediment's absorption and scattering (Babin et al. 2003, backscattered 1.83 %). Per
+   screen channel (linear sRGB's response from the CIE observer): the diffuse attenuation K = a +
+   b_b, a channel's mean transmittance over 3 m, and the backscattering b_b, published as
+   `RaWaterMedium` (c176–c177). The water body attenuates every leg by K (forward scattering
+   stays on the path; the bed's blur is not modelled) and scatters 2 b_b isotropically toward the
+   eye: deep water's reflectance within about 10 % of Gordon's 0.089 b_b / (a + b_b). The swash's
+   sheet takes the same K. `renderer.waterType` picks a preset: 0–4 oceanic I, IA, IB, II, III,
+   5–9 coastal 1, 3, 5, 7, 9, each set near Jerlov's diffuse attenuation at 450, 550 and 600 nm,
+   10 a glacial river (30 g/m³ of rock flour); `renderer.waterChlorophyll`, `waterCdom`,
+   `waterSediment` set one constituent (the type reads −1). A level's type is in its weather file
+   (`settings/eon64-weather/<level>.txt`, `waterType`); without one, coastal 1. Muttrah City
+   coastal 1 (green), Omaha Beach coastal 5, The Falklands coastal 3, Kunar the glacial river
+   (milky grey). `tools.water` writes the medium. `renderer.waterColor` (`WaterColor`) is no
+   longer read by the water body; only the path without the scene copy (under water) keeps it.
+   Seen: Muttrah City `ssr-shore` (types 0, 5, 9: blue, green, olive); Kunar `river` (the glacial
+   type against oceanic II). Open: glacial flour's turquoise (the sediment's scattering slope is one
+   for all minerals); the terrain's far water colour (`TerrainWaterColor`) is the level's.
 5. **Surf turbidity.** Breaking waves stir up sediment: the water's scattering rises with task 3's
    breaking energy and falls with distance from the break, the brown band along a real beach,
    in the sediment's tint over the water type's.
