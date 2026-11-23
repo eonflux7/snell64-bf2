@@ -589,6 +589,8 @@ bool drawTiles(void* effect, const char* technique, IDirect3DTexture9* target, u
         d3dx->SetTexture(h, field);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudCoarse"))
         d3dx->SetTexture(h, coarse);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudDetail"))
+        d3dx->SetTexture(h, s.detail);   // the light bake erodes with it (contract 33)
 
     IDirect3DSurface9* surface = 0;
     target->GetSurfaceLevel(0, &surface);
@@ -634,6 +636,7 @@ void buildStep(void* effect)
     VolumeSet& v = s.sets[target];
     float c[kRows][4];
     fillConstants(c, s.built, s.next);
+    c[7][2] = static_cast<float>(kDetailTileM);   // the light bake's erosion (contract 33)
     ++s.buildFrames;
     if (s.stage == kField)
     {
