@@ -44,9 +44,11 @@
 //                    cascade's foam (short waves break on the longer ones' crests).
 //
 // The three slope maps are bound to the reserved samplers s6-s8 (16x anisotropic, wrap) while the
-// water queue draws, and RaWaterSsr.w is set to 1 (rendererWaterBindWaves). The wind's direction is
-// the level's WaterScroll (retail's texture scroll), its speed and fetch renderer.waterWind and
-// renderer.waterFetch. The foam maps go to s4-s5 (kWaterFoamSampler) and RaWaterFoam (c188) is set
+// water queue draws, and RaWaterSsr.w is set to 1 (rendererWaterBindWaves). The wind's speed and
+// fetch are renderer.waterWind and renderer.waterFetch, its direction renderer.waterWindFrom (a
+// bearing) or, by default, the open-water map's choice: from the map's most open sea, an onshore
+// sea breeze (WaterOpen.cpp). The live spectrum's direction is WaterScroll.xy while the waves draw
+// (TerrainDraw, contract 39; retail's texture scroll is no longer read). The foam maps go to s4-s5 (kWaterFoamSampler) and RaWaterFoam (c188) is set
 // (renderer.waterFoam scales the coverage; 0 none).
 #ifdef BF2_IMAGE_RENDDX9
 
@@ -110,6 +112,7 @@ struct Wind
 struct State
 {
     float windSpeed, fetchKm;
+    float windFrom;              // renderer.waterWindFrom: degrees, negative automatic
     // CPU-built spectrum.
     std::thread thread;
     std::atomic<bool> done;
@@ -123,6 +126,7 @@ struct State
     double cascadeMss[kCascades], liveMss[kCascades];   // each cascade's mean square slope (built, live)
     double liveHs;               // the live spectrum's significant height
     float openTable[kWaterOpenTableRows][kWaterOpenTable][4];   // the built spectrum's fetch table
+    float openSpreading[kWaterOpenRadials];                     // and its spreading by energy
     float foamScale;             // renderer.waterFoam
     double buildMs;
     // GPU.
@@ -152,6 +156,7 @@ State& st()
         g_state = new State();
         g_state->windSpeed = 7.0f;
         g_state->fetchKm = 60.0f;
+        g_state->windFrom = -1.0f;
         g_state->foamScale = 1.0f;
         g_state->foamFresh = true;
     }
@@ -324,6 +329,33 @@ void openTable(const Wind& w, float table[kWaterOpenTableRows][kWaterOpenTable][
     }
 }
 
+// The spectrum's directional spreading weighted by energy, at the open-water map's radials (angles
+// to the wind), normalised to sum to 1 over them: what share of the sea's energy travels along
+// each, so the map averages the fetch's energy over the directions the waves come from.
+void openSpreading(const Wind& w, float out[kWaterOpenRadials])
+{
+    double omegaPeak;
+    jonswap(1.0, w, omegaPeak);
+    double sum[kWaterOpenRadials] = {}, total = 0.0;
+    const int steps = 400;
+    const double l0 = std::log(0.3), l1 = std::log(20.0);
+    for (int i = 0; i < steps; ++i)
+    {
+        const double omega = omegaPeak * std::exp(l0 + (i + 0.5) * (l1 - l0) / steps);
+        double peak;
+        const double e = jonswap(omega, w, peak) * omega * (l1 - l0) / steps;
+        for (int r = 0; r < kWaterOpenRadials; ++r)
+        {
+            const double theta = (r - (kWaterOpenRadials - 1) / 2) * kWaterOpenRadialStep * kPi / 180.0;
+            sum[r] += e * spreading(theta, omega, peak, w);
+        }
+    }
+    for (int r = 0; r < kWaterOpenRadials; ++r)
+        total += sum[r];
+    for (int r = 0; r < kWaterOpenRadials; ++r)
+        out[r] = static_cast<float>(total > 0.0 ? sum[r] / total : 1.0 / kWaterOpenRadials);
+}
+
 // The upper tail of the unit normal distribution, and its inverse (by bisection).
 double gaussTail(double z) { return 0.5 * std::erfc(z / std::sqrt(2.0)); }
 double gaussTailInverse(double p)
@@ -399,19 +431,18 @@ Wind currentWind()
     Wind w;
     w.speed = std::min(std::max(static_cast<double>(s.windSpeed), 1.0), 30.0);
     w.fetch = std::min(std::max(static_cast<double>(s.fetchKm), 1.0), 1000.0) * 1000.0;
+    // A bearing the wind blows from (0 from +z, 90 from +x); automatic, the open-water map's
+    // choice once baked (+x until then)
     w.dirX = 1.0;
     w.dirZ = 0.0;
-    if (geom::Terrain* const t = geom::terrain())
+    if (s.windFrom >= 0.0f)
     {
-        Vec2 v;
-        t->getWaterScroll(&v);
-        const double len = std::sqrt(static_cast<double>(v.x) * v.x + static_cast<double>(v.y) * v.y);
-        if (len > 1e-6)
-        {
-            w.dirX = v.x / len;
-            w.dirZ = v.y / len;
-        }
+        const double b = s.windFrom * kPi / 180.0;
+        w.dirX = -std::sin(b);
+        w.dirZ = -std::cos(b);
     }
+    else
+        rendererWaterOpenWind(w.dirX, w.dirZ);
     return w;
 }
 
@@ -592,6 +623,17 @@ void logFoamCoverage()
 float& rendererWaterFoam() { return st().foamScale; }
 float& rendererWaterWind() { return st().windSpeed; }
 float& rendererWaterFetch() { return st().fetchKm; }
+float& rendererWaterWindFrom() { return st().windFrom; }
+
+bool rendererWaterWaveWind(float& x, float& z)
+{
+    State& s = st();
+    if (!s.haveLive)
+        return false;
+    x = static_cast<float>(s.live.dirX);
+    z = static_cast<float>(s.live.dirZ);
+    return true;
+}
 
 void rendererWaterFrame()
 {
@@ -608,7 +650,7 @@ void rendererWaterFrame()
 
     // The spectrum: rebuilt on a worker whenever the wind changes; the old one draws meanwhile.
     const Wind wind = currentWind();
-    rendererWaterOpenFrame(wind.dirX, wind.dirZ);   // milestone 23: the open-water map
+    rendererWaterOpenFrame(s.windFrom < 0.0f, wind.dirX, wind.dirZ);   // milestone 23: the open-water map
     if (s.building && s.done)
     {
         s.thread.join();
@@ -621,7 +663,10 @@ void rendererWaterFrame()
             for (unsigned int i = 0; i < kCascades; ++i)
                 s.liveMss[i] = s.cascadeMss[i];
             s.liveHs = s.hs;
-            rendererWaterOpenTable(s.openTable);
+            double omegaPeak;
+            jonswap(1.0, s.live, omegaPeak);
+            rendererWaterOpenTable(s.openTable, s.openSpreading, s.live.fetch,
+                                   2.0 * kPi * kGravity / (omegaPeak * omegaPeak));
             s.liveSince = secondsSince(s.start);
             s.foamChecked = false;
             s.haveLive = true;
@@ -645,6 +690,7 @@ void rendererWaterFrame()
             buildSpectrum(wind, t.h0Data, t.hs, t.mss, t.mssU, t.mssC, t.cascadeMss);
             tailVariance(wind, t.mssU, t.mssC, t.tail);
             openTable(wind, t.openTable);
+            openSpreading(wind, t.openSpreading);
             t.buildMs = secondsSince(t0) * 1000.0;
             t.done = true;
         });

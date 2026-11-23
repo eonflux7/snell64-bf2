@@ -754,8 +754,10 @@ const unsigned int kWaterSceneSampler = 12;
 // A16B16G16R16F slope maps with mips (slope x, slope z and their squares). rendererWaterBindWaves
 // binds them to kWaterWaveSampler .. + 2 (16x anisotropic, wrap) for the water queue and returns
 // true, then RaWaterSsr.w is 1 (0 before the first frame builds them: a flat plane);
-// renderer.waterWind (m/s) and renderer.waterFetch (km) set the sea, the level's WaterScroll its
-// direction. The targets go at a device reset.
+// renderer.waterWind (m/s) and renderer.waterFetch (km) set the sea, renderer.waterWindFrom its
+// direction (a bearing; -1, the default, from the open-water map's most open sea). The targets go
+// at a device reset. rendererWaterWaveWind gives the live spectrum's direction (world x, z, unit),
+// which TerrainDraw publishes as WaterScroll.xy while waves draw (contract 39).
 const unsigned int kWaterWaveSampler = 6;
 // [RENDER] Render milestone 16 task 5, water's foam (contract 18): the two finer cascades' foam
 // maps (256 x 256 G16R16F with mips, r coverage 0-1, g the compression in ramps) on kWaterFoamSampler .. + 1 (16x anisotropic,
@@ -772,14 +774,19 @@ void rendererWaterUnbindWaves();
 void rendererWaterRelease();
 float& rendererWaterWind();
 float& rendererWaterFetch();
+float& rendererWaterWindFrom();   // renderer.waterWindFrom, degrees (0 from +z, 90 from +x), -1 automatic
+bool rendererWaterWaveWind(float& x, float& z);
 // [RENDER] Render milestone 23 task 2, water's open-water map (WaterOpen.cpp, contract 38): baked
 // once a level loads (rendererWaterOpenLoad, from Terrain::load) from the heights and the sea level
 // into kWaterOpenSide^2 texels over the map (the signed distance to the shore, the direction to
 // open water, log2 of the effective fetch upwind), with kWaterOpenTableRows rows below holding a
 // table over log2 fetch (kWaterOpenTable entries from kWaterOpenTableFirst, one per octave) that
 // Water.cpp writes with each spectrum (rendererWaterOpenTable): [0] the cascades' slope amplitude
-// and the significant height's ratio, [1].x the whitecap coverage's ratio. rendererWaterOpenFrame
-// (from rendererWaterFrame, with the wind's direction) bakes and uploads; rendererWaterOpenBind
+// and the significant height's ratio, [1].x the whitecap coverage's ratio; with it the spectrum's
+// directional spreading weighted by energy at kWaterOpenRadials angles kWaterOpenRadialStep apart
+// about the wind, the level's fetch and its sea's peak wavelength (m). rendererWaterOpenFrame (from rendererWaterFrame, with
+// the wind's direction, or automatic) bakes and uploads; rendererWaterOpenWind gives the direction
+// an automatic bake chose (toward which the wind blows); rendererWaterOpenBind
 // puts it on kWaterOpenSampler and returns 1 / the map's side in metres for RaWaterFoam.w (0
 // without it). rendererWaterOpenRelease from Terrain's destructor.
 const unsigned int kWaterOpenSampler = 2;
@@ -788,8 +795,12 @@ const int kWaterOpenTableRows = 2;
 const int kWaterOpenTableFirst = 4;   // log2 m: the first entry's fetch, 16 m
 void rendererWaterOpenLoad();
 void rendererWaterOpenRelease();
-void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4]);
-void rendererWaterOpenFrame(double windX, double windZ);
+const int kWaterOpenRadials = 31;
+const double kWaterOpenRadialStep = 6.0;   // degrees: the radials span +-90 degrees
+void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4],
+                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength);
+void rendererWaterOpenFrame(bool automatic, double windX, double windZ);
+bool rendererWaterOpenWind(double& x, double& z);
 float rendererWaterOpenBind();
 bool& rendererWaterOpen();   // renderer.waterOpen, milestone 23's A/B switch (1)
 void rendererWaterOpenUnbind();
@@ -865,7 +876,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 38
+#define RA_CONTRACT_VERSION 39
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

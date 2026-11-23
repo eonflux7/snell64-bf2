@@ -283,6 +283,16 @@ void Terrain::updateWaterConstants()
     Vec2 scroll;
     constantF(392) = getWaterScroll(&scroll)->x;                          // vslot +0x88, called twice as shipped
     constantF(396) = getWaterScroll(&scroll)->y;
+    // [RENDER] render milestone 23, contract 39: with the FFT ocean's waves, WaterScroll.xy is their
+    // wind's direction (the slope maps' frame) in place of the level's texture scroll.
+    {
+        float windX, windZ;
+        if (dx9rend::rendererWaterWaveWind(windX, windZ))
+        {
+            constantF(392) = windX;
+            constantF(396) = windZ;
+        }
+    }
     constantF(400) = kWaterScrollZ;
     constantF(404) = kWaterScrollW;
 

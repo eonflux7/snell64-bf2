@@ -23,6 +23,7 @@
 #include "../Geom/BundledMeshStateManager.h"
 #include "../GeomMisc/FSQuadDrawer.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -1512,6 +1513,11 @@ float getWaterFetch() { return rendererWaterFetch(); }
 void setWaterFetch(float value) { rendererWaterFetch() = clampf(value, 1.0f, 1000.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFetch, float, true, getWaterFetch(), setWaterFetch, 1.0f, 1000.0f,
                                  kRendererConsoleTag)
+// [RENDER] render milestone 23: the bearing the wind blows from; -1 from the open-water map's most open sea.
+float getWaterWindFrom() { return rendererWaterWindFrom(); }
+void setWaterWindFrom(float value) { rendererWaterWindFrom() = value < 0.0f ? -1.0f : std::fmod(value, 360.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterWindFrom, float, true, getWaterWindFrom(), setWaterWindFrom, -1.0f, 360.0f,
+                                 kRendererConsoleTag)
 float getWaterFoam() { return rendererWaterFoam(); }
 void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
@@ -1619,6 +1625,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
         { "waterFetch", "Water's waves: the fetch, how far the wind has blown over water, km (1-1000)" },
+        { "waterWindFrom", "Water's waves: the bearing the wind blows from, degrees (0 from north, +z; 90 from east, +x); -1 from the map's most open sea" },
         { "waterOpen", "Water's open-water map (milestone 23 A/B): waves and foam by the local fetch upwind; off, the level's sea everywhere" },
         { "waterFoam", "Water's foam on the crests: times the whitecap coverage measured for the wind (0-4); 0 none" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },

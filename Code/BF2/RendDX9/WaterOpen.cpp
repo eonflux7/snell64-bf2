@@ -11,15 +11,27 @@
 //       nearest texel centre of the other kind, less half a texel
 //   g b the direction toward open water: the distance's gradient (central differences), unit, zero
 //       where it vanishes
-//   a   log2 of the effective fetch, metres: how far the wind has blown over water to reach the
-//       texel. The wind's direction is the level's WaterScroll (+x without one). The fetch along
-//       each of kRadials radials within 42 degrees of the wind, combined as the Shore Protection
-//       Manual's effective fetch (US Army Corps of Engineers, 1984, after Saville 1962): weighted
-//       by cos^2 of the radial's angle to the wind, here normalised so uniform fetch is itself.
+//   a   log2 of the effective fetch upwind, metres: the fetch whose sea has the energy the texel's
+//       waves bring in from every direction. Along each of kWaterOpenRadials radials (6 degrees
+//       apart, within 90 degrees of the wind) the fetch is how far the wind has blown over water to
+//       reach the texel, at most the level's (renderer.waterFetch: past it the sea is the level's).
+//       A fetch-limited JONSWAP sea's variance goes as F^(4/3 - 0.22) (alpha ~ F^-0.22, omega_p
+//       ~ F^-1/3, the shape fixed), so each radial's energy is (F / F_level)^kEnergyPower; they
+//       are averaged with the spectrum's spreading weighted by energy (Water.cpp, Mitsuyasu's),
+//       the share of the sea travelling along each, and the mean energy turned back into a fetch.
+//       A lee fills in gradually from the directions that clear the shore, as diffraction round a
+//       breakwater's tip would spread it (not modelled itself). An average of the fetches instead
+//       (the Shore Protection Manual's effective fetch) lets one open radial carry a whole sea.
 //       Each radial's fetch is one sweep over the map: a texel's is the upwind texel's (linear
 //       between the two texels a step upwind) plus the step, zero on land. Past the map, water
 //       along an edge is open sea (kOpenFetch) where its run along that edge is at least kOpenRun,
 //       a shore otherwise (a river leaving the map)
+//
+// The wind's direction is Water.cpp's (renderer.waterWindFrom), or chosen here when automatic: the
+// one among kWindCandidates bringing the most wave energy to the map's water, the wind from its
+// most open sea (a sea breeze, the daytime wind of a warm coast; along a river's longest reach
+// inland). The mean energy over the water is linear in the radials', so each direction is swept
+// once and every candidate's score is its radials' mean energies weighted by the spreading.
 //
 // Two rows below the map hold a table over log2 fetch, kTable entries from kTableFirst (one per
 // octave), written by Water.cpp whenever the spectrum changes (rendererWaterOpenTable): row 0 each
@@ -61,8 +73,9 @@ namespace {
 
 const int kSide = 1024;              // the map's texels per side
 const int kTexRows = kSide + 2;      // and the table's two rows
-const int kRadials = 15;             // the effective fetch's radials, kRadialStep apart about the wind
-const double kRadialStep = 6.0;      // degrees
+const int kRadials = kWaterOpenRadials;   // about the wind, kWaterOpenRadialStep apart
+const int kWindCandidates = 60;      // automatic wind directions, kWaterOpenRadialStep apart
+const double kEnergyPower = 4.0 / 3.0 - 0.22;   // a fetch-limited JONSWAP sea's variance ~ F^this
 const double kOpenRun = 1000.0;      // m of water along a map edge that continues as open sea past it
 const float kOpenFetch = 1.0e6f;     // m: open sea's fetch, past renderer.waterFetch's range
 const double kPi = 3.14159265358979323846;
@@ -71,7 +84,11 @@ struct Bake
 {
     std::vector<float> heights;      // kSide^2, row j at z
     float sea, half;
+    bool automatic;                  // choose the wind's direction (dirX, dirZ out) or take it (in)
     double dirX, dirZ;
+    double fetch;                    // the level's, m
+    double wavelength;               // its sea's peak, m
+    float spreading[kWaterOpenRadials];
     std::vector<float> texels;       // kSide^2 x 4, the map's r g b a
     double waterShare, meanLog2Fetch, ms;
     int openEdges;                   // edge runs taken as open sea
@@ -82,7 +99,10 @@ struct OpenState
     bool pending;                    // a level loaded: bake on the next water frame
     bool haveKey;
     float keySea, keyHalf;
-    double keyDirX, keyDirZ;
+    bool keyAutomatic;
+    double keyDirX, keyDirZ, keyFetch, keyWavelength;
+    float keySpreading[kWaterOpenRadials];
+    bool haveDir;                    // a bake's direction (automatic or given) for rendererWaterOpenWind
     std::thread thread;
     std::atomic<bool> done;
     bool building;
@@ -91,6 +111,8 @@ struct OpenState
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
     float table[kWaterOpenTableRows][kWaterOpenTable][4];
+    float spreading[kWaterOpenRadials];
+    double fetch, wavelength;
     bool haveTable, tableNew;
     IDirect3DTexture9* texture;
     float scale;                     // 1 / the uploaded map's side, m
@@ -231,8 +253,16 @@ int openEdges(const std::vector<unsigned char>& water, double cell, std::vector<
 // One radial's fetch, metres, for the wind blowing toward (dx, dz): a sweep from the upwind side,
 // a texel's fetch the upwind one's (linear between the two texels one column or row upwind) plus
 // the step, zero on land; past the map the edge's open sea or a shore.
+//
+// With spread > 0 (m^2 per m travelled) the waves diffract: what arrives from upwind spreads
+// across the ray as it travels, so a shadow's edge behind a breakwater's tip blurs over
+// sqrt(spread * distance) rather than staying a knife edge. The parabolic approximation of
+// diffraction is a diffusion across the ray; on energy (here (F / cap)^kEnergyPower, the fetch
+// being the sea it carries) the Fresnel edge's 20-80 % width, about 0.85 sqrt(lambda x), is an
+// erf's of variance lambda x / 4, so the caller passes lambda / 4. Each row across the sweep is
+// solved implicitly (unconditionally stable at any texel size), land ends a segment (reflecting).
 void fetchSweep(const std::vector<unsigned char>& water, const std::vector<unsigned char> open[4], double cell,
-                double dx, double dz, std::vector<float>& out)
+                double dx, double dz, std::vector<float>& out, double spread = 0.0, double cap = 0.0)
 {
     out.assign(static_cast<std::size_t>(kSide) * kSide, 0.0f);
     const bool alongX = std::fabs(dx) >= std::fabs(dz);
@@ -248,13 +278,19 @@ void fetchSweep(const std::vector<unsigned char>& water, const std::vector<unsig
     // The edge the upwind ray leaves by: the major axis's upwind edge, or the minor's
     const int edgeMajor = alongX ? (stepA > 0 ? 0 : 1) : (stepA > 0 ? 2 : 3);
     const int edgeMinorLow = alongX ? 2 : 0, edgeMinorHigh = alongX ? 3 : 1;
+    // Diffusion per step in texels across: adjacent texels of a row are cell / sqrt(1 + slope^2)
+    // apart across the ray, and the ray travels stepLength
+    const bool diffract = spread > 0.0 && cap > 0.0;
+    const double across = cell / std::sqrt(1.0 + slope * slope);
+    const double k = diffract ? 0.5 * spread * stepLength / (across * across) : 0.0;
+    std::vector<double> row(kSide), cPrime(kSide);
     for (int n = 0; n < kSide; ++n)
     {
         const int a = firstA + n * stepA;
         for (int b = 0; b < kSide; ++b)
         {
-            const std::size_t k = at(a, b);
-            if (!water[k])
+            const std::size_t i = at(a, b);
+            if (!water[i])
                 continue;
             float upwind;
             const double ub = b - slope;   // the upwind point's minor coordinate
@@ -270,7 +306,43 @@ void fetchSweep(const std::vector<unsigned char>& water, const std::vector<unsig
                 const float t = static_cast<float>(ub - b0);
                 upwind = out[at(a - stepA, b0)] * (1.0f - t) + out[at(a - stepA, b0 + 1)] * t;
             }
-            out[k] = std::min(upwind + stepLength, kOpenFetch);
+            if (diffract)
+                row[b] = std::pow(std::min(static_cast<double>(upwind), cap) / cap, kEnergyPower);
+            else
+                out[i] = std::min(upwind + stepLength, kOpenFetch);
+        }
+        if (!diffract)
+            continue;
+        // Each run of water across the row: (1 + 2k) E_b - k E_b-1 - k E_b+1 = E_upwind, Thomas's
+        // algorithm; at a run's ends the missing neighbour reflects
+        for (int b0 = 0; b0 < kSide;)
+        {
+            if (!water[at(a, b0)])
+            {
+                ++b0;
+                continue;
+            }
+            int b1 = b0;
+            while (b1 + 1 < kSide && water[at(a, b1 + 1)])
+                ++b1;
+            double prev = 0.0;
+            for (int b = b0; b <= b1; ++b)
+            {
+                const double lower = b > b0 ? -k : 0.0, upper = b < b1 ? -k : 0.0;
+                const double diag = 1.0 - lower - upper;
+                const double m = diag - lower * prev;
+                cPrime[b] = upper / m;
+                row[b] = (row[b] - lower * (b > b0 ? row[b - 1] : 0.0)) / m;
+                prev = cPrime[b];
+            }
+            for (int b = b1 - 1; b >= b0; --b)
+                row[b] -= cPrime[b] * row[b + 1];
+            for (int b = b0; b <= b1; ++b)
+            {
+                const double e = std::min(std::max(row[b], 0.0), 1.0);
+                out[at(a, b)] = static_cast<float>(std::min(cap * std::pow(e, 1.0 / kEnergyPower) + stepLength, cap));
+            }
+            b0 = b1 + 1;
         }
     }
 }
@@ -307,18 +379,58 @@ void runBake(Bake& b)
     // The effective fetch
     std::vector<unsigned char> open[4];
     b.openEdges = openEdges(water, cell, open);
-    std::vector<double> sum(count, 0.0);
+    const double cap = std::max(b.fetch, 1.0);
+    auto energy = [cap](float fetch) { return fetch >= cap ? 1.0 : std::pow(fetch / cap, kEnergyPower); };
     std::vector<float> radial;
+    const double step = kWaterOpenRadialStep * kPi / 180.0;
+    double wind = std::atan2(b.dirZ, b.dirX);
+    if (b.automatic && wet)
+    {
+        // Each direction's mean energy over the water (every kSampleStride-th texel), then each
+        // candidate's by the spreading
+        const std::size_t kSampleStride = 7;
+        double mean[kWindCandidates];
+        for (int d = 0; d < kWindCandidates; ++d)
+        {
+            fetchSweep(water, open, cell, std::cos(d * step), std::sin(d * step), radial);
+            double e = 0.0, n = 0.0;
+            for (std::size_t k = 0; k < count; k += kSampleStride)
+                if (water[k])
+                {
+                    e += energy(radial[k]);
+                    n += 1.0;
+                }
+            mean[d] = n > 0.0 ? e / n : 0.0;
+        }
+        double best = -1.0;
+        for (int c = 0; c < kWindCandidates; ++c)
+        {
+            double score = 0.0;
+            for (int r = 0; r < kRadials; ++r)
+                score += b.spreading[r] * mean[((c + r - (kRadials - 1) / 2) % kWindCandidates + kWindCandidates)
+                                              % kWindCandidates];
+            if (score > best + 1e-9)
+            {
+                best = score;
+                wind = c * step;
+            }
+        }
+        b.dirX = std::cos(wind);
+        b.dirZ = std::sin(wind);
+    }
+    std::vector<double> sum(count, 0.0);
     double weights = 0.0;
-    const double wind = std::atan2(b.dirZ, b.dirX);
     for (int r = 0; r < kRadials; ++r)
     {
-        const double offset = (r - (kRadials - 1) / 2) * kRadialStep * kPi / 180.0;
-        const double c = std::cos(offset);
-        fetchSweep(water, open, cell, std::cos(wind + offset), std::sin(wind + offset), radial);
+        const double offset = (r - (kRadials - 1) / 2) * step;
+        const double w = b.spreading[r];
+        if (w <= 0.0)
+            continue;
+        fetchSweep(water, open, cell, std::cos(wind + offset), std::sin(wind + offset), radial, 0.25 * b.wavelength, cap);
         for (std::size_t k = 0; k < count; ++k)
-            sum[k] += c * c * radial[k];
-        weights += c * c;
+            if (water[k])
+                sum[k] += w * energy(radial[k]);
+        weights += w;
     }
 
     b.texels.assign(count * 4, 0.0f);
@@ -332,7 +444,8 @@ void runBake(Bake& b)
             const float gz = sd[static_cast<std::size_t>(std::min(j + 1, kSide - 1)) * kSide + i]
                            - sd[static_cast<std::size_t>(std::max(j - 1, 0)) * kSide + i];
             const float len = std::sqrt(gx * gx + gz * gz);
-            const float fetch = static_cast<float>(sum[k] / weights);
+            const double mean = weights > 0.0 ? sum[k] / weights : 0.0;
+            const float fetch = static_cast<float>(cap * std::pow(mean, 1.0 / kEnergyPower));
             float* const p = &b.texels[k * 4];
             p[0] = sd[k];
             p[1] = len > 1e-6f ? gx / len : 0.0f;
@@ -405,19 +518,34 @@ void rendererWaterOpenRelease()
     s.scale = 0.0f;
     s.pending = false;
     s.haveKey = false;
+    s.haveDir = false;
     s.mapNew = false;
     s.tableNew = s.haveTable;
 }
 
-void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4])
+void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4],
+                            const float spreading[kWaterOpenRadials], double fetch, double peakWavelength)
 {
     OpenState& s = st();
     std::memcpy(s.table, table, sizeof(s.table));
+    std::memcpy(s.spreading, spreading, sizeof(s.spreading));
+    s.fetch = fetch;
+    s.wavelength = peakWavelength;
     s.haveTable = true;
     s.tableNew = true;
 }
 
-void rendererWaterOpenFrame(double windX, double windZ)
+bool rendererWaterOpenWind(double& x, double& z)
+{
+    OpenState& s = st();
+    if (!s.haveDir)
+        return false;
+    x = s.info.dirX;
+    z = s.info.dirZ;
+    return true;
+}
+
+void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
 {
     OpenState& s = st();
     if (s.building && s.done)
@@ -427,36 +555,48 @@ void rendererWaterOpenFrame(double windX, double windZ)
         std::vector<float>().swap(s.bake.heights);
         std::vector<float>().swap(s.bake.texels);
         s.info = s.bake;
+        s.haveDir = true;
         s.mapNew = true;
         std::fprintf(stderr, "[WATER] open-water map: %d x %d over %.0f m, sea level %.2f m, wind toward "
-                     "(%.2f, %.2f): water %.1f %% of the map, %d edge runs open sea, mean effective fetch "
+                     "(%.2f, %.2f)%s, level fetch %.0f km: water %.1f %% of the map, %d edge runs open sea, mean effective fetch "
                      "%.0f m; baked in %.0f ms\n", kSide, kSide, 2.0 * s.info.half, s.info.sea,
-                     s.info.dirX, s.info.dirZ, 100.0 * s.info.waterShare, s.info.openEdges,
+                     s.info.dirX, s.info.dirZ, s.info.automatic ? " (from the open sea)" : "",
+                     s.info.fetch / 1000.0, 100.0 * s.info.waterShare, s.info.openEdges,
                      std::exp2(s.info.meanLog2Fetch), s.info.ms);
     }
 
-    // A new level, or the wind turned: sample the heights here, bake on a worker
+    // A new level, a new sea (the spreading and the level's fetch come with each spectrum) or the
+    // wind turned (given, not automatic): sample the heights here, bake on a worker
     geom::Terrain* const t = geom::terrain();
     world::IHeightmapCluster* const cluster = heightmapCluster();
-    if (t && cluster && cluster->getPrimaryHeightmap() && !s.building && (s.pending || s.haveKey))
+    if (t && cluster && cluster->getPrimaryHeightmap() && s.haveTable && !s.building && (s.pending || s.haveKey))
     {
         const float half = 0.5f * static_cast<float>(t->m_patchCount * t->m_patchSize) * t->m_primaryWorldScale.x;
         const float sea = cluster->getSeaWaterLevel();
-        const bool changed = !s.haveKey || sea != s.keySea || half != s.keyHalf || windX != s.keyDirX
-                          || windZ != s.keyDirZ;
+        const bool changed = !s.haveKey || sea != s.keySea || half != s.keyHalf || automatic != s.keyAutomatic
+                          || (!automatic && (windX != s.keyDirX || windZ != s.keyDirZ)) || s.fetch != s.keyFetch || s.wavelength != s.keyWavelength
+                          || std::memcmp(s.spreading, s.keySpreading, sizeof(s.spreading)) != 0;
         if (changed && half > 0.0f)
         {
             s.pending = false;
             s.haveKey = true;
             s.keySea = sea;
             s.keyHalf = half;
+            s.keyAutomatic = automatic;
             s.keyDirX = windX;
             s.keyDirZ = windZ;
+            s.keyFetch = s.fetch;
+            s.keyWavelength = s.wavelength;
+            std::memcpy(s.keySpreading, s.spreading, sizeof(s.spreading));
             Bake& b = s.bake;
             b.sea = sea;
             b.half = half;
+            b.automatic = automatic;
             b.dirX = windX;
             b.dirZ = windZ;
+            b.fetch = s.fetch;
+            b.wavelength = s.wavelength;
+            std::memcpy(b.spreading, s.spreading, sizeof(s.spreading));
             b.heights.resize(static_cast<std::size_t>(kSide) * kSide);
             const float cell = 2.0f * half / kSide, inside = half - 0.01f;
             for (int j = 0; j < kSide; ++j)
@@ -537,9 +677,17 @@ bool toolsWriteWater(const char* base, const char*& message)
         return false;
     }
     std::fprintf(f, "# tools.water (render milestone 23): the open-water map and its fetch table\n");
-    std::fprintf(f, "[map] %d x %d over %.1f m (%.2f m a texel), sea level %.2f m, wind toward (%.3f, %.3f), "
-                    "bound %s\n", kSide, kSide, 2.0 * s.info.half, 2.0 * s.info.half / kSide, s.info.sea,
-                 s.info.dirX, s.info.dirZ, s.scale > 0.0f ? "yes" : "no");
+    const double from = std::fmod(std::atan2(-s.info.dirX, -s.info.dirZ) * 180.0 / kPi + 360.0, 360.0);
+    std::fprintf(f, "[map] %d x %d over %.1f m (%.2f m a texel), sea level %.2f m, wind toward (%.3f, %.3f) "
+                    "from %.0f degrees (0 +z, 90 +x), %s, level fetch %.0f km, peak wavelength %.1f m (diffraction), bound %s\n", kSide, kSide,
+                 2.0 * s.info.half, 2.0 * s.info.half / kSide, s.info.sea, s.info.dirX, s.info.dirZ, from,
+                 s.info.automatic ? "from the open sea" : "renderer.waterWindFrom", s.info.fetch / 1000.0,
+                 s.info.wavelength,
+                 s.scale > 0.0f ? "yes" : "no");
+    std::fprintf(f, "[spreading] by energy, -90 to +90 degrees:");
+    for (int r = 0; r < kRadials; ++r)
+        std::fprintf(f, " %.3f", s.info.spreading[r]);
+    std::fprintf(f, "\n");
     std::fprintf(f, "[bake] water %.2f %% of the map, %d edge runs open sea, %.0f ms\n",
                  100.0 * s.info.waterShare, s.info.openEdges, s.info.ms);
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;

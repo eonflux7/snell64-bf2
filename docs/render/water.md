@@ -49,10 +49,10 @@ As built:
   shader sums the three slopes into its normal; retail's tiled normal volume (`WaterMap`,
   `WaterMapFrame0`/`1`) is no longer read, and before the first frame the water is a flat plane.
   `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
-  the level's `WaterScroll`, +x when it has none. The Falklands at the defaults: significant height
+  `renderer.waterWindFrom` or the open-water map's choice (milestone 23, task 2). The Falklands at the defaults: significant height
   1.17 m, mean square slope 0.026. Geometry stays flat (owner, 2026-11-22: normals only for now).
 - *Filtered normals and the sun path* (task 3). The slope maps hold the slopes along and across the
-  wind (the level's `WaterScroll`, which the water shader reads too) and their squares: in that
+  wind (published to the water shader as `WaterScroll`, contract 39) and their squares: in that
   frame the spectrum is symmetric and the slopes' covariance zero, so four channels hold the
   whole second moment. LEAN mapping: the filtered means summed are the mean slope (the normal),
   each cascade's squares minus its mean squared the variance its footprint averaged away. The

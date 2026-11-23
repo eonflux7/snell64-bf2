@@ -29,15 +29,30 @@ Tasks:
    descent (it was the unbent slant: oblique shallow water was too murky). Muttrah City
    `ssr-shore` clean, `seahigh` unchanged. The reflection march's weak spots (16 steps, hits on
    back faces) stay open until something shows them.
-2. **Open-water map:** built (`WaterOpen.cpp`, contract 38; `renderer.waterOpen` the A/B switch until
-   acceptance). Baked on the first water frame after a level loads, and again when the wind turns:
-   the heights sampled on the main thread over the map's square at 1024² (2 m a texel on Muttrah
-   City), the rest on a worker (112 ms there). Per texel: the signed distance to the shore (two
-   exact Euclidean distance transforms of the water mask, height under the sea level), the
+2. **Open-water map:** built (`WaterOpen.cpp`, contracts 38–39; `renderer.waterOpen` the A/B switch
+   until acceptance). Baked on the first water frame after a level loads, and again when the sea
+   or a given wind changes: the heights sampled on the main thread over the map's square at 1024²
+   (2 m a texel on Muttrah City), the rest on a worker (1.2 s there). Per texel: the signed distance to the shore
+   (two exact Euclidean distance transforms of the water mask, height under the sea level), the
    direction toward open water (its gradient), and the effective fetch upwind: one sweep per
-   radial at 6° steps within 42° of the wind, weighted by cos² (the Shore Protection Manual's
-   effective fetch, normalised so uniform fetch is itself). Past the map, water along an edge in
-   a run of at least 1 km is open sea (1000 km), a shorter run a shore (a river leaving the map).
+   radial at 6° steps within 90° of the wind, each radial's fetch (at most the level's) turned
+   into the fetch-limited JONSWAP sea's energy (∝ F^1.11), averaged with the spectrum's spreading
+   weighted by energy, and turned back into a fetch. Along each radial the waves diffract: what
+   arrives from upwind spreads across the ray as it travels (the parabolic approximation, a
+   diffusion of the energy across each row of the sweep, solved implicitly; variance λ_p x / 4,
+   the Fresnel edge's width, λ_p the level's peak wavelength, 34 m at 7 m/s), so a breakwater's
+   shadow is sharp at its tip and blurs downwind. (The first build averaged the fetches, the
+   Shore Protection Manual's effective fetch: one open radial carried a whole sea, a hard line
+   from a pier's corner; energy without diffraction still left the radials' knife-edged shadows
+   as steps.) Past
+   the map, water along an edge in a run of at least 1 km is open sea, a shorter run a shore (a
+   river leaving the map).
+   The wind blows from the map's most open sea (owner, 2026-11-24: physical; retail's
+   `WaterScroll`, a texture scroll, is no longer the wind): of 60 directions, the one bringing the
+   most wave energy to the water, a sea breeze (a warm coast's daytime wind); on a river map along
+   its longest reach. `renderer.waterWindFrom` overrides it with a bearing (0 from +z, 90 from +x;
+   −1 automatic). The live spectrum's direction reaches the shader as `WaterScroll` (contract 39).
+   The clouds keep their preset's wind for now.
    With each spectrum, a table over log2 fetch (16 m to 512 km, one entry an octave) from the same
    wind's JONSWAP integrated over each cascade's band: each cascade's slope amplitude against the
    level's, the significant height's ratio, and the whitecap coverage's ratio from wave age
@@ -46,10 +61,10 @@ Tasks:
    each cascade's slopes and variance by its amplitude, the crests' foam by the whitecap ratio,
    and the shore's breaking depth by the height ratio (at least 2 cm). At 7 m/s: under 1 km of
    fetch no 503 m swell and little of the 87 m cascade, the finest steeper (×1.45 at 1 km, young
-   seas), the height ×0.1. `tools.water` dumps it. Muttrah City `ssr-shore`: its `WaterScroll`
-   (1, 0) blows off the land, so the bay keeps only short chop and no shore strip; with
-   `terrain.waterScroll -1/0` the open sea's waves return (mean fetch 224 km). Kunar's rivers not
-   yet looked at (task 6).
+   seas), the height ×0.1. `tools.water` dumps it. Muttrah City `ssr-shore`: wind from 60°
+   (east-north-east, onshore), mean effective fetch 22 km, the bay's lee smooth from the
+   breakwater's tip; the long breakwater's lee stays calm right behind it. Kunar's rivers not yet looked
+   at (task 6).
 3. **Shore waves (Dagor).** Wave fronts travelling up the distance map's gradient, breaking where
    the depth falls under their height, foam from the break; run-up sheets on the beach and a wet
    sand band on the terrain above the waterline. Replaces the fixed shore strip.
