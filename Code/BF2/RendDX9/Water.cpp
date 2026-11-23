@@ -122,6 +122,7 @@ struct State
     float tail[2], liveTail[2];  // the unresolved slope variance along and across the wind (built, live)
     double cascadeMss[kCascades], liveMss[kCascades];   // each cascade's mean square slope (built, live)
     double liveHs;               // the live spectrum's significant height
+    float openTable[kWaterOpenTableRows][kWaterOpenTable][4];   // the built spectrum's fetch table
     float foamScale;             // renderer.waterFoam
     double buildMs;
     // GPU.
@@ -271,6 +272,56 @@ void tailVariance(const Wind& w, double mssU, double mssC, float tail[2])
     const double coxMunkC = 0.003 + 0.00192 * w.speed;
     tail[0] = static_cast<float>(std::max(coxMunkU - mssU, kTailFloor * coxMunkU));
     tail[1] = static_cast<float>(std::max(coxMunkC - mssC, kTailFloor * coxMunkC));
+}
+
+// The fetch table of the open-water map (render milestone 23, task 2; WaterOpen.cpp): per entry, a
+// fetch of 2^(kWaterOpenTableFirst + e) m (at most the level's), the same wind's JONSWAP integrated
+// over each cascade's band of wavenumbers (the spreading integrates to 1 over the circle): [0] each
+// cascade's slope amplitude against the level's spectrum, sqrt of the ratio of mean square slopes,
+// and the significant height's ratio; [1].x the whitecap coverage's ratio from the wave age:
+// Zhao and Toba ("Dependence of whitecap coverage on wind and wind-wave properties", 2001) measure
+// W proportional to (u*^2 / (nu omega_p))^1.09, and JONSWAP's omega_p goes as fetch^(-1/3), so
+// W goes as fetch^0.363 for one wind. Young seas are steeper (JONSWAP's alpha grows as the fetch
+// shortens), so the finest cascade's amplitude can pass 1 while the long waves vanish.
+void bandMoments(const Wind& w, double variance[kCascades], double mss[kCascades])
+{
+    const double limit[kCascades + 1] = { 2.0 * kPi / kPatch[0], kBandSplit * 2.0 * kPi / kPatch[1],
+                                          kBandSplit * 2.0 * kPi / kPatch[2], 0.5 * kN * 2.0 * kPi / kPatch[2] };
+    const int steps = 200;
+    for (unsigned int c = 0; c < kCascades; ++c)
+    {
+        variance[c] = mss[c] = 0.0;
+        const double l0 = std::log(limit[c]), l1 = std::log(limit[c + 1]);
+        for (int i = 0; i < steps; ++i)
+        {
+            const double k = std::exp(l0 + (i + 0.5) * (l1 - l0) / steps);
+            const double dk = k * (l1 - l0) / steps;
+            const double omega = std::sqrt(kGravity * k);
+            double omegaPeak;
+            const double sk = jonswap(omega, w, omegaPeak) * 0.5 * omega / k;   // dω/dk = ω / 2k
+            variance[c] += sk * dk;
+            mss[c] += sk * k * k * dk;
+        }
+    }
+}
+
+void openTable(const Wind& w, float table[kWaterOpenTableRows][kWaterOpenTable][4])
+{
+    double var0[kCascades], mss0[kCascades];
+    bandMoments(w, var0, mss0);
+    const double total0 = var0[0] + var0[1] + var0[2];
+    for (int e = 0; e < kWaterOpenTable; ++e)
+    {
+        Wind local = w;
+        local.fetch = std::min(std::ldexp(1.0, kWaterOpenTableFirst + e), w.fetch);
+        double var[kCascades], mss[kCascades];
+        bandMoments(local, var, mss);
+        for (unsigned int c = 0; c < kCascades; ++c)
+            table[0][e][c] = static_cast<float>(mss0[c] > 0.0 ? std::sqrt(mss[c] / mss0[c]) : 1.0);
+        table[0][e][3] = static_cast<float>(total0 > 0.0 ? std::sqrt((var[0] + var[1] + var[2]) / total0) : 1.0);
+        table[1][e][0] = static_cast<float>(std::pow(local.fetch / w.fetch, 1.09 / 3.0));
+        table[1][e][1] = table[1][e][2] = table[1][e][3] = 0.0f;
+    }
 }
 
 // The upper tail of the unit normal distribution, and its inverse (by bisection).
@@ -557,6 +608,7 @@ void rendererWaterFrame()
 
     // The spectrum: rebuilt on a worker whenever the wind changes; the old one draws meanwhile.
     const Wind wind = currentWind();
+    rendererWaterOpenFrame(wind.dirX, wind.dirZ);   // milestone 23: the open-water map
     if (s.building && s.done)
     {
         s.thread.join();
@@ -569,6 +621,7 @@ void rendererWaterFrame()
             for (unsigned int i = 0; i < kCascades; ++i)
                 s.liveMss[i] = s.cascadeMss[i];
             s.liveHs = s.hs;
+            rendererWaterOpenTable(s.openTable);
             s.liveSince = secondsSince(s.start);
             s.foamChecked = false;
             s.haveLive = true;
@@ -591,6 +644,7 @@ void rendererWaterFrame()
             QueryPerformanceCounter(&t0);
             buildSpectrum(wind, t.h0Data, t.hs, t.mss, t.mssU, t.mssC, t.cascadeMss);
             tailVariance(wind, t.mssU, t.mssC, t.tail);
+            openTable(wind, t.openTable);
             t.buildMs = secondsSince(t0) * 1000.0;
             t.done = true;
         });
@@ -709,6 +763,8 @@ bool rendererWaterBindWaves()
         foam[1] = static_cast<float>(std::max(s.liveHs / 0.78, 0.3));
         foam[2] = static_cast<float>(std::fmod(s.lastSeconds, kLoopSeconds));
     }
+    // The open-water map (milestone 23, contract 38): w 1 / its side in metres while bound
+    foam[3] = rendererWaterOpenBind();
     stateManagerSetWaterFoam(foam);
     return true;
 }
@@ -721,6 +777,7 @@ void rendererWaterUnbindWaves()
             d->SetTexture(kWaterWaveSampler + i, 0);
         for (unsigned int i = 0; i < kFoamMaps; ++i)
             d->SetTexture(kWaterFoamSampler + i, 0);
+        rendererWaterOpenUnbind();
         static const float kNone[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         stateManagerSetWaterFoam(kNone);
     }

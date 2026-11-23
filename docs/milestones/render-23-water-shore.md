@@ -29,9 +29,27 @@ Tasks:
    descent (it was the unbent slant: oblique shallow water was too murky). Muttrah City
    `ssr-shore` clean, `seahigh` unchanged. The reflection march's weak spots (16 steps, hits on
    back faces) stay open until something shows them.
-2. **Open-water map.** Baked at level load from the heightmap and the water level: distance to shore
-   (signed, its gradient the direction to the shore) and the fetch upwind. Waves' height and foam
-   scale with the fetch, so rivers and harbours stay calm and the shore's breaking depth is local.
+2. **Open-water map:** built (`WaterOpen.cpp`, contract 38; `renderer.waterOpen` the A/B switch until
+   acceptance). Baked on the first water frame after a level loads, and again when the wind turns:
+   the heights sampled on the main thread over the map's square at 1024² (2 m a texel on Muttrah
+   City), the rest on a worker (112 ms there). Per texel: the signed distance to the shore (two
+   exact Euclidean distance transforms of the water mask, height under the sea level), the
+   direction toward open water (its gradient), and the effective fetch upwind: one sweep per
+   radial at 6° steps within 42° of the wind, weighted by cos² (the Shore Protection Manual's
+   effective fetch, normalised so uniform fetch is itself). Past the map, water along an edge in
+   a run of at least 1 km is open sea (1000 km), a shorter run a shore (a river leaving the map).
+   With each spectrum, a table over log2 fetch (16 m to 512 km, one entry an octave) from the same
+   wind's JONSWAP integrated over each cascade's band: each cascade's slope amplitude against the
+   level's, the significant height's ratio, and the whitecap coverage's ratio from wave age
+   (Zhao and Toba 2001: coverage ∝ ω_p^−1.09, so fetch^0.36; re-thresholding the foam maps by the
+   steeper young sea would give short fetch more whitecaps, not fewer). The water shader scales
+   each cascade's slopes and variance by its amplitude, the crests' foam by the whitecap ratio,
+   and the shore's breaking depth by the height ratio (at least 2 cm). At 7 m/s: under 1 km of
+   fetch no 503 m swell and little of the 87 m cascade, the finest steeper (×1.45 at 1 km, young
+   seas), the height ×0.1. `tools.water` dumps it. Muttrah City `ssr-shore`: its `WaterScroll`
+   (1, 0) blows off the land, so the bay keeps only short chop and no shore strip; with
+   `terrain.waterScroll -1/0` the open sea's waves return (mean fetch 224 km). Kunar's rivers not
+   yet looked at (task 6).
 3. **Shore waves (Dagor).** Wave fronts travelling up the distance map's gradient, breaking where
    the depth falls under their height, foam from the break; run-up sheets on the beach and a wet
    sand band on the terrain above the waterline. Replaces the fixed shore strip.

@@ -1516,6 +1516,10 @@ float getWaterFoam() { return rendererWaterFoam(); }
 void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
                                  kRendererConsoleTag)
+// [RENDER] render milestone 23 task 2's A/B switch, until acceptance: the open-water map bound.
+bool getWaterOpen() { return rendererWaterOpen(); }
+void setWaterOpen(bool value) { rendererWaterOpen() = value; }
+BF2_CONSOLE_PROPERTY_FN(waterOpen, bool, true, getWaterOpen(), setWaterOpen, kRendererConsoleTag)
 
 // [RENDER] The far ground (render milestone 17, Geom/FarGround.cpp): 0 the retail ring, 1 where the
 // level has a bake, 2 everywhere.
@@ -1615,6 +1619,7 @@ const char* rendererVariableHelp(const char* name)
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
         { "waterFetch", "Water's waves: the fetch, how far the wind has blown over water, km (1-1000)" },
+        { "waterOpen", "Water's open-water map (milestone 23 A/B): waves and foam by the local fetch upwind; off, the level's sea everywhere" },
         { "waterFoam", "Water's foam on the crests: times the whitecap coverage measured for the wind (0-4); 0 none" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
         { "cloudBase", "Sky clouds' low layer: base above the terrain's mean height, in metres; 0 the preset's (desert 2000, maritime 500)" },

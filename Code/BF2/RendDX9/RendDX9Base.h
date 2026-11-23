@@ -772,6 +772,27 @@ void rendererWaterUnbindWaves();
 void rendererWaterRelease();
 float& rendererWaterWind();
 float& rendererWaterFetch();
+// [RENDER] Render milestone 23 task 2, water's open-water map (WaterOpen.cpp, contract 38): baked
+// once a level loads (rendererWaterOpenLoad, from Terrain::load) from the heights and the sea level
+// into kWaterOpenSide^2 texels over the map (the signed distance to the shore, the direction to
+// open water, log2 of the effective fetch upwind), with kWaterOpenTableRows rows below holding a
+// table over log2 fetch (kWaterOpenTable entries from kWaterOpenTableFirst, one per octave) that
+// Water.cpp writes with each spectrum (rendererWaterOpenTable): [0] the cascades' slope amplitude
+// and the significant height's ratio, [1].x the whitecap coverage's ratio. rendererWaterOpenFrame
+// (from rendererWaterFrame, with the wind's direction) bakes and uploads; rendererWaterOpenBind
+// puts it on kWaterOpenSampler and returns 1 / the map's side in metres for RaWaterFoam.w (0
+// without it). rendererWaterOpenRelease from Terrain's destructor.
+const unsigned int kWaterOpenSampler = 2;
+const int kWaterOpenTable = 16;
+const int kWaterOpenTableRows = 2;
+const int kWaterOpenTableFirst = 4;   // log2 m: the first entry's fetch, 16 m
+void rendererWaterOpenLoad();
+void rendererWaterOpenRelease();
+void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTable][4]);
+void rendererWaterOpenFrame(double windX, double windZ);
+float rendererWaterOpenBind();
+bool& rendererWaterOpen();   // renderer.waterOpen, milestone 23's A/B switch (1)
+void rendererWaterOpenUnbind();
 void rendererWaterSceneBegin();
 void rendererWaterSceneEnd();
 void rendererFirstPersonPrepass();
@@ -844,7 +865,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 36
+#define RA_CONTRACT_VERSION 38
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

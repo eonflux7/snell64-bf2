@@ -981,6 +981,7 @@ void Terrain::load(const std::string& path)
     setupWater();                                                                 // vslot +0xD4
     terrainAtlasLoad(this);    // [RENDER] the one-pass terrain's atlases, built on the first update (TerrainAtlas.h)
     farGroundLoad(this);       // [RENDER] the far ground, built after them (FarGround.h)
+    dx9rend::rendererWaterOpenLoad();   // [RENDER] water's open-water map, baked on a water frame (render milestone 23)
     dx9rend::rendererWeatherLoad();   // [RENDER] the level's weather file (render milestone 18)
 
     // [RENDER] Retail created the dynamic shadow-range index buffer (+0x368) here; nothing draws
@@ -2295,6 +2296,7 @@ Terrain::~Terrain()
     Terrain::releaseWater();
     terrainAtlasRelease();     // [RENDER] TerrainAtlas.h
     farGroundRelease();        // [RENDER] FarGround.h
+    dx9rend::rendererWaterOpenRelease();   // [RENDER] water's open-water map (render milestone 23)
 
     // Destroy the water-parameter array in reverse order, then free its allocation header.
     // The member remains unchanged.
