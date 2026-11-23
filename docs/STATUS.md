@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
+| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look; 21 (tonemap and grade) task 1 built | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -21,6 +21,11 @@ Tasks 0–4 built and checked by an agent (2026-11-23); design, as built and wha
 owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fallback and
 `renderer.sunBakedFallback` deleted). Left out, for the owner: overgrowth in the static cascade
 (it streams round the camera), static meshes placed during a round (deployables).
+
+## In progress: `render` milestone 21, tonemap and grade
+
+Task 1 (the GT curve, white balance, `renderer.grade*`) built; 2–4 planned
+([render.md](lanes/render.md#21-tonemap-and-grade)). `renderer.gradeCurve 0` is milestone 13's grade.
 
 ## Paused: `render` milestone 17, far terrain
 

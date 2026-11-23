@@ -1027,6 +1027,23 @@ struct HdrPostInfo
     IDirect3DTexture9* bloomTop;    // the bloom's level 0, half the scene
 };
 HdrPostInfo rendererHdrPostInfo();
+// [RENDER] The frame grade's look (Grade.cpp, render milestone 21): renderer.gradeCurve (0 PBR
+// Neutral, 1 the GT curve; the A/B until acceptance), gradeContrast, gradeSaturation,
+// gradeHighlightShift, gradeToe, gradeShoulder, gradeTemperature (K), gradeTint. Bound as RaGradeLook
+// on the FSQuadDrawer effect each frame (from rendererHdrPost).
+struct GradeSettings
+{
+    int curve = 1;
+    float contrast = 1.0f;          // around mid grey, in log2, before the curve
+    float saturation = 1.0f;
+    float highlightShift = 0.5f;    // 0 hue kept in highlights, 1 each channel through the curve
+    float toe = 1.25f;              // the toe's power below 0.22 (1 none)
+    float shoulder = 0.4f;          // the linear section's length, as a share of 0.22..1
+    float temperature = 6504.0f;    // the light the image is balanced for: lower cooler, higher warmer
+    float tint = 0.0f;              // + magenta, - green
+};
+GradeSettings& rendererGrade();
+void rendererGradeBind(void* d3dxEffect, bool thermal);
 // [RENDER] Milestone 12 task 8 (contract 16): the cloud shadow map (Clouds.cpp), a Beer shadow map
 // over 32 km of the plane at the reference height around the camera, redrawn a band a frame about
 // once a second; its receiver constants RaCloudShadow (2 float4s, RaSunShadow.fxh) go to the

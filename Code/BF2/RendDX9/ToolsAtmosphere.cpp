@@ -936,6 +936,13 @@ bool toolsWriteExposure(const char* base, const char*& message)
                     "dark %.1f/s); key %.3f; bloom strength %.3f\n",
                  e.exposureBias, e.exposureMin, e.exposureMax, e.exposureSpeed,
                  e.rateLight * e.exposureSpeed, e.rateDark * e.exposureSpeed, e.key, e.bloomStrength);
+    {
+        const GradeSettings& g = rendererGrade();
+        std::fprintf(f, "[grade] curve %d (%s), contrast %.3f, saturation %.3f, highlight shift %.3f, toe %.3f, "
+                        "shoulder %.3f, white balance %.0f K tint %+.3f\n", g.curve,
+                     g.curve ? "GT" : "PBR Neutral, fixed grade", g.contrast, g.saturation, g.highlightShift, g.toe,
+                     g.shoulder, g.temperature, g.tint);
+    }
     std::fprintf(f, "[frame] %u frames, last ran %s%s, dt %.4f s%s; scene %ux%u, %u bloom levels\n", e.frames,
                  e.ran ? "yes" : "no", e.thermal ? " (thermal view: skipped)" : "", e.lastDt,
                  e.lastSnap ? " (snapped)" : "", e.sceneW, e.sceneH, e.levels);

@@ -54,6 +54,7 @@ BF2/RendDX9/Weather.cpp
 BF2/RendDX9/Clouds.cpp
 BF2/RendDX9/Water.cpp
 BF2/RendDX9/HdrPost.cpp
+BF2/RendDX9/Grade.cpp
 BF2/RendDX9/SkyCube.cpp
 BF2/RendDX9/Frame.cpp
 BF2/RendDX9/Submit.cpp

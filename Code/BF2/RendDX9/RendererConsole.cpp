@@ -1559,6 +1559,23 @@ void setExposureSpeed(float value) { rendererExposureSpeed() = clampf(value, 0.0
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(exposureSpeed, float, true, getExposureSpeed(), setExposureSpeed, 0.05f, 20.0f,
                                  kRendererConsoleTag)
 
+// [RENDER] The frame grade's look (render milestone 21, Grade.cpp).
+int getGradeCurve() { return rendererGrade().curve; }
+void setGradeCurve(int value) { rendererGrade().curve = value < 0 ? 0 : value > 1 ? 1 : value; }
+BF2_CONSOLE_PROPERTY_FN(gradeCurve, int, true, getGradeCurve(), setGradeCurve, kRendererConsoleTag)
+#define GRADE_FLOAT(NAME, FIELD, LO, HI) \
+    float get##NAME() { return rendererGrade().FIELD; } \
+    void set##NAME(float value) { rendererGrade().FIELD = clampf(value, LO, HI); } \
+    BF2_CONSOLE_PROPERTY_FN_RANGED_T(NAME, float, true, get##NAME(), set##NAME, LO, HI, kRendererConsoleTag)
+GRADE_FLOAT(gradeContrast, contrast, 0.5f, 2.0f)
+GRADE_FLOAT(gradeSaturation, saturation, 0.0f, 2.0f)
+GRADE_FLOAT(gradeHighlightShift, highlightShift, 0.0f, 1.0f)
+GRADE_FLOAT(gradeToe, toe, 1.0f, 2.0f)
+GRADE_FLOAT(gradeShoulder, shoulder, 0.05f, 1.0f)
+GRADE_FLOAT(gradeTemperature, temperature, 2000.0f, 15000.0f)
+GRADE_FLOAT(gradeTint, tint, -1.0f, 1.0f)
+#undef GRADE_FLOAT
+
 } // anonymous namespace
 
 // The help lines of the fork's renderer variables, for the debug menu (docs/lanes/ui.md).
@@ -1603,6 +1620,14 @@ const char* rendererVariableHelp(const char* name)
         { "exposureMin", "Auto-exposure: the lowest exposure, in stops (how far bright scenes are darkened)" },
         { "exposureMax", "Auto-exposure: the highest exposure, in stops (keeps night dark)" },
         { "exposureSpeed", "Auto-exposure: adaptation speed, times 3/s into light and 1/s into dark" },
+        { "gradeCurve", "Tonemap curve: 1 the GT curve (toe, linear mids, shoulder; highlights may shift toward white), 0 PBR Neutral with the old fixed grade (A/B)" },
+        { "gradeContrast", "Grade: contrast around mid grey, before the curve (1 none)" },
+        { "gradeSaturation", "Grade: saturation, before the curve (1 none)" },
+        { "gradeHighlightShift", "Grade: bright colours toward white, channel by channel (fire goes yellow, then white); 0 keeps their hue" },
+        { "gradeToe", "Grade: the curve's toe below mid tones (1 linear; higher, deeper shadows)" },
+        { "gradeShoulder", "Grade: length of the curve's straight section before the highlights roll off (higher, later and harder roll-off)" },
+        { "gradeTemperature", "Grade: white balance, the light the image is balanced for in kelvin (6504 neutral; lower cooler, higher warmer)" },
+        { "gradeTint", "Grade: white balance tint (+ magenta, - green)" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

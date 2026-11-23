@@ -30,6 +30,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 18. Atmosphere rework (one atmosphere, weather per level) | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 18'` |
 | 19. Hex-tiled detail textures | Accepted | `git log --grep 'milestone 19'` |
 | 20. GTAO (split out of 14) | Not planned | — |
+| 21. Tonemap and grade | In progress: task 1 built | `git log --grep 'milestone 21'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,

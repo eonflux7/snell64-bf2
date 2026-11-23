@@ -891,6 +891,35 @@ Tasks:
 
 GTAO for small-scale occlusion, split out of milestone 14 (owner, 2026-11-23). Not planned yet.
 
+### 21. Tonemap and grade
+
+The frame grade (FSQuadDrawer pass 0, `RGrade_Apply`) after milestone 13 was PBR Neutral with no toe
+and fixed constants: linear up to 0.76, then a hue-keeping shoulder. Mid tones read flat, and bright
+saturated light (fire, flashes) kept its hue instead of running to yellow and white (milestone 7's
+red-orange fire). The grade replaces it with a parametric curve and moves the look to console
+variables (`Grade.cpp`, bound as `RaGradeLook` next to milestone 13's `RaGrade`). Cost: a few ALU
+ops in the one full-screen pass, about what Neutral cost (contract 37). Drops: PBR Neutral, and the shader's
+unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
+
+1. **Curve, white balance, console variables** (built). The GT curve (Uchimura 2017): a power toe
+   below 0.22 (`renderer.gradeToe`, 1.25), slope 1 to 0.22 + 0.78 × `renderer.gradeShoulder`
+   (0.4: 0.53), then an exponential shoulder to 1. Taken two ways and blended by
+   `renderer.gradeHighlightShift` (0.5): hue kept (the brightest channel through the curve, the
+   others scaled with it, desaturated toward white by the shoulder's pull as Neutral does) and per
+   channel (orange runs to yellow, then white). White balance: a Bradford adaptation from the white
+   of `renderer.gradeTemperature` (K, 6504 the identity; the Planckian locus offset onto D65) moved
+   off the locus by `renderer.gradeTint` (1 = 0.02 Duv), to D65; a 3x3 matrix from the CPU, the
+   white's luminance kept. `renderer.gradeContrast` and `gradeSaturation` (1, 1) as before, around
+   0.18 in log2, before the curve. `renderer.gradeCurve 0` is milestone 13's output exactly (Neutral,
+   contrast 1.05), the A/B until acceptance; thermals always take it. `tools.exposure` prints the
+   settings (`[grade]`).
+2. **Shadows, mid tones, highlights** (planned): saturation and colour per range.
+3. **A 3D LUT** (planned): the grade baked to a 32³ table when a variable changes, one fetch in the
+   pass; per-level looks.
+4. **Low light** (planned, optional): a small blue, desaturated shift near the exposure ceiling.
+5. **Checks**: A/B on Muttrah City `sun`, `street`; Kashan Desert `hb-owner` at dusk; a fire; the
+   Falklands' night layer (`w0`, its toe against milestone 13's accepted 25/255).
+
 ### 17. Far terrain
 
 Planned by the owner, 2026-11-22: cheap ground past the map for air combat, so a jet at altitude
@@ -1399,6 +1428,7 @@ and add its row here.
 | 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
 | 35 | The sky under the deck (render milestone 12): the main panorama's a (`RaClouds[4].w` ≥ half `RA_PANO_H`; not the sky cube's) is the clouds' transmittance times the dimming of the clear sky's air under the slab by the clouds' shadow and light (luminance); `RaSkyClouds.z` no longer read by the sky pass |
 | 36 | The run-time sun (render milestone 14): pixel registers c180–c187 `RaSunStatic` (engine-owned, published with `RASM`, zero outside the main world pass; layout in the shaders' `RaSunShadow.fxh`): the round's sun and a run-time flag, the static cascade's rows and the shadow height's mapping; their R32F atlas on the reserved sampler s12 in the world pass and s3 while water draws (point, clamp) |
+| 37 | The grade's look (render milestone 21): the FSQuadDrawer effect gets `RaGradeLook` (`float4[5]`, set with `RaGrade` each frame): [0] the curve (0 PBR Neutral and milestone 13's fixed grade, 1 GT; 0 under thermals), contrast, saturation, the highlights' shift toward white; [1] the toe's power, the shoulder (the linear section's length, 0–1); [2..4] the white balance matrix's rows on linear sRGB. All zero is curve 0 |
 
 Samplers 9–15 are reserved for renderer frame resources (and 3–8 in water effects, contracts 17–18 and 36), and pixel registers
 c180–c223 for `RaSunStatic`, `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
