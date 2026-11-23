@@ -783,25 +783,48 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
 On acceptance the A/B switches `renderer.exposure`, `renderer.encodeSrgb` and `renderer.bloom`
 were deleted (bloom always on, owner 2026-11-23); `bloomStrength` and the `exposure*` limits stay.
 
-### 14. GTAO + lightmap channel ownership
+### 14. Run-time sun term (the lightmaps' sun channel dropped)
 
-GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: inside cascade
-range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
-cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
-higher resolution unless the reference views show the baked sky term failing.
+Planned by the owner, 2026-11-23. The sun term is owned at run time everywhere; the lightmaps'
+sun channel (`g`) goes for terrain, roads, static meshes, grass and water. Sky visibility and
+baked point lights stay baked. Lightmaps are not re-baked.
 
-Found 2026-11-23 (Kashan Desert, sun moved to 4° by `lightManager.sunDirection`): the baked sun
-term is visibility × N.L for the level's authored sun, so with any other sun the map past the
-cascades keeps its noon light in the new sun's colour while the cascades' range and the far ground
-take the real cosine: a dark disc round the camera the size of the cascades' reach, and a bright
-map against a dim far ground. At the authored sun they roughly agree. Proposed (agent, not yet
-planned by the owner): own the sun term at run time everywhere, in three layers: the cascades
-near (as now); one static cascade over the map (terrain and static meshes, about 1 m texels at
-4096²), cached and redrawn only when the sun moves; the terrain's self-shadow out to the far
-ground's edge, marched through the heightmap and the bake toward the sun into one visibility
-texture, also only when the sun moves. The lightmaps' sun channel goes for terrain and static
-meshes; sky visibility and point lights stay. Gives long low-sun shadows; loses the baked soft
-building shadows at range.
+Why: the baked sun term is visibility × N.L for the level's authored sun. Found 2026-11-23
+(Kashan Desert, sun moved to 4° by `lightManager.sunDirection`): with any other sun the map past
+the cascades keeps its noon light in the new sun's colour while the cascades' range and the far
+ground take the real cosine, so a dark disc round the camera the size of the cascades' reach, and
+a bright map against a dim far ground. At the authored sun they roughly agree.
+
+Three layers of sun visibility, nearest first:
+
+- The cascades (as now).
+- One static cascade over the map: terrain and static meshes, about 1 m texels at 4096², cached
+  and redrawn only when the sun moves. Shares its caching with the cached static casters idea
+  ([STATUS.md](../STATUS.md#open-issues)).
+- The terrain's self-shadow out to the far ground's edge: the heightmap and the far ground bake
+  marched toward the sun into one visibility texture, redrawn only when the sun moves. The far
+  ground (milestone 17) takes it too, its first shadows.
+
+Where the baked term enters today, each a `lerp(baked, cascades, weight)`: `Ra_ResolveSunVisibility`
+and `Ra_ResolveSunCosine` (`rasunshadow.fxh`; static meshes, terrain, roads), water
+(`rashaderwaterbase.fx`), grass (`GetGrassSunTerm`, `undergrowth.fx`). The fallback becomes the
+two run-time layers; past them the sun is unshadowed N.L. Particles and vehicles fall back to the
+hemi map's alpha, not the lightmap: out of scope. Thermals keep the baked term.
+
+Accepted loss: the baked soft building shadows at range; far shadows are hard and about 1 m.
+
+Tasks:
+
+1. Static map cascade: caster list (terrain, static meshes), its target, cache, redraw on sun move.
+2. Terrain self-shadow texture: heightmap and far ground bake marched toward the sun.
+3. Shaders: the receivers above take the two layers in place of the baked `g`.
+4. Checks: Kashan Desert at a 4° sun (no disc, no bright map against the far ground), the
+   authored sun no worse than today, frame time and memory of the static cascade stated.
+5. On acceptance: the baked sun fallback deleted from the receivers.
+
+### 20. GTAO
+
+GTAO for small-scale occlusion, split out of milestone 14 (owner, 2026-11-23). Not planned yet.
 
 ### 17. Far terrain
 
