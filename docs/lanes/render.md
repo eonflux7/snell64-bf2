@@ -901,152 +901,73 @@ Tasks:
 
 ### 18. Atmosphere rework
 
-Planned with the owner, 2026-11-23: haze and clouds as in real life, now that the far ground
-shows real terrain 30+ km out. Milestone 11 drew the sky from Earth's air (Rayleigh, Mie and ozone
-at fixed densities) and laid a separate ground haze over the land (`renderer.hazeVisibility`,
-8 km; `hazeFalloff`, 1200 m) whose light is borrowed from the clear sky in the ray's direction. Two
-layers were chosen when the haze followed PR's fog end (0.5–2 km), which would have turned the
-whole sky to haze; at a real visibility that reason is gone. What looks wrong now (Kunar Province
-`horizon`, 2026-11-23):
-- The haze is blue: distance fades toward the clear sky's colour. Real haze is aerosol, which
-  scatters all wavelengths about equally: milky white-grey, yellow-brown with dust.
-- The sky ignores the haze: at 8 km the land is gone but the sky stays deep blue to the horizon,
-  where a hazy day's sky turns pale.
-- No sun angle: real haze scatters forward, bright toward the sun, dim and grey away from it.
-- No Rayleigh on the land: the atlas holds only the haze, one grey extinction, so far ridges
-  never go blue on a clean day nor redden at a low sun.
-- Every level sits at sea level in the model, Kunar Province included (1170 m by its bake).
+Accepted (owner, 2026-11-23). One atmosphere (Bruneton 2017, Hillaire 2020: milestone 11's sky
+model) whose aerosol comes from the weather, in place of milestone 11's ground-haze layer (a grey,
+fixed-density haze lit by the clear sky's colour, every level at sea level). The haze, the sky,
+the far ground and the clouds all go through it.
 
-**Design.** One atmosphere (Bruneton 2017, Hillaire 2020: what milestone 11 already builds for the
-sky), its aerosol set by the weather instead of fixed. Reviewed 2026-11-23 (owner: no A/B, the
-two-layer path is replaced outright):
 - *Aerosol from visibility.* Extinction at the level's ground at 550 nm = 3.912 / V minus the
-  molecules' there (about 0.012 /km at sea level, less at altitude), spread over a mixing layer
-  (near uniform up to its top, 1–3 km over the ground, then falling at Earth's 1.2 km scale
-  height). Its type sets single-scattering albedo, phase asymmetry and the Ångström exponent α
-  (extinction ∝ λ^-α, which gives the haze its colour): continental (0.9, g 0.75, α 1.3: grey,
-  faintly blue far off), maritime and humid (0.98, g 0.8, α 0.5: white), dust (0.9 with blue
-  absorbed, g 0.7, α 0.2: yellow-brown), smoke (0.85, g 0.65, α 1.8: brown-grey, a red sun). Phase
-  Cornette-Shanks.
-- *Altitude.* The level's ground above sea level: the weather file's `altitude`, defaulting to the
-  bake's fit offset (`farbake` `fits/<level>.json`, written into a reserved word of the bake's
-  header, version 2), 0 m without either. Thinner air at altitude, a deeper blue sky.
-- *The sun.* The sun above the atmosphere is fitted once, against a fixed reference air (fair:
-  25 km, continental, 1.5 km, at the level's altitude): authored sun over the reference's
-  transmittance, as milestone 11 does with clear air. Fitting it against the weather's own air
-  would brighten the whole sky as the haze thickens (at 5 km and a 20° sun the transmittance is
-  about 0.03: ten times the sky, the same ground). The surfaces' sun is the authored one times
-  this weather's transmittance toward the sun over the reference's (rgb, `Ra_SunIrradiance`): at
-  the reference it matches the lightmaps' anchor exactly, hazier air dims and reddens it.
-- *Tables.* Transmittance, multiple scattering, sky view and cloud light from this model, built on
-  the CPU as now, rebuilt on a worker when the weather changes (the sky cube already is), so a
-  change in game does not hitch; the last tables stay bound meanwhile. The sky view is built at
-  the camera's height in 200 m bands (a jet above the mixing layer sees clear sky over a haze
-  layer); the sky cube, SH and cloud light stay at the ground's mean height. Multiple scattering
-  is Hillaire's isotropic approximation, which runs dark at a vertical aerosol depth above about
-  1 (visibility under ~6 km): judged at task 1's 5 km check.
-- *Aerial perspective* (contract 27). The atlas integrates the whole model per tile and slice:
-  Rayleigh and aerosol in-scatter with the sun's phase, the sun through the transmittance table
-  and the cloud shadow map (s14), multiple scattering from its table, in planet coordinates (the
-  curvature at 40 km is 125 m). Transmittance per colour channel: the atlas grows to 2080 x 32 on
-  s9, 32 in-scatter slices, then 32 transmittance slices, then the sky block; `Ra_GetAerial` reads
-  two texels and returns rgb transmittance. Slices span the scenery distance (40 km) on a cubic
-  curve, so the gameplay range keeps its share (fog end 700 m falls in slice 8, the first ends at
-  1.2 m); the closed form past fog end goes. The sky block keeps contract 20's layout (the clear
-  sky's radiance per tile column and elevation) with a new use: a pixel scales its tile's
-  in-scatter by the block's light at its own ray's elevation over the tile ray's, so far ridges
-  take the sky right behind them, not the tile's (34 px tiles band where the sky changes fast just
-  above the horizon).
-- *Clouds* (contract 28). The near clouds take the atlas at their mean distance, as the ground
-  does; the panorama's air (`Ra_PanoAerial`) comes from the same model, aerosol included, so
-  contract 25's separate haze term goes. The sky pass composites clouds as before.
-- *Weather per level.* One file per level outside this tree (`<mod>/settings/eon64-weather/<level>.txt`):
-  visibility, aerosol type, mixing height, altitude, cloud preset and coverage, with an optional
-  section per layer (`gpm_cq 32` and the like: The Falklands' night layer is its own weather).
-  Console variables (`renderer.weather*`) change each live; the file sets them at load, defaults
-  otherwise (fair: 25 km, continental, 1.5 km, milestone 12's preset and coverage). 25 km and not
-  40: in clearer air the view-distance cut (fog end, 0.5–2 km) stands out, about 93 % contrast at
-  700 m against 90 % at 25 km and 70 % at today's 8 km; levels can go clearer by file. Fog end
-  stays the gameplay view distance and its cut; weather never changes it.
+  molecules' there, never under 0.002 /km; uniform up to the mixing layer's top, then falling at a
+  1.2 km scale height. The type sets single-scattering albedo, Cornette-Shanks g and the Ångström
+  exponent α (extinction ∝ λ^-α): continental (0.9, 0.75, 1.3), maritime (0.98, 0.8, 0.5), dust
+  (0.96 / 0.91 / 0.80 per channel, 0.7, 0.2), smoke (0.85, 0.65, 1.8).
+- *Altitude.* The level's ground above sea level: `renderer.weatherAltitude` (the ground at the
+  terrain's mean height), else the bake's sea offset (`farbake` writes it into bake header
+  version 2: real elevation = level height + offset; Kunar Province 935 m, Kashan Desert 1187 m,
+  Muttrah City -27 m), else world y 0 at sea level. The planet's surface stays at sea level, so a
+  high level's horizon dips.
+- *The sun.* The sun above the atmosphere is fitted once against a fixed reference air (25 km,
+  continental, 1.5 km, at the level's altitude), so a hazier sky does not brighten the scene. The
+  surfaces' sun is the authored one times this air's transmittance toward the sun over the
+  reference's: `RaSunFactor` (c199, every pass, w 1 once built) multiplies `Ra_SunIrradiance`;
+  vertex-lit foliage multiplies it in its pixel shader, particles take `RaSunFactorVertex`. The sun
+  disc is the surfaces' sun. At 5 km: dust 0.14 / 0.15 / 0.16 (neutral), smoke 0.28 / 0.15 / 0.05.
+- *Tables.* Transmittance, multiple scattering (Hillaire's isotropic approximation), sky view
+  and cloud light on the CPU, on a worker when the weather or the authored light changes (about
+  0.3 s); the last tables stay bound meanwhile. The marches step finer near their start. The sky
+  view is built at the camera's height in 200 m bands (a jet above the mixing layer sees clear sky
+  over a haze layer); the sky cube, SH and cloud light at the ground's mean height, rebuilt after
+  each weather build. `view.shot` waits out these rebuilds.
+- *Aerial perspective* (contract 27). The atlas (2080 x 32 on s9) integrates the whole model per
+  tile and slice in planet coordinates: Rayleigh and aerosol in-scatter with the sun's phase, the
+  sun through the transmittance table and the cloud shadow map, multiple scattering from its
+  table; the sky's share of its light is dimmed to the clouds' mean transmittance and their light
+  added (contract 16's terms). 32 slices over the scenery distance (40 km) on a cubic curve (fog
+  end 700 m falls in slice 8), transmittance per channel. The atlas stores in-scatter over the sky
+  block's light toward the tile ray's elevation; `Ra_GetAerial` multiplies the pixel's own ray's
+  back, so far ridges take the sky right behind them, and returns `Ra_Air` (rgb in-scatter and
+  transmittance; `Ra_AerialMeanT` for an alpha). View-space callers take the horizon's.
+- *Clouds* (contract 28). The near clouds take the atlas at their mean distance along their ray
+  (`Ra_AerialSlices`, `Ra_AerialLight` in the shaders' `RaAerial.fxh`), with the panorama's closed
+  form until the atlas's first build. The panorama's air is the same model in closed form:
+  Rayleigh from the observer's height, the aerosol's mean density along the ray from its column,
+  the in-scatter the clear sky's radiance scaled by (1 - Ta(d)) / (1 - Ta(∞)). The panorama's rgb
+  is compressed by its luminance per unit opacity (no grey outline on filtered edges).
+- *Weather per level* (`Weather.cpp`). At each level load (terrain load) the six weather
+  variables (`weatherVisibility`, `weatherAerosol`, `weatherMixing`, `weatherAltitude`,
+  `cloudPreset`, `cloudCoverage`) go back to their defaults (25 km, continental, 1.5 km, auto,
+  milestone 12's preset and coverage), then `<mod>/settings/eon64-weather/<level>.txt` runs, outside
+  this tree: a line is a variable without `renderer.` and a value, `#` comments; lines before any
+  section apply to every layer, `[<mode>]` and `[<mode> <size>]` apply in file order where they
+  match the loaded layer. Values go through the console, keeping the variables' ranges; other
+  names are logged and skipped. Fog end stays the gameplay view distance and its cut; weather
+  never changes it. 25 km and not 40 by default: in clearer air the view-distance cut stands out.
+- `tools.atmosphere` dumps the weather, the file and lines applied, the aerosol, altitude, the
+  surfaces' sun factor and every table.
 
-Contract 26: `RaAtmosphere`'s rows for the aerosol (density at the ground, 1 / scale height above
-the mixing layer, the layer's top, the level's altitude; scattering and extinction rgb; g) in
-place of row 7's haze, and the surfaces' sun factor (rgb) that `Ra_SunIrradiance` multiplies in.
-Layouts in the shaders' `RaAtmosphere.fx` as built.
+Contract 26: `RaAtmosphere`'s aerosol rows and `RaSunFactor` (table in [Shader contract](#shader-contract)).
 
-Dropped: the ground-haze layer and its borrowed light (`Ra_HazeLight`'s haze use,
-`renderer.hazeVisibility`, `hazeFalloff`, `RaAerialHaze`), the authored fog colour as the haze's
-albedo (the last retail input to the haze; retail's fog curve stays under water, in first person
-and in thermals), contract 25's cloud haze, contract 20's light-times-opacity in-scatter. Kept:
-the sky pass, sky cube and SH (they read the tables), view-distance cut, under-water and thermal
-looks.
+Deleted: the ground-haze layer and its borrowed light (`renderer.hazeVisibility`, `hazeFalloff`,
+`RaAerialHaze`), the authored fog colour as the haze's albedo (retail's fog curve stays under
+water, in first person and in thermals), contract 25's cloud haze, contract 20's
+light-times-opacity in-scatter. GPU cost waits for the final GPU pass.
 
-Cost: the atlas pass does more per step (two media, a transmittance, a multiple-scattering and a
-cloud-shadow read, the phase) over twice the texels (66,560 x 16 steps), expected under 0.1 ms
-more; lit pixels read one more atlas texel. Table rebuilds off the main thread.
-
-Not in it: shadowed haze from terrain and buildings (light shafts, dropped in 11), humidity-driven
-cloud cover (coverage stays explicit, as milestone 12 decided), rain and fog banks.
-
-As built for tasks 1 and 2 (2026-11-23):
-- The level's altitude: the weather's (`renderer.weatherAltitude`, the ground at the terrain's
-  mean height), else the bake's sea offset (`farbake` writes it into header version 2: real
-  elevation = level height + offset; Kunar Province 935 m, Kashan Desert 1187 m, Muttrah City
-  -27 m), else world y 0 at sea level (milestone 11's frame). The planet's surface stays at sea
-  level, so a high level's horizon dips as it should.
-- Dust's albedo per channel 0.96, 0.91, 0.80; the aerosol's extinction at 550 nm never falls under
-  0.002 /km. The tables' marches step finer near their start, where the aerosol is.
-- `RaSunFactor` (c199, every pass, w 1 once built) multiplies `Ra_SunIrradiance`; vertex-lit
-  foliage multiplies it in its pixel shader, particles take it as `RaSunFactorVertex`. The sun
-  disc is the surfaces' sun.
-- The atlas stores in-scatter over the sky block's light toward the tile ray's elevation; a
-  pixel multiplies its own ray's back (`Ra_GetAerial`); view-space callers take the horizon's.
-  `Ra_GetAerial` returns `Ra_Air` (rgb in-scatter and transmittance; `Ra_AerialMeanT` for an
-  alpha). The atlas pass reads the cloud shadow map by parameters (`RaSunShadow.fxh` per-vertex
-  path); the sky's share of its light is dimmed to the clouds' mean transmittance and their light
-  added (contract 16's terms).
-- Task 3 (contract 28): the near clouds take the atlas at their mean distance along their ray
-  (`Ra_AerialSlices` and `Ra_AerialLight`, moved to the shaders' `RaAerial.fxh` for them and
-  `Ra_GetAerial`), with the panorama's closed form until the atlas's first build. The panorama's
-  air is the same model in closed form: Rayleigh from the observer's height above sea level, the
-  aerosol's mean density along the ray from its column (uniform to the mixing layer's top,
-  exponential above), the height linear in distance; its in-scatter is the clear sky's radiance
-  scaled by (1 - Ta(d)) / (1 - Ta(∞)), the aerosol's Ta(∞) with its column above the observer as
-  scale height. `RaClouds[18].zw` (contract 25) is gone.
-- Task 4 (`Weather.cpp`): at each level load (terrain load, beside the far ground's) the six
-  weather variables (`weatherVisibility`, `weatherAerosol`, `weatherMixing`, `weatherAltitude`,
-  `cloudPreset`, `cloudCoverage`) go back to their defaults, then the level's file runs: a line is
-  a variable without `renderer.` and a value, `#` comments; lines before any section apply to every
-  layer, `[<mode>]` and `[<mode> <size>]` (the loaded layer from the game: mode and chosen size)
-  apply in file order where they match. Values go through the console as typed, so they keep the
-  variables' ranges; other names are logged and skipped. `tools.atmosphere` prints the file and
-  lines applied (`[weather] file`).
-
-- Task 5 (checks, no code): the sky cube and SH rebuild with the weather (5 km dust: irradiance
-  up 1.06 / 1.02 / 0.75, the cube within 2 % of its SH looking up); water reflects them;
-  The Falklands' night layer (`w0`, defaults) stays dark with a pale horizon band, and at 6 km
-  maritime greys out. The surfaces' sun factor at 5 km: dust 0.14 / 0.15 / 0.16 (neutral:
-  α 0.2 against the reference's 1.3), smoke 0.28 / 0.15 / 0.05 (red). The sun's aureole is
-  too broad (STATUS.md).
-
-Tasks (1 and 2 land in one build: the old haze is deleted, not kept beside the new):
-1. The model: aerosol from visibility, type, Ångström exponent and mixing height; altitude (bake
-   header version 2, `farbake` writes it); the sun against the reference air and the surfaces'
-   factor; tables on a worker on change, the sky view by camera height band; `tools.atmosphere`
-   dumps the new inputs. Check: the sky alone at visibility 100, 25, 8, 5 km (horizon whitening,
-   sun glow, the 5 km sky not too dark), and from a jet above the mixing layer.
-2. Aerial perspective from the model, to the scenery distance (contract 27); the ground haze, its
-   light and the closed form deleted. Check: Kunar Province `horizon` and `ft-1500`, Muttrah City
-   `sun`, `antisun`; far ridges without tile bands.
-3. Clouds through the same air (contract 28): near clouds by the atlas, the panorama's air from the
-   model. Check: Kunar Province `horizon` at 8 and 25 km, no step between near and far clouds.
-4. Weather per level: file with per-layer sections, console variables, defaults; a first pick for
-   the baked levels (Kunar Province, Kashan Desert, Muttrah City) from their regions' typical
-   weather, for the owner to set.
-5. Sky cube, SH, water reflections and the night layer checked against the new sky (The Falklands
-   `w0`); low suns (Muttrah City `sunup`), the surfaces' sun reddening with the haze.
-6. Judged by eye at milestone 11's reference views and the far-ground views; GPU cost with the final
-   GPU pass.
+Open, for later: the sun's aureole is too broad (a one-lobe phase at g 0.75–0.8 keeps 60 % of its
+peak at 10°; a sharp forward lobe would tighten it; Muttrah City `sunup`). Above the mixing layer
+the aerosol falls at 1.2 km, so from a jet the ground 20 km off sits under an optical depth of
+about 2 and the clouds aloft at 8 km visibility under about 1.5; a sharper top (an inversion)
+would thin both. Not in it: shadowed haze (light shafts), humidity-driven cloud cover, rain, fog
+banks.
 
 ## Frame
 
