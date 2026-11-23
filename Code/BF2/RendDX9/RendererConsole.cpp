@@ -1574,7 +1574,21 @@ GRADE_FLOAT(gradeToe, toe, 1.0f, 2.0f)
 GRADE_FLOAT(gradeShoulder, shoulder, 0.05f, 1.0f)
 GRADE_FLOAT(gradeTemperature, temperature, 2000.0f, 15000.0f)
 GRADE_FLOAT(gradeTint, tint, -1.0f, 1.0f)
+GRADE_FLOAT(gradeShadowSaturation, shadowSaturation, 0.0f, 2.0f)
+GRADE_FLOAT(gradeHighlightSaturation, highlightSaturation, 0.0f, 2.0f)
 #undef GRADE_FLOAT
+#define GRADE_TINT(NAME, FIELD) \
+    Vec3 get##NAME() { const float* t = rendererGrade().FIELD; Vec3 v; v.x = t[0]; v.y = t[1]; v.z = t[2]; return v; } \
+    void set##NAME(const Vec3& v) \
+    { \
+        float* t = rendererGrade().FIELD; \
+        t[0] = clampf(v.x, 0.0f, 4.0f); t[1] = clampf(v.y, 0.0f, 4.0f); t[2] = clampf(v.z, 0.0f, 4.0f); \
+    } \
+    BF2_CONSOLE_PROPERTY_FN(NAME, Vec3, true, get##NAME(), set##NAME, kRendererConsoleTag)
+GRADE_TINT(gradeShadowTint, shadowTint)
+GRADE_TINT(gradeMidTint, midTint)
+GRADE_TINT(gradeHighlightTint, highlightTint)
+#undef GRADE_TINT
 
 } // anonymous namespace
 
@@ -1628,6 +1642,11 @@ const char* rendererVariableHelp(const char* name)
         { "gradeShoulder", "Grade: length of the curve's straight section before the highlights roll off (higher, later and harder roll-off)" },
         { "gradeTemperature", "Grade: white balance, the light the image is balanced for in kelvin (6504 neutral; lower cooler, higher warmer)" },
         { "gradeTint", "Grade: white balance tint (+ magenta, - green)" },
+        { "gradeShadowTint", "Grade: colour of the shadows (below mid grey), r/g/b multiplier with its brightness divided out; 1/1/1 none" },
+        { "gradeMidTint", "Grade: colour of the mid tones, r/g/b multiplier with its brightness divided out; 1/1/1 none" },
+        { "gradeHighlightTint", "Grade: colour of the highlights (above mid grey), r/g/b multiplier with its brightness divided out; 1/1/1 none" },
+        { "gradeShadowSaturation", "Grade: saturation of the shadows, times gradeSaturation (1 none)" },
+        { "gradeHighlightSaturation", "Grade: saturation of the highlights, times gradeSaturation (1 none)" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

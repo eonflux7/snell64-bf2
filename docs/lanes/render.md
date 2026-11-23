@@ -918,7 +918,13 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    `gradeTemperature 4500` cools the image. The Falklands' night layer (`w0`, +4 stops on the
    ceiling): the toe takes the terrain from 27 to 19/255; `gradeToe 1` keeps milestone 13's night.
    Fire not yet seen.
-2. **Shadows, mid tones, highlights** (planned): saturation and colour per range.
+2. **Shadows, mid tones, highlights** (built). After the contrast, in scene linear: weights by the
+   pixel's luminance in stops from 0.18, shadows full below −4 EV and gone by −0.5, highlights from
+   +0.5 to full at +4, the mids between. Each range has a tint (`renderer.gradeShadowTint`,
+   `gradeMidTint`, `gradeHighlightTint`, `r/g/b`; the engine divides out its luminance, so a tint
+   moves hue, not brightness) and the shadows and highlights a saturation over the global one
+   (`gradeShadowSaturation`, `gradeHighlightSaturation`). All 1 by default: no change.
+   `tools.exposure` prints them (`[grade ranges]`).
 3. **A 3D LUT** (planned): the grade baked to a 32³ table when a variable changes, one fetch in the
    pass; per-level looks.
 4. **Low light** (planned, optional): a small blue, desaturated shift near the exposure ceiling.
@@ -1433,7 +1439,7 @@ and add its row here.
 | 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
 | 35 | The sky under the deck (render milestone 12): the main panorama's a (`RaClouds[4].w` ≥ half `RA_PANO_H`; not the sky cube's) is the clouds' transmittance times the dimming of the clear sky's air under the slab by the clouds' shadow and light (luminance); `RaSkyClouds.z` no longer read by the sky pass |
 | 36 | The run-time sun (render milestone 14): pixel registers c180–c187 `RaSunStatic` (engine-owned, published with `RASM`, zero outside the main world pass; layout in the shaders' `RaSunShadow.fxh`): the round's sun and a run-time flag, the static cascade's rows and the shadow height's mapping; their R32F atlas on the reserved sampler s12 in the world pass and s3 while water draws (point, clamp) |
-| 37 | The grade's look (render milestone 21): the FSQuadDrawer effect gets `RaGradeLook` (`float4[5]`, set with `RaGrade` each frame): [0] the curve (0 PBR Neutral and milestone 13's fixed grade, 1 GT; 0 under thermals), contrast, saturation, the highlights' shift toward white; [1] the toe's power, the shoulder (the linear section's length, 0–1); [2..4] the white balance matrix's rows on linear sRGB. All zero is curve 0 |
+| 37 | The grade's look (render milestone 21): the FSQuadDrawer effect gets `RaGradeLook` (`float4[8]`, set with `RaGrade` each frame): [0] the curve (0 PBR Neutral and milestone 13's fixed grade, 1 GT; 0 under thermals), contrast, saturation, the highlights' shift toward white; [1] the toe's power, the shoulder (the linear section's length, 0–1); [2..4] the white balance matrix's rows on linear sRGB; [5] the shadows' tint (luminance 1), w their saturation; [6] the mids' tint; [7] the highlights' tint, w their saturation. All zero is curve 0 |
 
 Samplers 9–15 are reserved for renderer frame resources (and 3–8 in water effects, contracts 17–18 and 36), and pixel registers
 c180–c223 for `RaSunStatic`, `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.

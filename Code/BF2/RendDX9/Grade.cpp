@@ -2,7 +2,7 @@
 // Not part of retail BF2.
 //
 // The grade itself is FSQuadDrawer pass 0 (RGrade_Apply); this file holds its console variables and
-// hands them to the effect as RaGradeLook (float4[5], layout below), next to HdrPost.cpp's RaGrade.
+// hands them to the effect as RaGradeLook (float4[8], layout below), next to HdrPost.cpp's RaGrade.
 // White balance is a von Kries adaptation in Bradford cone space, from the white of
 // renderer.gradeTemperature (Planckian locus, Kang et al. 2002) shifted off the locus by
 // renderer.gradeTint, to D65; computed here once per change, a 3x3 matrix for the shader. The locus
@@ -151,6 +151,9 @@ void rendererGradeBind(void* effect, bool thermal)
     //       z saturation, w the highlights' shift toward white per channel (0-1)
     //   [1] x toe (the toe's power), y shoulder (the linear section's length, 0-1), zw 0
     //   [2..4] the white balance, rows of a 3x3 matrix on linear sRGB (w 0)
+    //   [5] the shadows' tint (luminance 1), w their saturation
+    //   [6] the mids' tint (luminance 1), w 0
+    //   [7] the highlights' tint (luminance 1), w their saturation
     // Thermals keep curve 0: their encode is heat, not radiance.
     static double cachedKelvin = -1.0, cachedTint = -1.0;
     static Mat3 wb;
@@ -160,14 +163,24 @@ void rendererGradeBind(void* effect, bool thermal)
         cachedKelvin = g.temperature;
         cachedTint = g.tint;
     }
-    float v[5][4] = {
+    float v[8][4] = {
         { thermal ? 0.0f : static_cast<float>(g.curve), g.contrast, g.saturation, g.highlightShift },
         { g.toe, g.shoulder, 0.0f, 0.0f },
     };
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
             v[2 + i][j] = static_cast<float>(wb.m[i][j]);
-    d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(v), 5);
+    const float* const tints[3] = { g.shadowTint, g.midTint, g.highlightTint };
+    for (int r = 0; r < 3; ++r)
+    {
+        const float* const t = tints[r];
+        const float y = 0.2126f * t[0] + 0.7152f * t[1] + 0.0722f * t[2];
+        for (int j = 0; j < 3; ++j)
+            v[5 + r][j] = y > 1e-4f ? t[j] / y : 1.0f;
+    }
+    v[5][3] = g.shadowSaturation;
+    v[7][3] = g.highlightSaturation;
+    d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(v), 8);
 }
 
 } // namespace dx9rend

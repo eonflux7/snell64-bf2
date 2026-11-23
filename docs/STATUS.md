@@ -24,7 +24,7 @@ owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fal
 
 ## In progress: `render` milestone 21, tonemap and grade
 
-Task 1 (the GT curve, white balance, `renderer.grade*`) built; 2–4 planned
+Tasks 1 (the GT curve, white balance, `renderer.grade*`) and 2 (tint and saturation per range) built; 3–4 planned
 ([render.md](lanes/render.md#21-tonemap-and-grade)). `renderer.gradeCurve 0` is milestone 13's grade.
 
 ## Paused: `render` milestone 17, far terrain
@@ -49,10 +49,12 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-- The grade (milestone 21, task 1): `renderer.gradeCurve 1` the GT curve (default), 0 the old
+- The grade (milestone 21, tasks 1–2): `renderer.gradeCurve 1` the GT curve (default), 0 the old
   Neutral grade. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night is darker: toe
   1.25 takes the terrain from 27 to 19/255; `renderer.gradeToe 1` keeps the old night). Also
-  `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`.
+  `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`;
+  per range `gradeShadowTint`, `gradeMidTint`, `gradeHighlightTint` (`r/g/b`), `gradeShadowSaturation`,
+  `gradeHighlightSaturation`.
 
 - The run-time sun (milestone 14): `renderer.sunBakedFallback 1` is the old baked sun past the
   cascades, 0 (the default) the new. Kashan Desert, `lightManager.sunDirection 0.7/-0.07/0.71`

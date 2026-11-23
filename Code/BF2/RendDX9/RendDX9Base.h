@@ -1029,7 +1029,8 @@ struct HdrPostInfo
 HdrPostInfo rendererHdrPostInfo();
 // [RENDER] The frame grade's look (Grade.cpp, render milestone 21): renderer.gradeCurve (0 PBR
 // Neutral, 1 the GT curve; the A/B until acceptance), gradeContrast, gradeSaturation,
-// gradeHighlightShift, gradeToe, gradeShoulder, gradeTemperature (K), gradeTint. Bound as RaGradeLook
+// gradeHighlightShift, gradeToe, gradeShoulder, gradeTemperature (K), gradeTint; per range (task 2)
+// gradeShadowTint, gradeMidTint, gradeHighlightTint, gradeShadowSaturation, gradeHighlightSaturation. Bound as RaGradeLook
 // on the FSQuadDrawer effect each frame (from rendererHdrPost).
 struct GradeSettings
 {
@@ -1041,6 +1042,14 @@ struct GradeSettings
     float shoulder = 0.4f;          // the linear section's length, as a share of 0.22..1
     float temperature = 6504.0f;    // the light the image is balanced for: lower cooler, higher warmer
     float tint = 0.0f;              // + magenta, - green
+    // Per range (task 2), by scene luminance around mid grey: shadows below about -1 EV, highlights
+    // above about +1 EV. A tint is a colour multiplier, its luminance divided out (1/1/1 none);
+    // the mids' saturation is the global one.
+    float shadowTint[3] = { 1.0f, 1.0f, 1.0f };
+    float midTint[3] = { 1.0f, 1.0f, 1.0f };
+    float highlightTint[3] = { 1.0f, 1.0f, 1.0f };
+    float shadowSaturation = 1.0f;
+    float highlightSaturation = 1.0f;
 };
 GradeSettings& rendererGrade();
 void rendererGradeBind(void* d3dxEffect, bool thermal);
