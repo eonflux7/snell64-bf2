@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework): tasks 1–2 built, 3 next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15 and 16 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights), the bake's colour next; milestone 18 (atmosphere rework): tasks 1–3 built, 4 next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -36,14 +36,16 @@ altitude) in place of the ground-haze layer; weather per level. Design, as built
 1. The model (aerosol, altitude from the bake, the sun against the reference air, tables on a
    worker, the camera's sky view by height band): built.
 2. Aerial perspective from the model to 40 km (contract 27), the ground haze deleted: built.
-3. Clouds through the same air: next (their separate haze is zeroed meanwhile).
-4–6 as planned.
+3. Clouds through the same air (contract 28: near clouds by the atlas, the panorama's air from the
+   model): built.
+4. Weather per level: next. 5–6 as planned.
 
 Open for the owner: above the mixing layer the aerosol falls at 1.2 km (the design's), so 1 km
 over the layer's top it keeps 43 %: from a jet (Kunar Province `jet`) the ground 20 km off is
 under an optical depth of about 2, washed to the horizon's blue, and at 5 km visibility the
 surfaces' sun drops to 0.15 / 0.09 / 0.04 (Muttrah City, sun at 43°). A sharper top (a real
-inversion) would thin both.
+inversion) would thin both. It also hides the clouds aloft at 8 km (Kunar Province `horizon`, shot
+`m18t3-horizon-8k`): even at 30° they lie under an optical depth of about 1.5.
 
 ## Paused: `render` milestone 12, clouds
 
@@ -81,7 +83,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   `renderer.weatherVisibility` (25 km default), `weatherAerosol` (0 continental, 1 maritime, 2 dust,
   3 smoke), `weatherMixing` (1500 m), `weatherAltitude` (from the bake). Kunar Province `horizon`
   at 100, 25, 8, 5 km (shots `m18-horizon-<n>k`), `ft-1500`, `jet` (above the haze layer);
-  Muttrah City `sun`, `antisun` (bright warm haze toward the sun, bluer away). No A/B: the old
+  Muttrah City `sun`, `antisun` (bright warm haze toward the sun, bluer away). Task 3: the clouds
+  fade in the same air (`m18t3-horizon-25k`, `-8k`; visibility is in metres). No A/B: the old
   haze is gone. A rebuild takes about 0.3 s after a change.
 
 ## Open issues
