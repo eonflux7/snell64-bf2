@@ -945,12 +945,14 @@ void skyLightStep(void* effect)
         {
             float* const out = &s.skyData[(y * kSkyLightW + x) * 4];
             const float r = halfToFloat(row[x * 4 + 0]), g = halfToFloat(row[x * 4 + 1]), b = halfToFloat(row[x * 4 + 2]);
-            // Ra_CloudDecompress (RaCloudPanorama.fxh)
-            const float k = 1.0f / std::max(1.0f - (0.2126f * r + 0.7152f * g + 0.0722f * b), 1e-4f);
+            const float t = halfToFloat(row[x * 4 + 3]);
+            // Ra_CloudDecompress (RaCloudPanorama.fxh, contract 28): luminance per unit opacity
+            const float ratio = (0.2126f * r + 0.7152f * g + 0.0722f * b) / std::max(1.0f - t, 1e-4f);
+            const float k = 1.0f / (1.0f - std::min(ratio, 0.98f));
             out[0] = r * k;
             out[1] = g * k;
             out[2] = b * k;
-            out[3] = halfToFloat(row[x * 4 + 3]);
+            out[3] = t;
         }
     }
     s.skySys->UnlockRect();
