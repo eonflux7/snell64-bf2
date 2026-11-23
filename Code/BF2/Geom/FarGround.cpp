@@ -1125,7 +1125,7 @@ bool buildColor(Terrain* t, float mapHalf)
 
 // The land classes' colours past the map (ESA WorldCover). Each class has a reference albedo; the
 // map's colour under the bake gives them its tint and brightness (one gain per channel over the
-// classes found there), and a class well represented under the map leans toward its own mean there.
+// classes found there; not snow), and a class well represented under the map leans toward its own mean there.
 // Levels are artistic takes on their places, so a class's own mean is only half trusted.
 struct LandClass
 {
@@ -1216,7 +1216,9 @@ bool buildFarColor(float mapHalf)
         const float trust = kClassOwnShare * clamp01(static_cast<float>(texels[c]) / kClassTrustTexels);
         for (int k = 0; k != 3; ++k)
         {
-            const float ref = kLandClasses[c].albedo[k] * static_cast<float>(mapSum[k] / (std::max)(refSum[k], 1e-6));
+            // Snow is not the soil's colour: its reference albedo untinted.
+            const float gain = kLandClasses[c].id == 70 ? 1.0f : static_cast<float>(mapSum[k] / (std::max)(refSum[k], 1e-6));
+            const float ref = kLandClasses[c].albedo[k] * gain;
             const float own = texels[c] > 0.0 ? static_cast<float>(sum[c][k] / texels[c]) : ref;
             colour[kLandClasses[c].id][k] = ref + (own - ref) * trust;
         }
