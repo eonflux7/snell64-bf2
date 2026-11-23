@@ -160,7 +160,9 @@ encode is synchronous, so the frame of the shot is longer. Works with no view he
 
 **Settle and freeze.** Before a shot the tool waits until streaming has no pending loads and LOD
 crossfades have finished, then `tools.settleFrames` frames, which also covers any shadow cascade
-that is updated less often than every frame. If the wait exceeds `tools.settleTimeout` (default
+that is updated less often than every frame, and until the auto-exposure's adapted value reaches
+the metered one (render milestone 13; as built, a shot right after `view.go` comes about 3 %
+off the settled exposure: Muttrah City `sun`, 2026-11-23). If the wait exceeds `tools.settleTimeout` (default
 10 s), the shot is taken anyway and the report names the condition that was still pending. While a
 view is active, the renderer's time inputs are frozen: wind on overgrowth, water, particle updates,
 the sun. Whether the game simulation can also be paused on a local server is part of this

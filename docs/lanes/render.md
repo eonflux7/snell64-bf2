@@ -938,6 +938,9 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    luminance under 0.05, fading out by 0.5; lights keep their colour) move toward the rods'
    response (roughly 0.06 / 0.52 / 0.42 of linear sRGB) in a grey-blue, by
    `renderer.gradeNight` (0.35) at full night. `tools.exposure` prints it (`[grade night]`).
+   Seen by an agent (2026-11-23): the Falklands' night layer (`w0`) terrain 29/32/33 against
+   milestone 13's 27/29/29, faintly grey-blue, the grass less saturated; Muttrah City `sun` the same
+   with `gradeNight` 1 and 0 (within frame noise).
 5. **Checks**: A/B on Muttrah City `sun`, `street`; Kashan Desert `hb-owner` at dusk; a fire; the
    Falklands' night layer (`w0`, its toe against milestone 13's accepted 25/255).
 
