@@ -11,6 +11,8 @@ bool toolsWriteAtmosphere(const char* base, const char*& message);
 bool toolsWriteClouds(const char* base, const char*& message);
 // IRendererTools::toolsWriteExposure (render milestone 13).
 bool toolsWriteExposure(const char* base, const char*& message);
+// IRendererTools::toolsWriteSun (render milestone 14), in SunStatic.cpp.
+bool toolsWriteSun(const char* base, const char*& message);
 
 } // namespace dx9rend
 } // namespace hfe

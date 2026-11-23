@@ -243,6 +243,10 @@ public:
     {
         return dx9rend::toolsWriteExposure(base, message);
     }
+    virtual bool toolsWriteSun(const char* base, const char*& message)
+    {
+        return dx9rend::toolsWriteSun(base, message);
+    }
 };
 
 RendererTools g_tools;

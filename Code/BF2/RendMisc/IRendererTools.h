@@ -74,6 +74,10 @@ public:
     // histogram, meter and bloom to base.txt and base-bloom.png, at once, as toolsWriteAtmosphere.
     virtual bool toolsWriteExposure(const char* base, const char*& message) = 0;
 
+    // Sun (docs/lanes/tools.md#sun): writes render milestone 14's static layers (the static cascade,
+    // the shadow height) to base.txt, base-static.png and base-height.png, at once.
+    virtual bool toolsWriteSun(const char* base, const char*& message) = 0;
+
 protected:
     ~IRendererTools() {}
 };

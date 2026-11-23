@@ -23,6 +23,7 @@
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "RendDX9Base.h"
 #include "GpuTimers.h"
+#include "ToolsAtmosphere.h"
 #include "../RendMisc/IRenderView.h"
 #include "../Math/Frustum.h"
 #include "../Math/Mat4.h"
@@ -390,7 +391,120 @@ bool drawShadowHeight(geom::Terrain* terrain, const V3& towardSun)
     return true;
 }
 
+// [TOOLS] An R32F region of the atlas to an 8-bit grey PNG `side` pixels wide (point-sampled), each
+// value mapped from [lo, hi]; the range it held in `outLo`, `outHi`.
+bool saveRegion(const float* texels, unsigned int pitchFloats, unsigned int x0, unsigned int y0,
+                unsigned int w, unsigned int hgt, unsigned int side, bool autoRange,
+                const std::string& path, float& outLo, float& outHi)
+{
+    float lo = 1e30f, hi = -1e30f;
+    for (unsigned int y = 0; y < hgt; ++y)
+        for (unsigned int x = 0; x < w; ++x)
+        {
+            const float v = texels[static_cast<std::size_t>(y0 + y) * pitchFloats + x0 + x];
+            lo = (std::min)(lo, v);
+            hi = (std::max)(hi, v);
+        }
+    outLo = lo;
+    outHi = hi;
+    if (!autoRange)
+    {
+        lo = 0.0f;
+        hi = 1.0f;
+    }
+    const unsigned int sideY = static_cast<unsigned int>(
+        static_cast<float>(side) * static_cast<float>(hgt) / static_cast<float>(w));
+    IDirect3DSurface9* image = 0;
+    if (device()->CreateOffscreenPlainSurface(side, sideY, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &image, 0) < 0)
+        return false;
+    D3DLOCKED_RECT locked;
+    if (image->LockRect(&locked, 0, 0) >= 0)
+    {
+        for (unsigned int y = 0; y < sideY; ++y)
+            for (unsigned int x = 0; x < side; ++x)
+            {
+                const unsigned int sx = x * w / side, sy = y * hgt / sideY;
+                const float v = texels[static_cast<std::size_t>(y0 + sy) * pitchFloats + x0 + sx];
+                const float t = hi > lo ? (v - lo) / (hi - lo) : 0.0f;
+                const unsigned int g = static_cast<unsigned int>((std::min)((std::max)(t, 0.0f), 1.0f) * 255.0f);
+                reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(locked.pBits)
+                    + static_cast<std::size_t>(y) * locked.Pitch)[x] = 0xFF000000u | (g << 16) | (g << 8) | g;
+            }
+        image->UnlockRect();
+    }
+    const bool ok = D3DXSaveSurfaceToFileA(path.c_str(), D3DXIFF_PNG, image, 0, 0) >= 0;
+    image->Release();
+    return ok;
+}
+
+std::string g_toolsMessage;
+
 } // namespace
+
+// [TOOLS] tools.sun (render milestone 14): the static layers' state to base.txt, the static cascade
+// (light depth, 1 white = no caster) to base-static.png and the shadow height to base-height.png.
+bool toolsWriteSun(const char* base, const char*& message)
+{
+    message = "";
+    if (!base || !g_rendererBase || !g_atlas)
+    {
+        g_toolsMessage = "the static layers are not drawn";
+        message = g_toolsMessage.c_str();
+        return false;
+    }
+    const std::string root(base);
+    FILE* const f = std::fopen((root + ".txt").c_str(), "w");
+    if (!f)
+    {
+        g_toolsMessage = "cannot write " + root + ".txt";
+        message = g_toolsMessage.c_str();
+        return false;
+    }
+    std::fprintf(f, "# tools.sun (render milestone 14): the sun's static layers as drawn\n");
+    std::fprintf(f, "[settings] bakedFallback %d, static %u, height %u, normal offset %.2f texels, depth "
+                    "bias %.2f texels\n", g_settings.bakedFallback ? 1 : 0, g_atlasSize, g_atlasHeightSize,
+                 g_settings.normalOffset, g_settings.depthBias);
+    std::fprintf(f, "[sun] travels %.4f %.4f %.4f\n", g_drawn.sun[0], g_drawn.sun[1], g_drawn.sun[2]);
+    for (unsigned int i = 0; i < kSunStaticVec4s; ++i)
+        std::fprintf(f, "[RaSunStatic %u] %.6g %.6g %.6g %.6g\n", i, g_layers[4 * i], g_layers[4 * i + 1],
+                     g_layers[4 * i + 2], g_layers[4 * i + 3]);
+
+    const unsigned int w = g_atlasSize, hgt = g_atlasSize + g_atlasHeightSize;
+    IDirect3DSurface9* copy = 0;
+    IDirect3DSurface9* src = 0;
+    bool ok = device()->CreateOffscreenPlainSurface(w, hgt, D3DFMT_R32F, D3DPOOL_SYSTEMMEM, &copy, 0) >= 0
+           && g_atlas->GetSurfaceLevel(0, &src) >= 0
+           && device()->GetRenderTargetData(src, copy) >= 0;
+    if (src)
+        src->Release();
+    D3DLOCKED_RECT locked;
+    if (ok && copy->LockRect(&locked, 0, D3DLOCK_READONLY) >= 0)
+    {
+        const float* const texels = static_cast<const float*>(locked.pBits);
+        const unsigned int pitch = static_cast<unsigned int>(locked.Pitch) / sizeof(float);
+        float lo = 0.0f, hi = 0.0f;
+        std::size_t covered = 0;
+        for (unsigned int y = 0; y < w; ++y)
+            for (unsigned int x = 0; x < w; ++x)
+                covered += texels[static_cast<std::size_t>(y) * pitch + x] < 1.0f ? 1u : 0u;
+        ok = saveRegion(texels, pitch, 0, 0, w, w, 1024, false, root + "-static.png", lo, hi);
+        std::fprintf(f, "[static] light depth %.4f..%.4f, %.1f %% of texels hold a caster\n", lo, hi,
+                     100.0 * static_cast<double>(covered) / (static_cast<double>(w) * w));
+        ok = saveRegion(texels, pitch, 0, w, g_atlasHeightSize, g_atlasHeightSize, 512, true,
+                        root + "-height.png", lo, hi) && ok;
+        std::fprintf(f, "[height] %.1f..%.1f m\n", lo, hi);
+        copy->UnlockRect();
+    }
+    if (copy)
+        copy->Release();
+    std::fclose(f);
+    if (!ok)
+    {
+        g_toolsMessage = "could not read the atlas back";
+        message = g_toolsMessage.c_str();
+    }
+    return ok;
+}
 
 SunStaticSettings& sunStaticSettings()
 {

@@ -1056,6 +1056,30 @@ std::string toolsExposure(const std::string& requested)
     return std::string(ok ? "tools.exposure: wrote " : "tools.exposure: failed: ") + (message ? message : "");
 }
 
+// tools.sun [NAME] (render milestone 14): <outputDir>\<map>\sun\<NAME>.txt and its PNGs, at once:
+// the sun's static layers as drawn. NAME as for tools.atmosphere.
+std::string toolsSun(const std::string& requested)
+{
+    dx9rend::IRendererTools* const tools = rendererTools();
+    if (!tools)
+        return "tools.sun: the renderer has no tools";
+    std::string map = game ? game->getCurrentMapName() : std::string();
+    if (map.empty())
+        return "tools.sun: no map loaded";
+    for (size_t i = 0; i < map.size(); ++i)
+        map[i] = static_cast<char>(tolower(static_cast<unsigned char>(map[i])));
+    const std::string name = requested.empty()
+        ? (g_state.view.empty() ? std::string("camera") : g_state.view) : requested;
+    if (!validShotName(name))
+        return "tools.sun: a name has only letters, digits, '_', '-' and '.'";
+    const std::string dir = outputDirectory() + "\\" + map + "\\sun";
+    if (!makeDirectories(dir))
+        return "tools.sun: cannot create " + dir;
+    const char* message = "";
+    const bool ok = tools->toolsWriteSun((dir + "\\" + name).c_str(), message);
+    return std::string(ok ? "tools.sun: wrote " : "tools.sun: failed: ") + (message ? message : "");
+}
+
 // Once per frame while a survey is pending.
 void surveyStep()
 {
@@ -1743,6 +1767,8 @@ BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(atmosphere, toolsAtmosphere, std::string, true
 BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(clouds, toolsClouds, std::string, true, std::string,
                                   std::string(), kViewToolConsoleTag)
 BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(exposure, toolsExposure, std::string, true, std::string,
+                                  std::string(), kViewToolConsoleTag)
+BF2_CONSOLE_METHOD_0_1_RET_ACTIVE(sun, toolsSun, std::string, true, std::string,
                                   std::string(), kViewToolConsoleTag)
 
 dx9rend::IUiViewTool* viewToolUi()
