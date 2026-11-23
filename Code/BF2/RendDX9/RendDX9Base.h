@@ -868,6 +868,11 @@ struct AtmosphereWeather
 const float kAltitudeAuto = -100000.0f;
 AtmosphereWeather& rendererAtmosphereWeather();
 const char* rendererAtmosphereAerosolName(int type);
+// The level's weather file (Weather.cpp): the weather variables back to their defaults, then
+// <mod>/settings/eon64-weather/<level>.txt's lines for the loaded layer. Run at each level load.
+void rendererWeatherLoad();
+// What the last load applied: the file and its lines, or why the defaults stand (tools.atmosphere).
+const char* rendererWeatherSource();
 // How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
 // against the world view's frustum taken out to here.
 float rendererSceneryDistance();

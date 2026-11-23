@@ -416,6 +416,7 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     std::fprintf(f, "[weather] visibility %.0f m, aerosol %d (%s), mixing %.0f m, altitude %s\n",
                  a.weather.visibility, a.weather.aerosol, a.aerosolName, a.weather.mixing,
                  a.weather.altitude < -1000.0f ? "auto" : "set");
+    std::fprintf(f, "[weather] file %s\n", rendererWeatherSource());
     std::fprintf(f, "[air] ground %.1f m above sea level (%s); world y 0 at %.1f m; mixing layer to %.1f m\n",
                  a.groundAltitude, a.altitudeSource, a.seaOffset, a.mixingTop);
     std::fprintf(f, "[air] aerosol extinction %.5f %.5f %.5f /km, scattering %.5f %.5f %.5f /km, g %.2f\n",

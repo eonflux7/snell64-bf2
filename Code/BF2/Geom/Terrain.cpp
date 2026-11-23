@@ -981,6 +981,7 @@ void Terrain::load(const std::string& path)
     setupWater();                                                                 // vslot +0xD4
     terrainAtlasLoad(this);    // [RENDER] the one-pass terrain's atlases, built on the first update (TerrainAtlas.h)
     farGroundLoad(this);       // [RENDER] the far ground, built after them (FarGround.h)
+    dx9rend::rendererWeatherLoad();   // [RENDER] the level's weather file (render milestone 18)
 
     // [RENDER] Retail created the dynamic shadow-range index buffer (+0x368) here; nothing draws
     // shadow ranges.
