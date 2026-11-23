@@ -1508,6 +1508,7 @@ bool drawWith(Terrain* terrain, const std::string& technique)
     g.constants[0][0] = camera[0];
     g.constants[0][1] = camera[1];
     g.constants[0][2] = camera[2];
+    g.constants[2][3] = dx9rend::rendererHexTiling() ? 1.0f : 0.0f;   // contract 30
 
     // Each level snapped to twice its cell, so its odd vertices sit on the next level's grid.
     float levels[10][4];
