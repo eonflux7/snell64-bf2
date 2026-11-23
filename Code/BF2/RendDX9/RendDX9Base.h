@@ -1175,7 +1175,6 @@ void stateManagerSetSunStatic(const float* value /* RaSunStatic, kSunStaticVec4s
 // terrain blocks the sun). RaSunStatic's layout is in the shaders' RaSunShadow.fxh.
 struct SunStaticSettings
 {
-    bool bakedFallback;         // renderer.sunBakedFallback: the lightmaps' baked sun past the cascades
     unsigned int resolution;    // renderer.sunStaticResolution: the static cascade's texels per side
     float normalOffset;         // renderer.sunStaticNormalOffset: receiver offset along its normal, texels
     float depthBias;            // renderer.sunStaticDepthBias: toward the sun, texels per (1 + the slope's tangent)

@@ -1354,12 +1354,6 @@ bool getSunShadows() { return sunShadowSettings().enabled; }
 void setSunShadows(bool value) { sunShadowSettings().enabled = value; }
 BF2_CONSOLE_PROPERTY_FN(sunShadows, bool, true, getSunShadows(), setSunShadows, kRendererConsoleTag)
 
-// [RENDER] Render milestone 14, in development: 1 keeps the lightmaps' baked sun past the cascades
-// (the A/B against the run-time sun term); deleted on acceptance.
-bool getSunBakedFallback() { return sunStaticSettings().bakedFallback; }
-void setSunBakedFallback(bool value) { sunStaticSettings().bakedFallback = value; }
-BF2_CONSOLE_PROPERTY_FN(sunBakedFallback, bool, true, getSunBakedFallback(), setSunBakedFallback,
-                        kRendererConsoleTag)
 // [RENDER] Render milestone 14: the static cascade's receiver offsets, in its texels.
 float getSunStaticNormalOffset() { return sunStaticSettings().normalOffset; }
 void setSunStaticNormalOffset(float value) { sunStaticSettings().normalOffset = value < 0.0f ? 0.0f : value > 8.0f ? 8.0f : value; }
@@ -1609,7 +1603,6 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowCascadeBlend", "Part of the next slice each cascade also covers and blends over" },
         { "sunShadowNormalOffset", "Receiver offset along its normal, in cascade texels (against acne)" },
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
-        { "sunBakedFallback", "Milestone 14 A/B: 1 keeps the lightmaps' baked sun past the cascades, 0 the run-time sun term" },
         { "sunStaticResolution", "Static sun cascade over the map: texels per side (1024-8192), drawn once per sun" },
         { "sunStaticNormalOffset", "Static sun cascade: receiver offset along its normal, in its texels" },
         { "sunStaticDepthBias", "Static sun cascade: receiver offset toward the sun, in its texels, times 1 + the slope's tangent" },

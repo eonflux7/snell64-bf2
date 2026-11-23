@@ -836,7 +836,8 @@ included. Particles stay on the hemi map's alpha: out of scope. Thermals keep th
 
 Accepted loss: the baked soft building shadows at range; far shadows are hard-edged and about 1 m.
 
-**As built** (2026-11-23, `SunStatic.cpp`, contract 36; waiting on the owner's look):
+**As built** (2026-11-23, `SunStatic.cpp`, contract 36; accepted by the owner the same day, no
+lightmapped sun to go back to):
 
 - **Budget.** `RaSunStatic`, eight engine-owned pixel registers c180–c187 below the old range
   (`kEngineRegisterBegin` 180), published with `RASM`, zero outside the main world pass. Checked
@@ -846,8 +847,8 @@ Accepted loss: the baked soft building shadows at range; far shadows are hard-ed
   layers share one R32F atlas on s12, bound as the world pass publishes (the frame steps before it
   take s12 for their own samplers), and on s3 while water draws (its s12 is the scene copy).
 - **Receivers.** `Ra_SunVisibility` (`rasunshadow.fxh`) behind `Ra_ResolveSunVisibility`,
-  `Ra_ResolveSunCosine`, grass and water: while `RaSunStatic[4].w` is 1 (`renderer.sunBakedFallback
-  0`) it replaces the baked term everywhere with the round's N.L, the cascades near, the static
+  `Ra_ResolveSunCosine`, grass and water: in the main world pass (`RaSunStatic[4].w` 1) it replaces
+  the baked term everywhere with the round's N.L, the cascades near, the static
   cascade past them, unshadowed past both, all times the shadow height. The far ground takes the
   round's N.L and the shadow height.
 - **Static cascade.** Orthographic over the level's box in light space (the map's square, its
@@ -882,11 +883,11 @@ Accepted loss: the baked soft building shadows at range; far shadows are hard-ed
 Tasks:
 
 0. Budget: done (contract 36).
-1. Run-time N.L past the cascades, behind `renderer.sunBakedFallback`: done.
+1. Run-time N.L past the cascades: done.
 2. Static cascade: done, without overgrowth and without casters added during a round.
 3. Far ground shadow height: done.
 4. Checks: done as above, but frame time with the final GPU pass.
-5. On acceptance: the baked sun fallback and `renderer.sunBakedFallback` deleted.
+5. On acceptance: the baked sun fallback and its switch (`renderer.sunBakedFallback`) deleted: done.
 
 ### 20. GTAO
 

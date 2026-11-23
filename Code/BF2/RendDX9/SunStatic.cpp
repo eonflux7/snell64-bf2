@@ -54,7 +54,7 @@ unsigned int raHashString(const std::string& s);
 
 namespace {
 
-SunStaticSettings g_settings = { false, 4096u, 1.0f, 1.0f, 512u };
+SunStaticSettings g_settings = { 4096u, 1.0f, 1.0f, 512u };
 const float kHeadroom = 150.0f;       // m above the map's highest ground the casters may reach
 const float kFootroom = 20.0f;        // m below its lowest
 
@@ -482,8 +482,8 @@ bool toolsWriteSun(const char* base, const char*& message)
         return false;
     }
     std::fprintf(f, "# tools.sun (render milestone 14): the sun's static layers as drawn\n");
-    std::fprintf(f, "[settings] bakedFallback %d, static %u, height %u, normal offset %.2f texels, depth "
-                    "bias %.2f texels\n", g_settings.bakedFallback ? 1 : 0, g_atlasSize, g_atlasHeightSize,
+    std::fprintf(f, "[settings] static %u, height %u, normal offset %.2f texels, depth "
+                    "bias %.2f texels\n", g_atlasSize, g_atlasHeightSize,
                  g_settings.normalOffset, g_settings.depthBias);
     std::fprintf(f, "[sun] travels %.4f %.4f %.4f\n", g_drawn.sun[0], g_drawn.sun[1], g_drawn.sun[2]);
     for (unsigned int i = 0; i < kSunStaticVec4s; ++i)
@@ -635,11 +635,11 @@ void rendererSunStaticFrame(float* constants, float time)
     // [3].zw: the receiver offsets, live (renderer.sunStaticNormalOffset, sunStaticDepthBias)
     constants[14] = g_settings.normalOffset;
     constants[15] = g_settings.depthBias * g_depthPerTexel;
-    // [4]: toward the sun; w 1 while the run-time sun term replaces the baked one
+    // [4]: toward the sun; w 1: the run-time sun term in force (zero outside the main world pass)
     constants[16] = towardSun.x;
     constants[17] = towardSun.y;
     constants[18] = towardSun.z;
-    constants[19] = g_settings.bakedFallback ? 0.0f : 1.0f;
+    constants[19] = 1.0f;
     // [5].xy: the atlas's texel in uv
     if (g_atlas)
     {

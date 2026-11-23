@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look; 21 (tonemap and grade) task 1 built; 22 (far overgrowth) task 1 built | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
+| `render` | Milestones 1–11, 13–16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | 22 (far overgrowth) task 1 built; 21 (tonemap and grade) tasks 1, 2, 4, 6 built | [render.md](lanes/render.md#22-far-overgrowth) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -14,15 +14,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 | `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
 | `fix` | G–O, Q, R fixed | A, C–F open (packaging, build) | [fix.md](lanes/fix.md) |
 
-## Current: `render` milestone 14, run-time sun term
-
-Tasks 0–4 built and checked by an agent (2026-11-23); design, as built and what was seen in
-[render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped). Open: the
-owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fallback and
-`renderer.sunBakedFallback` deleted). Left out, for the owner: overgrowth in the static cascade
-(it streams round the camera), static meshes placed during a round (deployables).
-
-## In progress: `render` milestone 22, far overgrowth
+## Current: `render` milestone 22, far overgrowth
 
 Task 1 built (2026-11-23): far overgrowth over the whole map, one cell per patch built once, buffers
 sized per patch (Kunar 32.7 MB). Next: 3 (shadows), 4 (index range), 5 (checks)
@@ -65,12 +57,6 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`;
   per range `gradeShadowTint`, `gradeMidTint`, `gradeHighlightTint` (`r/g/b`), `gradeShadowSaturation`,
   `gradeHighlightSaturation`.
-
-- The run-time sun (milestone 14): `renderer.sunBakedFallback 1` is the old baked sun past the
-  cascades, 0 (the default) the new. Kashan Desert, `lightManager.sunDirection 0.7/-0.07/0.71`
-  (4°), views `kas_high`, `kas_here`, `m14-above` (buildings from above; `renderer.sunShadows 0`
-  shows the static cascade alone); Muttrah City `sun`, `ridges` at the level's sun; Saaremaa
-  `water`. `tools.sun` dumps the layers.
 
 - Clouds (milestone 12, contracts 32–33): no step at the 16 km handoff and no far radial edge
   (one air integral, a cross-fade band); edge albedo and the eroded light bake. Kashan Desert,
