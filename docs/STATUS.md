@@ -20,7 +20,7 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
-| `render` 23, water at the shore | In progress (2026-11-24) | 1 (the dark shore patches, Muttrah City `ssr-shore`) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
+| `render` 23, water at the shore | In progress: task 1 built (2026-11-24) | 2 (open-water map) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
 | `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
 | `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
@@ -30,6 +30,8 @@ Several may run at once; each session works in one milestone's document.
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
+- Water's dark shore patches (milestone 23, task 1): the refracted bed read, not SSR. Muttrah City
+  `ssr-shore`.
 - Far overgrowth (milestone 22, task 1): trees over the whole map, no setting. Kunar `og-sw`,
   `ft-1500`, `edge-e`.
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast

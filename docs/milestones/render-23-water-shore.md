@@ -20,10 +20,15 @@ breaking foam. The shore follows Dagor's approach (its open-source DagorEngine i
 
 Tasks:
 
-1. **The dark shore patches.** Find out whether they come from the reflection march or from the bed
-   (the bed's patches near land, the deep-water test a pixel from sky), with a debug view of the
-   water's terms. Fix the cause. On the reflection side the known weak spots are the 16 steps and
-   hits on surfaces facing away from the ray.
+1. **The dark shore patches:** built (shader only). Not the reflections (none with them off): the
+   water body's refracted bed read. It stepped the slanted view path (up to 30 m) along the bent
+   ray, far below the bed in shallow water, so the read landed on other depths, ragged with the
+   waves. Now three fixed-point steps to the bed (its point on the read pixel's camera ray, its
+   depth under this surface); the straight read where a read leaves the screen, meets sky or
+   something above the water. The view's path in the water is the depth over the bent ray's
+   descent (it was the unbent slant: oblique shallow water was too murky). Muttrah City
+   `ssr-shore` clean, `seahigh` unchanged. The reflection march's weak spots (16 steps, hits on
+   back faces) stay open until something shows them.
 2. **Open-water map.** Baked at level load from the heightmap and the water level: distance to shore
    (signed, its gradient the direction to the shore) and the fetch upwind. Waves' height and foam
    scale with the fetch, so rivers and harbours stay calm and the shore's breaking depth is local.
