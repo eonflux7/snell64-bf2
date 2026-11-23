@@ -65,9 +65,8 @@ Tasks:
    (east-north-east, onshore), mean effective fetch 22 km, the bay's lee smooth from the
    breakwater's tip; the long breakwater's lee stays calm right behind it. Kunar's rivers not yet looked
    at (task 9).
-3. **Shore waves (Dagor).** The train and its breaking built (contract 40, 2026-11-24); run-up
-   sheets and the wet sand band on the terrain above the waterline still to do (the terrain shader
-   needs the shore map). Dagor (`fftWater/shaders/shore.dshl`) runs one Gerstner train phased by a
+3. **Shore waves (Dagor).** Built: the train and its breaking (contract 40), the swash up the beach
+   and wet sand (contract 41), 2026-11-24. Dagor (`fftWater/shaders/shore.dshl`) runs one Gerstner train phased by a
    shore distance field, faded by depth and distance, foam on a sawtooth of its phase; here the
    phase is physical instead:
    - **Shore map** (`WaterOpen.cpp`, beside the open-water map in a 2048-wide texture): the depth
@@ -89,6 +88,22 @@ Tasks:
      fixed strip (kept with `renderer.waterOpen 0`).
    - Seen: Omaha Beach `surf`, `surf-along` (bands of broken waves moving up the beach); Muttrah
      City's shores drop steeply (quay walls, rocks: foam only at the waterline), `beach-e` the cove.
+   - **Swash** (contract 41; `RaShore.fxh`, shared by the water and the terrain so both evaluate
+     the same edge): each wave's bore runs up the beach and drains back. Per wave the run-up and
+     run-down levels from Stockdon et al. (2006) (setup 0.35 tan b sqrt(H L0), swash range
+     sqrt(H L0 (0.563 tan² b + 0.004)), × 1.1; the slope capped at 0.2, the run-up at H, where
+     steeper shores reflect), H the train's height for that wave (its group, the field along the
+     crests, and lobes every 8 m along the shore, one of four fields per wave, so each bore reaches
+     its own lobed line). The shoreline moves ballistically between them (g sin² b, or faster so a
+     swash ends within three periods), the last four waves overlapping: a new bore overruns the
+     last one's backwash. The terrain draws, above the still water, the sheet (wet ground through
+     pure water's absorption, the sky cube's and the sun's reflection by Fresnel, the bore's foam
+     as lace); behind the backwash a draining film (glossy, 1.5 s); below the group's largest
+     run-up damp ground (albedo × 0.45, saturation × 1.25). The water clips its own plane where the
+     ground it shows lies above the swash level, so the run-down uncovers the bed. The bake carries
+     the waterline's phase, direction and fetch up the beach to 4 m above the sea (128 texels).
+     Seen: Omaha Beach `swash` (at the waterline, facing the sun), `surf-along`; Muttrah City
+     `beach-e` (the rocks: a thin wet band).
    - Open: the deep-water start is everywhere deep, so a harbour behind a breakwater starts its own
      plane wave from the wind (its height is the fetch map's, small).
 4. **Water types.** Pure water's absorption built in, and turbidity (scattering and its tint) as a
