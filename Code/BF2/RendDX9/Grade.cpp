@@ -139,7 +139,7 @@ GradeSettings& rendererGrade()
     return g_grade;
 }
 
-void rendererGradeBind(void* effect, bool thermal)
+void rendererGradeBind(void* effect, bool thermal, float ceilingEv)
 {
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effect);
     const D3DXHANDLE h = d3dx ? d3dx->GetParameterBySemantic(0, "RaGradeLook") : 0;
@@ -149,7 +149,8 @@ void rendererGradeBind(void* effect, bool thermal)
     // RaGradeLook (FSQuadDrawer.fx):
     //   [0] x the curve (0 PBR Neutral, retail-era constants; 1 the GT curve), y contrast,
     //       z saturation, w the highlights' shift toward white per channel (0-1)
-    //   [1] x toe (the toe's power), y shoulder (the linear section's length, 0-1), zw 0
+    //   [1] x toe (the toe's power), y shoulder (the linear section's length, 0-1), z the low-light
+    //       shift's strength, w the ceiling's log2 luminance (night: stops of adapted luminance under it)
     //   [2..4] the white balance, rows of a 3x3 matrix on linear sRGB (w 0)
     //   [5] the shadows' tint (luminance 1), w their saturation
     //   [6] the mids' tint (luminance 1), w 0
@@ -165,7 +166,7 @@ void rendererGradeBind(void* effect, bool thermal)
     }
     float v[8][4] = {
         { thermal ? 0.0f : static_cast<float>(g.curve), g.contrast, g.saturation, g.highlightShift },
-        { g.toe, g.shoulder, 0.0f, 0.0f },
+        { g.toe, g.shoulder, g.night, ceilingEv },
     };
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)

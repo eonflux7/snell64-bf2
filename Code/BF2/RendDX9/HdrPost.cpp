@@ -361,7 +361,8 @@ void rendererHdrPost(EngineTexture* scene)
         d3dx->SetTexture(h, autoExposure ? s.state[s.live] : 0);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaGradeBloom"))
         d3dx->SetTexture(h, bloom ? s.level[0] : 0);
-    rendererGradeBind(d3dx, s.thermal);
+    // The ceiling's adapted luminance: below it the exposure sits on exposureMax (the night)
+    rendererGradeBind(d3dx, s.thermal, std::log2(kKey) + s.exposureBias - s.exposureMax);
 }
 
 void rendererHdrPostBindParticles(void* effect)

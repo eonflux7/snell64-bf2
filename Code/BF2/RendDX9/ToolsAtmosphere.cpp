@@ -946,6 +946,7 @@ bool toolsWriteExposure(const char* base, const char*& message)
                         "highlights tint %.3f/%.3f/%.3f saturation %.3f\n", g.shadowTint[0], g.shadowTint[1],
                      g.shadowTint[2], g.shadowSaturation, g.midTint[0], g.midTint[1], g.midTint[2],
                      g.highlightTint[0], g.highlightTint[1], g.highlightTint[2], g.highlightSaturation);
+        std::fprintf(f, "[grade night] shift %.3f (full 2 stops under the exposure ceiling)\n", g.night);
     }
     std::fprintf(f, "[frame] %u frames, last ran %s%s, dt %.4f s%s; scene %ux%u, %u bloom levels\n", e.frames,
                  e.ran ? "yes" : "no", e.thermal ? " (thermal view: skipped)" : "", e.lastDt,

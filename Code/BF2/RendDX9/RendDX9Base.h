@@ -1030,7 +1030,7 @@ HdrPostInfo rendererHdrPostInfo();
 // [RENDER] The frame grade's look (Grade.cpp, render milestone 21): renderer.gradeCurve (0 PBR
 // Neutral, 1 the GT curve; the A/B until acceptance), gradeContrast, gradeSaturation,
 // gradeHighlightShift, gradeToe, gradeShoulder, gradeTemperature (K), gradeTint; per range (task 2)
-// gradeShadowTint, gradeMidTint, gradeHighlightTint, gradeShadowSaturation, gradeHighlightSaturation. Bound as RaGradeLook
+// gradeShadowTint, gradeMidTint, gradeHighlightTint, gradeShadowSaturation, gradeHighlightSaturation; gradeNight (task 4). Bound as RaGradeLook
 // on the FSQuadDrawer effect each frame (from rendererHdrPost).
 struct GradeSettings
 {
@@ -1050,9 +1050,14 @@ struct GradeSettings
     float highlightTint[3] = { 1.0f, 1.0f, 1.0f };
     float shadowSaturation = 1.0f;
     float highlightSaturation = 1.0f;
+    // Low light (task 4): past the auto-exposure's ceiling the toe relaxes to 1 and dark pixels
+    // shift blue and desaturate, by this much at full night (0 none)
+    float night = 0.35f;
 };
 GradeSettings& rendererGrade();
-void rendererGradeBind(void* d3dxEffect, bool thermal);
+// ceilingEv: the adapted log2 luminance below which the exposure sits on renderer.exposureMax
+// (log2 key + bias - max); the shader measures night as stops under it.
+void rendererGradeBind(void* d3dxEffect, bool thermal, float ceilingEv);
 // [RENDER] Milestone 12 task 8 (contract 16): the cloud shadow map (Clouds.cpp), a Beer shadow map
 // over 32 km of the plane at the reference height around the camera, redrawn a band a frame about
 // once a second; its receiver constants RaCloudShadow (2 float4s, RaSunShadow.fxh) go to the

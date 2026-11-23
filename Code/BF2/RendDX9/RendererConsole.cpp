@@ -1576,6 +1576,7 @@ GRADE_FLOAT(gradeTemperature, temperature, 2000.0f, 15000.0f)
 GRADE_FLOAT(gradeTint, tint, -1.0f, 1.0f)
 GRADE_FLOAT(gradeShadowSaturation, shadowSaturation, 0.0f, 2.0f)
 GRADE_FLOAT(gradeHighlightSaturation, highlightSaturation, 0.0f, 2.0f)
+GRADE_FLOAT(gradeNight, night, 0.0f, 1.0f)
 #undef GRADE_FLOAT
 #define GRADE_TINT(NAME, FIELD) \
     Vec3 get##NAME() { const float* t = rendererGrade().FIELD; Vec3 v; v.x = t[0]; v.y = t[1]; v.z = t[2]; return v; } \
@@ -1647,6 +1648,7 @@ const char* rendererVariableHelp(const char* name)
         { "gradeHighlightTint", "Grade: colour of the highlights (above mid grey), r/g/b multiplier with its brightness divided out; 1/1/1 none" },
         { "gradeShadowSaturation", "Grade: saturation of the shadows, times gradeSaturation (1 none)" },
         { "gradeHighlightSaturation", "Grade: saturation of the highlights, times gradeSaturation (1 none)" },
+        { "gradeNight", "Grade: low light, when the scene is darker than the auto-exposure can lift: dark areas shift blue and desaturate by this much (0 none); the toe relaxes either way" },
         { "softParticleDistance", "Depth over which particles fade out in front of the scene, in metres" },
         { "uiMenuKey", "Win32 virtual-key code that opens and closes this menu (45 = Insert)" },
         { "uiOverlay", "Performance overlay, top right; kept between sessions" },

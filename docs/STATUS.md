@@ -24,7 +24,7 @@ owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fal
 
 ## In progress: `render` milestone 21, tonemap and grade
 
-Tasks 1 (the GT curve, white balance, `renderer.grade*`) and 2 (tint and saturation per range) built; 3–4 planned
+Tasks 1 (the GT curve, white balance, `renderer.grade*`), 2 (tint and saturation per range) and 4 (low light) built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23)
 ([render.md](lanes/render.md#21-tonemap-and-grade)). `renderer.gradeCurve 0` is milestone 13's grade.
 
 ## Paused: `render` milestone 17, far terrain
@@ -49,7 +49,7 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-- The grade (milestone 21, tasks 1–2): `renderer.gradeCurve 1` the GT curve (default), 0 the old
+- The grade (milestone 21, tasks 1, 2, 4): `renderer.gradeCurve 1` the GT curve (default), 0 the old
   Neutral grade. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night is darker: toe
   1.25 takes the terrain from 27 to 19/255; `renderer.gradeToe 1` keeps the old night). Also
   `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`;

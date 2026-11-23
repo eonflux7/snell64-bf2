@@ -928,9 +928,16 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    Seen by an agent (2026-11-23): Kashan Desert `hb-owner`, sun at 7°, grey haze (40 km, 2 km):
    shadows `0.85/1.0/1.2` and highlights `1.1/1.0/0.85` cool the dune's shaded side and warm the
    sun's glow; mid grey unmoved.
-3. **A 3D LUT** (planned): the grade baked to a 32³ table when a variable changes, one fetch in the
+3. **A 3D LUT** (deferred, owner 2026-11-23, with per-level looks): the grade baked to a 32³ table when a variable changes, one fetch in the
    pass; per-level looks.
-4. **Low light** (planned, optional): a small blue, desaturated shift near the exposure ceiling.
+4. **Low light** (built). Night is how far the adapted luminance sits under the exposure ceiling
+   (the luminance at which the exposure reaches `renderer.exposureMax`: log2 key + bias − max, from
+   the engine; the adapted value from milestone 13's state), 0 at the ceiling, 1 two stops under it,
+   0 without auto-exposure. With night the toe relaxes to 1, so the toe never deepens what the
+   ceiling already holds dark (milestone 13's accepted night stays), and dark pixels (exposed
+   luminance under 0.05, fading out by 0.5; lights keep their colour) move toward the rods'
+   response (roughly 0.06 / 0.52 / 0.42 of linear sRGB) in a grey-blue, by
+   `renderer.gradeNight` (0.35) at full night. `tools.exposure` prints it (`[grade night]`).
 5. **Checks**: A/B on Muttrah City `sun`, `street`; Kashan Desert `hb-owner` at dusk; a fire; the
    Falklands' night layer (`w0`, its toe against milestone 13's accepted 25/255).
 
@@ -1442,7 +1449,7 @@ and add its row here.
 | 34 | The clouds' ambient along the view (render milestone 12): `RaCloudLightTable` grows to 64x32, a fourth row of tiles the sky's first moment toward the sun's azimuth / π (layout in `RaCloud.fxh`); `Ra_CloudLight` returns it, `Ra_CloudAmbientAlong` folds it in |
 | 35 | The sky under the deck (render milestone 12): the main panorama's a (`RaClouds[4].w` ≥ half `RA_PANO_H`; not the sky cube's) is the clouds' transmittance times the dimming of the clear sky's air under the slab by the clouds' shadow and light (luminance); `RaSkyClouds.z` no longer read by the sky pass |
 | 36 | The run-time sun (render milestone 14): pixel registers c180–c187 `RaSunStatic` (engine-owned, published with `RASM`, zero outside the main world pass; layout in the shaders' `RaSunShadow.fxh`): the round's sun and a run-time flag, the static cascade's rows and the shadow height's mapping; their R32F atlas on the reserved sampler s12 in the world pass and s3 while water draws (point, clamp) |
-| 37 | The grade's look (render milestone 21): the FSQuadDrawer effect gets `RaGradeLook` (`float4[8]`, set with `RaGrade` each frame): [0] the curve (0 PBR Neutral and milestone 13's fixed grade, 1 GT; 0 under thermals), contrast, saturation, the highlights' shift toward white; [1] the toe's power, the shoulder (the linear section's length, 0–1); [2..4] the white balance matrix's rows on linear sRGB; [5] the shadows' tint (luminance 1), w their saturation; [6] the mids' tint; [7] the highlights' tint, w their saturation. All zero is curve 0 |
+| 37 | The grade's look (render milestone 21): the FSQuadDrawer effect gets `RaGradeLook` (`float4[8]`, set with `RaGrade` each frame): [0] the curve (0 PBR Neutral and milestone 13's fixed grade, 1 GT; 0 under thermals), contrast, saturation, the highlights' shift toward white; [1] the toe's power, the shoulder (the linear section's length, 0–1), see below; [2..4] the white balance matrix's rows on linear sRGB; [5] the shadows' tint (luminance 1), w their saturation; [6] the mids' tint; [7] the highlights' tint, w their saturation; [1].z the low-light shift's strength, [1].w the exposure ceiling's adapted log2 luminance (the grade reads `RaGradeExposure`'s r against it). All zero is curve 0 |
 
 Samplers 9–15 are reserved for renderer frame resources (and 3–8 in water effects, contracts 17–18 and 36), and pixel registers
 c180–c223 for `RaSunStatic`, `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
