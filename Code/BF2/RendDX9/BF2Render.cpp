@@ -1041,6 +1041,7 @@ void releaseRendererPathResources(Renderer* renderer)
     dx9rend::rendererHdrReleaseSurface();                         // [RENDER] HDR
     dx9rend::rendererDepthPrepassRelease();                       // [RENDER] depth prepass
     dx9rend::rendererSunShadowsRelease();                         // [RENDER] sun cascades
+    dx9rend::rendererSunStaticRelease();                          // [RENDER] milestone 14: its atlas
     dx9rend::rendererAtmosphereRelease();                         // [RENDER] atmosphere tables
     dx9rend::rendererCloudsRelease();                             // [RENDER] cloud volumes
     dx9rend::rendererWaterRelease();                              // [RENDER] water's waves

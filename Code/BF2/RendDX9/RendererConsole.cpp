@@ -1354,6 +1354,13 @@ bool getSunShadows() { return sunShadowSettings().enabled; }
 void setSunShadows(bool value) { sunShadowSettings().enabled = value; }
 BF2_CONSOLE_PROPERTY_FN(sunShadows, bool, true, getSunShadows(), setSunShadows, kRendererConsoleTag)
 
+// [RENDER] Render milestone 14, in development: 1 keeps the lightmaps' baked sun past the cascades
+// (the A/B against the run-time sun term); deleted on acceptance.
+bool getSunBakedFallback() { return sunStaticSettings().bakedFallback; }
+void setSunBakedFallback(bool value) { sunStaticSettings().bakedFallback = value; }
+BF2_CONSOLE_PROPERTY_FN(sunBakedFallback, bool, true, getSunBakedFallback(), setSunBakedFallback,
+                        kRendererConsoleTag)
+
 // [RENDER] Contribution culling (milestone 9): a static mesh whose bounding sphere projects to fewer
 // pixels across than this is not drawn, and fades out over the 20 % above it; 0 turns it off.
 float getContributionCull() { return rendererContributionCullPixels(); }
@@ -1546,6 +1553,7 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowCascadeBlend", "Part of the next slice each cascade also covers and blends over" },
         { "sunShadowNormalOffset", "Receiver offset along its normal, in cascade texels (against acne)" },
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
+        { "sunBakedFallback", "Milestone 14 A/B: 1 keeps the lightmaps' baked sun past the cascades, 0 the run-time sun term" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
         { "weatherVisibility", "Weather: metres at which a level ray at the level's ground keeps 2 % contrast (lower: hazier)" },
         { "weatherAerosol", "Weather: the haze's kind, 0 continental (grey), 1 maritime (white), 2 dust (yellow-brown), 3 smoke" },

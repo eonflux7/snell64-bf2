@@ -189,6 +189,7 @@ float g_aerialConstants[4] = {};    // RaAerial for this frame's world view
 float g_sunFactor[4] = {};          // RaSunFactor for this frame, every pass
 const float kNoSunCascades[kSunCascadeVec4s * 4] = {};
 float g_cloudShadowConstants[kCloudShadowVec4s * 4] = {};   // RaCloudShadow for this frame's world view
+float g_sunStaticConstants[kSunStaticVec4s * 4] = {};       // RaSunStatic for this frame (milestone 14)
 bool g_sunCascadesLive = false;     // RASM is published: the world pass or its transparents draw
 bool g_softParticleDepth = false;   // s15 holds this frame's prepass depth and the world pass draws
 // Milestone 8, transparent depth rebuild.
@@ -222,6 +223,7 @@ void publishSunCascadeConstants(bool zero)
     stateManagerSetSunCascadeConstants(zero ? kNoSunCascades : g_sunCascadeConstants);
     stateManagerSetAerial(zero ? kNoSunCascades : g_aerialConstants);
     stateManagerSetCloudShadow(zero ? kNoSunCascades : g_cloudShadowConstants);
+    stateManagerSetSunStatic(zero ? kNoSunCascades : g_sunStaticConstants);
     stateManagerSetSunFactor(g_sunFactor);   // the sun is the same in every pass
 }
 
@@ -349,6 +351,7 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     // transform (right, up, forward, position) over the projection scales, so position
     // + clip.w * forward + clip.x * right' + clip.y * up' is the world point of a clip position.
     rendererSunShadowsRender(time, g_sunCascadeConstants);
+    rendererSunStaticFrame(g_sunStaticConstants);   // [RENDER] milestone 14: the sun past the cascades
     rendererAtmosphereFrame();   // [RENDER] milestone 11: its tables and atlas
     rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
     rendererWaterFrame();        // [RENDER] milestone 16: the waves
@@ -593,6 +596,7 @@ void rendererWaterSceneBegin()
     if (rendererWaterBindWaves())   // milestone 16: the waves (contract 17)
         constants[3] = 1.0f;
     stateManagerSetWaterSsr(constants);
+    rendererSunStaticBind(3);   // milestone 14: water reads the sun's static layers on s3 (contract 36)
 }
 
 void rendererWaterSceneEnd()
@@ -601,6 +605,8 @@ void rendererWaterSceneEnd()
     {
         stateManagerSetWaterSsr(kNoWaterSsr);
         rendererWaterUnbindWaves();
+        static_cast<RendDX9Base*>(g_rendererBase)->device->SetTexture(3, 0);
+        rendererSunStaticBind(kWaterSceneSampler);   // s12 is the sun's static layers again
     }
 }
 

@@ -896,7 +896,8 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
 // surfaces' sun factor (RaSunFactor, stateManagerSetSunFactor)
 // the sky's irradiance (RaSkySH, stateManagerSetSkySh), water's reflection switch (RaWaterSsr, stateManagerSetWaterSsr),
 // water's foam (RaWaterFoam, stateManagerSetWaterFoam)
-// and the cloud shadow lookup (RaCloudShadow, stateManagerSetCloudShadow). The effects that read them declare them at those registers, and D3DX
+// the cloud shadow lookup (RaCloudShadow, stateManagerSetCloudShadow)
+// and the run-time sun past the cascades (RaSunStatic, stateManagerSetSunStatic). The effects that read them declare them at those registers, and D3DX
 // uploads the parameters' own zeros at each pass; that part of a write is dropped, so the range
 // keeps the engine's values. Retail mirrors every write.
 int __stdcall smSetPixelShaderConstantF(StateManager* self, unsigned int reg, const float* data,
@@ -1669,6 +1670,13 @@ void stateManagerSetCloudShadow(const float* value)
 {
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kCloudShadowRegister, value, kCloudShadowVec4s);
+}
+
+// [RENDER] RaSunStatic into its reserved pixel registers (contract 36).
+void stateManagerSetSunStatic(const float* value)
+{
+    StateManager* const self = sm();
+    constFileWrite(self->psConst, self->psConstDirty, kSunStaticRegister, value, kSunStaticVec4s);
 }
 
 // FXParameter.cpp's sparse-matrix fast path uploads bone rows through vslot +0x38.

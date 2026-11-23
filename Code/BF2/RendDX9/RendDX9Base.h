@@ -840,7 +840,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 33
+#define RA_CONTRACT_VERSION 36
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -1119,14 +1119,42 @@ const unsigned int kSkyShVec4s = 7;
 const unsigned int kWaterSsrRegister = 191;
 // [RENDER] Milestone 12 cloud shadows (contract 16): RaCloudShadow in c189..c190, published with RASM.
 const unsigned int kCloudShadowRegister = 189;
-const unsigned int kEngineRegisterBegin = 188;
-const unsigned int kEngineRegisterEnd = 224;   // c189..c223 dropped from effect writes
+// [RENDER] Milestone 14 (contract 36): RaSunStatic in c180..c187, the run-time sun past the cascades
+// (SunStatic.cpp), published with RASM.
+const unsigned int kSunStaticRegister = 180;
+const unsigned int kSunStaticVec4s = 8;
+const unsigned int kEngineRegisterBegin = 180;
+const unsigned int kEngineRegisterEnd = 224;   // c180..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial */);
 void stateManagerSetSunFactor(const float* value /* RaSunFactor */);
 void stateManagerSetSkySh(const float* value /* RaSkySH, kSkyShVec4s float4s */);
 void stateManagerSetWaterSsr(const float* value /* RaWaterSsr, one float4 */);
 void stateManagerSetCloudShadow(const float* value /* RaCloudShadow, kCloudShadowVec4s float4s */);
+void stateManagerSetSunStatic(const float* value /* RaSunStatic, kSunStaticVec4s float4s */);
+// [RENDER] Render milestone 14: the run-time sun term past the cascades (SunStatic.cpp). Two layers
+// drawn once per sun, in one R32F atlas on the reserved sampler s12 (s3 while water draws): the
+// static cascade (one orthographic map over the level in light space, static casters at fixed LODs)
+// and the shadow height (per texel of a top-down square over the far ground, the height below which
+// terrain blocks the sun). RaSunStatic's layout is in the shaders' RaSunShadow.fxh.
+struct SunStaticSettings
+{
+    bool bakedFallback;         // renderer.sunBakedFallback: the lightmaps' baked sun past the cascades
+    unsigned int resolution;    // renderer.sunStaticResolution: the static cascade's texels per side
+    float normalOffset;         // renderer.sunStaticNormalOffset: receiver offset along its normal, m
+    float depthBias;            // renderer.sunStaticDepthBias: receiver offset toward the sun, m
+    unsigned int heightSize;    // the shadow height's texels per side
+};
+SunStaticSettings& sunStaticSettings();
+// Fills this frame's RaSunStatic (kSunStaticVec4s float4s); draws the layers first when the sun,
+// the level or a setting changed since they were drawn, or a static caster changed.
+void rendererSunStaticFrame(float* constants);
+// The static layers need drawing again (a static object added or destroyed; the sun moved).
+void rendererSunStaticInvalidate();
+IDirect3DTexture9* rendererSunStaticAtlas();
+void rendererSunStaticRelease();
+// The atlas on s12 (the world pass) or s3 (water, whose s12 is the scene copy); 0 unbinds it.
+void rendererSunStaticBind(DWORD stage);
 struct RenderQueueEntry;
 void renderEntryBindLodDither(const RenderQueueEntry* entry);
 // The sun shadow tuning, read each frame: the renderer.sunShadow* console variables

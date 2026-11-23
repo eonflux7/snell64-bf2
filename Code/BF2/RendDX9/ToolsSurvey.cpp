@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -546,7 +547,49 @@ struct EffectWalk
     unsigned int withoutCode;  // effects whose passes keep no bytecode (D3DXFX_NOT_CLONEABLE)
     int boundMax;              // the largest sampler-parameter bound among those
     std::string boundMaxName;
+    int constMax;              // [RENDER] the highest pixel float4 register an effect's own constant uses
+    std::string constMaxName;
+    unsigned int collisions;   // effect constants inside the engine-owned registers (contract 36)
 };
+
+// [RENDER] The engine-owned pixel registers' names (RendDX9Base.h, kEngineRegisterBegin..End).
+bool engineOwnedConstant(const char* name)
+{
+    static const char* const kOwned[] = { "RaSunStatic", "RaWaterFoam", "RaCloudShadow", "RaWaterSsr",
+        "RaSkySH", "RaSunFactor", "RASM", "RaLodDither", "RaAerial" };
+    for (size_t i = 0; name && i < sizeof(kOwned) / sizeof(kOwned[0]); ++i)
+        if (std::strcmp(name, kOwned[i]) == 0)
+            return true;
+    return false;
+}
+
+// The highest pixel float4 register this shader's own constants use (not the engine's), and
+// those of them inside the engine-owned range.
+void addConstants(const DWORD* function, int& highest, std::set<std::string>& inEngineRange)
+{
+    ID3DXConstantTable* table = 0;
+    if (!function || FAILED(D3DXGetShaderConstantTable(function, &table)) || !table)
+        return;
+    D3DXCONSTANTTABLE_DESC desc;
+    if (SUCCEEDED(table->GetDesc(&desc)))
+        for (UINT i = 0; i < desc.Constants; ++i)
+        {
+            D3DXHANDLE const h = table->GetConstant(0, i);
+            D3DXCONSTANT_DESC c;
+            UINT count = 1;
+            if (!h || FAILED(table->GetConstantDesc(h, &c, &count)) || c.RegisterSet != D3DXRS_FLOAT4
+                || engineOwnedConstant(c.Name))
+                continue;
+            const int last = static_cast<int>(c.RegisterIndex + c.RegisterCount) - 1;
+            if (last > highest)
+                highest = last;
+            if (last >= static_cast<int>(kEngineRegisterBegin)
+                && c.RegisterIndex < kEngineRegisterEnd)
+                inEngineRange.insert(format("%s:c%u+%u", c.Name ? c.Name : "?", c.RegisterIndex,
+                                            c.RegisterCount));
+        }
+    table->Release();
+}
 
 void addSamplers(const DWORD* function, unsigned int& mask, std::set<std::string>& cubes)
 {
@@ -593,6 +636,8 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
     unsigned int samplerParams = 0;
     std::set<const DWORD*> seen;
     unsigned int functions = 0;
+    int constHighest = -1;
+    std::set<std::string> inEngineRange;
     for (UINT t = 0; t < desc.Techniques; ++t)
     {
         D3DXHANDLE const technique = fx->GetTechnique(t);
@@ -607,7 +652,10 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
                 continue;
             functions += (pd.pPixelShaderFunction || pd.pVertexShaderFunction) ? 1 : 0;
             if (pd.pPixelShaderFunction && seen.insert(pd.pPixelShaderFunction).second)
+            {
                 addSamplers(pd.pPixelShaderFunction, ps, cubes);
+                addConstants(pd.pPixelShaderFunction, constHighest, inEngineRange);
+            }
             if (pd.pVertexShaderFunction && seen.insert(pd.pVertexShaderFunction).second)
             {
                 std::set<std::string> vsCubes;
@@ -659,11 +707,21 @@ void visitEffect(const std::string& name, void* d3dx, void* context)
                      static_cast<int>(samplerParams) - 1, paramText.empty() ? "-" : paramText.c_str());
         return;
     }
+    if (constHighest > walk.constMax)
+    {
+        walk.constMax = constHighest;
+        walk.constMaxName = name;
+    }
+    std::string collisionText;
+    for (std::set<std::string>::const_iterator i = inEngineRange.begin(); i != inEngineRange.end(); ++i)
+        collisionText += (collisionText.empty() ? "" : ",") + *i;
+    walk.collisions += static_cast<unsigned int>(inEngineRange.size());
     std::fprintf(walk.file, "[effects] %s '%s': techniques %u, ps samplers %s (highest %d), vs samplers %s; "
-                            "sampler params %u; cube samplers %s; cube params %s\n",
+                            "sampler params %u; cube samplers %s; cube params %s; ps constants to c%d%s%s\n",
                  walk.cache, name.c_str(), desc.Techniques, maskText(ps).c_str(), highest,
                  maskText(vs).c_str(), samplerParams, cubeText.empty() ? "-" : cubeText.c_str(),
-                 paramText.empty() ? "-" : paramText.c_str());
+                 paramText.empty() ? "-" : paramText.c_str(), constHighest,
+                 collisionText.empty() ? "" : "; IN THE ENGINE'S REGISTERS ", collisionText.c_str());
 }
 
 void writeEffects(FILE* f)
@@ -671,6 +729,7 @@ void writeEffects(FILE* f)
     EffectWalk walk = {};
     walk.file = f;
     walk.boundMax = -1;
+    walk.constMax = -1;
     walk.cache = "legacy";
     shaderManagerForEachEffect(&visitEffect, &walk);
     walk.cache = "ra";
@@ -685,6 +744,10 @@ void writeEffects(FILE* f)
     std::fprintf(f, "[effects] effects using each vertex sampler:%s\n", vs.c_str());
     std::fprintf(f, "[effects] %u effects without bytecode; their largest sampler-parameter bound "
                     "s%d ('%s')\n", walk.withoutCode, walk.boundMax, walk.boundMaxName.c_str());
+    std::fprintf(f, "[effects] highest pixel register of an effect's own constants c%d ('%s'); "
+                    "engine-owned c%u-c%u; %u effect constants inside them\n", walk.constMax,
+                 walk.constMaxName.c_str(), kEngineRegisterBegin, kEngineRegisterEnd - 1,
+                 walk.collisions);
 }
 
 void writeReport()

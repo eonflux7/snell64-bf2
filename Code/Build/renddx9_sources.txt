@@ -48,6 +48,7 @@ BF2/External/imgui/backends/imgui_impl_win32.cpp
 BF2/RendDX9/MovieRenderer.cpp
 BF2/RendDX9/RenderQueues.cpp
 BF2/RendDX9/SunShadows.cpp
+BF2/RendDX9/SunStatic.cpp
 BF2/RendDX9/Atmosphere.cpp
 BF2/RendDX9/Weather.cpp
 BF2/RendDX9/Clouds.cpp
