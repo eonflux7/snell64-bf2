@@ -945,7 +945,7 @@ two-layer path is replaced outright):
   layer); the sky cube, SH and cloud light stay at the ground's mean height. Multiple scattering
   is Hillaire's isotropic approximation, which runs dark at a vertical aerosol depth above about
   1 (visibility under ~6 km): judged at task 1's 5 km check.
-- *Aerial perspective* (contract 26). The atlas integrates the whole model per tile and slice:
+- *Aerial perspective* (contract 27). The atlas integrates the whole model per tile and slice:
   Rayleigh and aerosol in-scatter with the sun's phase, the sun through the transmittance table
   and the cloud shadow map (s14), multiple scattering from its table, in planet coordinates (the
   curvature at 40 km is 125 m). Transmittance per colour channel: the atlas grows to 2080 x 32 on
@@ -957,7 +957,7 @@ two-layer path is replaced outright):
   in-scatter by the block's light at its own ray's elevation over the tile ray's, so far ridges
   take the sky right behind them, not the tile's (34 px tiles band where the sky changes fast just
   above the horizon).
-- *Clouds* (contract 27). The near clouds take the atlas at their mean distance, as the ground
+- *Clouds* (contract 28). The near clouds take the atlas at their mean distance, as the ground
   does; the panorama's air (`Ra_PanoAerial`) comes from the same model, aerosol included, so
   contract 25's separate haze term goes. The sky pass composites clouds as before.
 - *Weather per level.* One file per level outside this tree (`<mod>/settings/eon64-weather/<level>.txt`):
@@ -969,7 +969,7 @@ two-layer path is replaced outright):
   700 m against 90 % at 25 km and 70 % at today's 8 km; levels can go clearer by file. Fog end
   stays the gameplay view distance and its cut; weather never changes it.
 
-Contract 28: `RaAtmosphere`'s rows for the aerosol (density at the ground, 1 / scale height above
+Contract 26: `RaAtmosphere`'s rows for the aerosol (density at the ground, 1 / scale height above
 the mixing layer, the layer's top, the level's altitude; scattering and extinction rgb; g) in
 place of row 7's haze, and the surfaces' sun factor (rgb) that `Ra_SunIrradiance` multiplies in.
 Layouts in the shaders' `RaAtmosphere.fx` as built.
@@ -988,16 +988,36 @@ more; lit pixels read one more atlas texel. Table rebuilds off the main thread.
 Not in it: shadowed haze from terrain and buildings (light shafts, dropped in 11), humidity-driven
 cloud cover (coverage stays explicit, as milestone 12 decided), rain and fog banks.
 
+As built for tasks 1 and 2 (2026-11-23):
+- The level's altitude: the weather's (`renderer.weatherAltitude`, the ground at the terrain's
+  mean height), else the bake's sea offset (`farbake` writes it into header version 2: real
+  elevation = level height + offset; Kunar Province 935 m, Kashan Desert 1187 m, Muttrah City
+  -27 m), else world y 0 at sea level (milestone 11's frame). The planet's surface stays at sea
+  level, so a high level's horizon dips as it should.
+- Dust's albedo per channel 0.96, 0.91, 0.80; the aerosol's extinction at 550 nm never falls under
+  0.002 /km. The tables' marches step finer near their start, where the aerosol is.
+- `RaSunFactor` (c199, every pass, w 1 once built) multiplies `Ra_SunIrradiance`; vertex-lit
+  foliage multiplies it in its pixel shader, particles take it as `RaSunFactorVertex`. The sun
+  disc is the surfaces' sun.
+- The atlas stores in-scatter over the sky block's light toward the tile ray's elevation; a
+  pixel multiplies its own ray's back (`Ra_GetAerial`); view-space callers take the horizon's.
+  `Ra_GetAerial` returns `Ra_Air` (rgb in-scatter and transmittance; `Ra_AerialMeanT` for an
+  alpha). The atlas pass reads the cloud shadow map by parameters (`RaSunShadow.fxh` per-vertex
+  path); the sky's share of its light is dimmed to the clouds' mean transmittance and their light
+  added (contract 16's terms).
+- Until task 3 the clouds' separate haze (`RaClouds[18].zw`) is zero and their air reads rows 0
+  and 2 as before (the aerosol in place of Earth's Mie).
+
 Tasks (1 and 2 land in one build: the old haze is deleted, not kept beside the new):
 1. The model: aerosol from visibility, type, Ångström exponent and mixing height; altitude (bake
    header version 2, `farbake` writes it); the sun against the reference air and the surfaces'
    factor; tables on a worker on change, the sky view by camera height band; `tools.atmosphere`
    dumps the new inputs. Check: the sky alone at visibility 100, 25, 8, 5 km (horizon whitening,
    sun glow, the 5 km sky not too dark), and from a jet above the mixing layer.
-2. Aerial perspective from the model, to the scenery distance (contract 26); the ground haze, its
+2. Aerial perspective from the model, to the scenery distance (contract 27); the ground haze, its
    light and the closed form deleted. Check: Kunar Province `horizon` and `ft-1500`, Muttrah City
    `sun`, `antisun`; far ridges without tile bands.
-3. Clouds through the same air (contract 27): near clouds by the atlas, the panorama's air from the
+3. Clouds through the same air (contract 28): near clouds by the atlas, the panorama's air from the
    model. Check: Kunar Province `horizon` at 8 and 25 km, no step between near and far clouds.
 4. Weather per level: file with per-layer sections, console variables, defaults; a first pick for
    the baked levels (Kunar Province, Kashan Desert, Muttrah City) from their regions' typical
@@ -1206,7 +1226,7 @@ and add its row here.
 | 6 | Atmosphere (render milestone 11, task 2): effect `Shaders/RaAtmosphere`, technique `RaAtmosPerspective` (the aerial-perspective atlas, one full-screen pass drawn by the engine each frame); parameter `RaAtmosphere` (`float4[16]`, layout in the effect and `Atmosphere.cpp`'s `fillConstants`). The transmittance, multiple-scattering and sky-view tables are built by the engine; how they are sampled joins the contract with the task that first does (3) |
 | 7 | The model's sky (render milestone 11, task 3): technique `RaSky` on the sky dome effect, one full-screen pass at the far plane (depth tested, not written) drawn in the dome's place; while it draws, the painted dome, its cloud layers and the flare sprite (`SkyDomeSunFlare`) are not drawn, and the flare's occlusion test runs as before. Constants: `RaSky` (`float4[3]`: [0] x 1 under water (the pass draws the water's fog colour), z, w cos of the sun disc's radius (0.27°) and of its soft edge; [1].rgb the disc's radiance, the authored sun over its solid angle, luminance capped at 100; [2] the viewport x, y, 1 / width, 1 / height), `RaAtmosphere` (as in contract 6, camera rows included), `RaSkyViewTable` (`texture`, 192x108 `A16B16G16R16F`, linear clamp: x the azimuth from the sun as sqrt((1 − cos)/2), y the zenith angle squared toward the horizon from both sides) |
 | 8 | Aerial perspective (render milestone 11, task 4): the atlas (contract 6) is bound to the reserved sampler s9 (linear, clamp) after it draws, and pixel register c223 is the engine's `RaAerial` (1 / the viewport's width and height, 1 / fog end, w 1 while the atlas holds the world view's haze; zero in the first-person passes and under water), published with `RASM`. Lit shaders fog through `Ra_GetAerial` (VPOS and the distance pick the atlas texel; w 0 or thermals: retail's fog curve). `RaAtmosPerspective` also gets `RaSkyViewTable`: full haze is the sky's radiance along each ray. `RaAtmosphere` rows 8–10: [8] unused (the steepening, removed at contract 9), [9].rgb the sun at the ground, [10].rgb the sky light |
-| 9 | View distance (render milestone 11, task 5): `RaAerial.w` is 2 while the radial cut applies (the world view with the atlas). `Ra_ViewDistanceFade` (1 inside, 0 at fog end and beyond, over the last 15 % by distance from the camera) and `Ra_ViewDistanceClip` (that fade against a 4x4 Bayer threshold, `Ra_Bayer4`) are called by every opaque world effect's main pixel shader, which its depth prepass calls too; blended effects (particles, trails, decals) take the fade on alpha. The atlas is no longer steepened: the haze stays exponential up to fog end. `RaAerialHaze` (c199, engine-owned, published with `RaAerial`): the haze's density at the camera's height and 1 / its height falloff; past fog end `Ra_GetAerial` integrates the haze in closed form along the pixel's ray (world-space positions). Static meshes (`RaShaderSTM`, and trees through the leaf and trunk effects), overgrowth and roads are not cut: the engine culls static meshes by size on screen, overgrowth at its own range |
+| 9 | View distance (render milestone 11, task 5): `RaAerial.w` is 2 while the radial cut applies (the world view with the atlas). `Ra_ViewDistanceFade` (1 inside, 0 at fog end and beyond, over the last 15 % by distance from the camera) and `Ra_ViewDistanceClip` (that fade against a 4x4 Bayer threshold, `Ra_Bayer4`) are called by every opaque world effect's main pixel shader, which its depth prepass calls too; blended effects (particles, trails, decals) take the fade on alpha. (`RaAerialHaze` in c199 and the closed form past fog end: replaced by contracts 26 and 27.) Static meshes (`RaShaderSTM`, and trees through the leaf and trunk effects), overgrowth and roads are not cut: the engine culls static meshes by size on screen, overgrowth at its own range |
 | 10 | Sky cube (render milestone 11, task 7): the sky cube on the reserved sampler s10 (`A16B16G16R16F` cube, 128 per face, 6 mips, trilinear, clamp): mip m is GGX-prefiltered for perceptual roughness m / 5 (alpha its square), so `texCUBElod(dir, roughness * 5)`; the model's clear sky above the horizon (no sun disc), the lit ground hazed toward the horizon below it; in scene units, the drawn sky's scale. The split-sum BRDF table on s11 (64x64 `A16B16G16R16F`, bilinear, clamp): u n.v, v perceptual roughness, r scale and g bias on F0 (Smith GGX, k = alpha / 2). `RaSkySH` in pixel registers c192–c198 (engine-owned): the sky's irradiance / pi (the authored sky colour's unit) at normal n per channel ch = dot([ch], (n, 1)) + dot([3 + ch], n.xyzz * n.yzzx) + [6][ch] * (n.x² − n.y²); [6].w 1 while live, all zero (and s10, s11 unbound) before the first fit. Particle effects get the same 7 float4s as the parameter `RaSkyShVertex` (`rendererBindParticleLighting`), for their vertex shaders. Its sky part is scaled so its upward value keeps the authored sky colour's luminance; the ground's bounce is not scaled |
 | 11 | One light (render milestone 11, task 8): the atmosphere's sun at the ground (`RaAtmosphere[9]`, the sky, disc and haze) is the surfaces' sun, the authored colour^2.2 x 2^2.2; the sky is physical under it, unscaled (the sky gain is gone, `RaAtmosphere[4].w` is 1); `RaSkySH` and the sky cube are in those units, unscaled, so a shader uses them as they are next to `Ra_SunIrradiance` |
 | 12 | Water reflections (render milestone 11, task 12): just before the water queue draws, above water, with this frame's prepass, the scene colour is copied into a single-sample texture of its size and format on the reserved sampler s12 (bilinear, clamp; since render milestone 16, task 3, a full mip chain of 2 x 2 boxes, trilinear), and pixel register c191 is `RaWaterSsr` (1, 1 / width, 1 / height, 0); zero otherwise and after the water. While water draws, s15 holds the opaque linear depth only (water's own goes to the multisampled target, resolved later) |
@@ -1223,9 +1243,11 @@ and add its row here.
 | 23 | The far ground meets the map's edge (render milestone 17 task 5): `RaFarGroundLevels` grows to `float4[10]` (slot 9 the strip under the map's edge: origin 0, cell 1; its vertices carry x, z and in w their depth under the edge, which every vertex subtracts); `RaFarGround[3].w` the edge square's half side, `[4].zw` the edge heights' uv scale and offset; texture `RaFarGroundHeightEdge` (R32F at the map's cell over the map and 256 m past it, vertex and pixel shaders); the curvature drop starts 2 km past the map; vertices inside the map sink half their cell and the far ground's pixels reach max(1 m, 0.4 % of their distance) into it (clip() drops whole pixels under MSAA) |
 | 24 | The far ground's depth (render milestone 17): technique `RaFarGroundDepth` on the terrain effect (pass 0, depth GREATER (reversed) and written), the lit pass's vertex shader and clip, linear view depth out; the engine draws it after the map's `RaDepthPrepass` with the same parameters as `RaFarGround`, so s15 holds the far ground for the near clouds, soft particles, the transparents' depth rebuild and the water's thickness. Optional: without it s15 is empty (infinitely far) there |
 | 25 | The clouds in the ground haze (render milestone 12): `RaClouds[18].zw` in the panorama's and the near clouds' passes, the haze's density at the reference height (1/m) and 1 / its falloff (0, 0 before the first fit); the clouds' air (`Ra_PanoAirTau`, `Ra_PanoAirTauInfinite`) includes it. The sky pass no longer hazes |
+| 26 | One atmosphere (render milestone 18): `RaAtmosphere` rows 1–2 the aerosol's scattering and extinction (1/km in the mixing layer), 2.w its g, 3.w the sky view's height above sea level (km, the camera's 200 m band), 7 the ground's and the mixing layer's top heights above sea level (km), 1 / the aerosol's scale height above it, world y 0's height above sea level (m); 9 the surfaces' sun, 9.w fog end; textures `RaTransmittanceTable`, `RaMultiScatterTable` on the atlas pass. `RaSunFactor` (c199, every pass): the surfaces' sun over the authored, rgb, w 1 once built; `Ra_SunIrradiance` multiplies it in, `Ra_SunDecode` does not (vertex shaders; particles get `RaSunFactorVertex`). Layout in the shaders' `RaAtmosphere.fx` |
+| 27 | The aerial-perspective atlas from the model (render milestone 18): 2080 x 32, 65 blocks of 32 x 32 tiles; slice i at 40 km x ((i + 1) / 32)^3: blocks 0–31 the in-scatter over the sky block's light toward the tile ray's elevation, 32–63 the transmittance (rgb), 64 the sky block (contract 20's layout, the clear sky's radiance). `Ra_GetAerial` returns `Ra_Air` (in-scatter and transmittance, rgb), its in-scatter times the sky block at the pixel's own elevation. The atlas pass reads `RaCloudShadow` and `RaCloudShadowMap` as parameters |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
-c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaAerialHaze`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
+c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
 Every other sampler states `SRGBTexture` in its `sampler_state`: TRUE where it reads colour (the
 hardware decodes before filtering), FALSE for data and outside the scene. D3D9 sampler state carries
 over between effects, so neither value is left to default. The engine binds s9–s15 (and s6–s8 for water) with it FALSE.
@@ -1241,7 +1263,7 @@ directory no longer carries it (`_3153_0`).
 |---|---|---|---|
 | s4–s5 | Water's foam maps, the two finer wave cascades (contract 18) | `R16F`, mipmapped | During the water queue only, while `RaWaterFoam.x` > 0 |
 | s6–s8 | Water's slope maps, one per wave cascade (contract 17) | `A16B16G16R16F`, mipmapped | During the water queue only, while `RaWaterSsr.w` > 0 |
-| s9 | Aerial-perspective atlas (1056x32: 32 distance slices of 32x32 screen tiles, then the light block, contract 20) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
+| s9 | Aerial-perspective atlas (2080x32: 32 in-scatter and 32 transmittance slices of 32x32 screen tiles, then the sky block, contract 27) | `A16B16G16R16F` | After the atlas pass (start of the depth prepass), rest of the frame; read only while `RaAerial.w` > 0 |
 | s12 | Scene colour copy for water's reflections (contract 12) | The scene's (`A16B16G16R16F`), mipmapped | During the water queue only, while `RaWaterSsr.x` > 0 |
 | s13 | Sun cascade atlas | `R32F` | From the cascade pass, rest of the frame |
 | s14 | Cloud shadow map (contract 16) | `A16B16G16R16F` | From the clouds' frame step (before the prepass), rest of the frame; read while `RaCloudShadow[0].w` > 0 |

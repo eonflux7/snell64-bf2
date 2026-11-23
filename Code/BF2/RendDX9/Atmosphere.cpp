@@ -805,6 +805,7 @@ void startJob(Job* job)
         // A band job: the live air and tables.
         job->air = g.sky;
         job->sunTop = g.sunTop;
+        job->toSun = v3(g.liveInputs.toSun[0], g.liveInputs.toSun[1], g.liveInputs.toSun[2]);
         job->tables = g.tables;
     }
     g.job = job;
