@@ -467,7 +467,7 @@ void buildSkyView(const SkyParams& p, const CpuTables& c, double r, const V3& su
 // radiance from below. A tile's texel (x, z) sits at world x, z = ((i + 0.5) / tile * 2 - 1) times
 // kCloudLightRangeKm from the level's origin: the planet's curvature lowers the sun far away
 // (sunset on the distant deck first). The ground everywhere has the level's albedo.
-const int kCloudLightLayers = 8, kCloudLightTile = 8, kCloudLightRows = 3;
+const int kCloudLightLayers = 8, kCloudLightTile = 8, kCloudLightRows = 4;
 const double kCloudLightTopKm = 12.0, kCloudLightRangeKm = 280.0;
 const int kCloudLightMuS = 33;   // sun cosines -0.32 .. 1 for the irradiance
 
@@ -490,6 +490,28 @@ V3 skyIrradiance(const SkyParams& p, const CpuTables& c, double r, double muS)
     return sum * (kPi / (rings * azimuths));
 }
 
+// The sky's first moment over the upper hemisphere toward the sun's azimuth, the integral of
+// L sin(theta) cos(phi): with the irradiance (the moment straight up) the sky's L1 spherical
+// harmonics in the sun's plane. Rings even in cos(theta) (the horizon's glow weighs in), half the
+// azimuths (the sky is symmetric about the sun's plane).
+V3 skyHorizontalMoment(const SkyParams& p, const CpuTables& c, double r, double muS)
+{
+    const int rings = 12, azimuths = 8;
+    const V3 sun = v3(std::sqrt(std::max(0.0, 1.0 - muS * muS)), muS, 0.0);
+    V3 sum = v3(0, 0, 0);
+    for (int i = 0; i < rings; ++i)
+    {
+        const double ct = (i + 0.5) / rings, st = std::sqrt(1.0 - ct * ct);
+        for (int j = 0; j < azimuths; ++j)
+        {
+            const double a = kPi * (j + 0.5) / azimuths;
+            sum = sum + skyInScatter(p, c, r, v3(st * std::cos(a), ct, st * std::sin(a)), sun, 20)
+                      * (st * std::cos(a));
+        }
+    }
+    return sum * (2.0 * kPi / (rings * azimuths));
+}
+
 double cloudLightMuS(int i) { return -0.32 + 1.32 * i / (kCloudLightMuS - 1); }
 
 V3 lookupMuS(const std::vector<V3>& t, double muS)
@@ -505,14 +527,17 @@ void buildCloudLight(const SkyParams& p, const CpuTables& c, const V3& toSun, co
     const int w = kCloudLightLayers * kCloudLightTile, h = kCloudLightRows * kCloudLightTile;
     out.assign(w * h, v3(0, 0, 0));
     const double rg = kGroundRadius + std::max(p.groundKm, 0.001);
-    std::vector<V3> groundSky(kCloudLightMuS), layerSky(kCloudLightMuS);
+    std::vector<V3> groundSky(kCloudLightMuS), layerSky(kCloudLightMuS), layerMoment(kCloudLightMuS);
     for (int i = 0; i < kCloudLightMuS; ++i)
         groundSky[i] = skyIrradiance(p, c, rg, cloudLightMuS(i));
     for (int l = 0; l < kCloudLightLayers; ++l)
     {
         const double r = rg + kCloudLightTopKm * (l + 0.5) / kCloudLightLayers;
         for (int i = 0; i < kCloudLightMuS; ++i)
+        {
             layerSky[i] = skyIrradiance(p, c, r, cloudLightMuS(i));
+            layerMoment[i] = skyHorizontalMoment(p, c, r, cloudLightMuS(i));
+        }
         // The air between the ground and this altitude, straight up.
         const V3 airUp = transmittance(c, rg, 1.0) / vmax(transmittance(c, r, 1.0), 1e-9);
         for (int tz = 0; tz < kCloudLightTile; ++tz)
@@ -528,6 +553,7 @@ void buildCloudLight(const SkyParams& p, const CpuTables& c, const V3& toSun, co
                 out[(0 * kCloudLightTile + tz) * w + x0] = sunTop * transmittance(c, r, muS);
                 out[(1 * kCloudLightTile + tz) * w + x0] = lookupMuS(layerSky, muS) * sunTop * (1.0 / kPi);
                 out[(2 * kCloudLightTile + tz) * w + x0] = p.groundAlbedo * groundIrr * airUp * (1.0 / kPi);
+                out[(3 * kCloudLightTile + tz) * w + x0] = lookupMuS(layerMoment, muS) * sunTop * (1.0 / kPi);
             }
     }
 }

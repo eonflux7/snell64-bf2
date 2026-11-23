@@ -510,7 +510,7 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
     {
         Table t;
         std::string why;
-        if (!readTable(a.cloudLight, t, why) || t.w != 64 || t.h != 24)
+        if (!readTable(a.cloudLight, t, why) || t.w != 64 || t.h != 32)
         {
             std::fprintf(f, "[cloudlight] not read: %s\n", why.empty() ? "unexpected size" : why.c_str());
             failed += std::string(failed.empty() ? "" : ", ") + "cloudlight";
@@ -524,13 +524,13 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
                 std::fprintf(f, "[cloudlight] png %s (rgb x %.4g)\n", png.c_str(), scale);
             // Per altitude, at the level's origin (texel 3 of 8, -35 km) and the tiles' x edges
             // (-245 and +245 km): the sun's irradiance, the sky from above, the ground from below.
-            static const char* const kRows[3] = { "sun", "sky", "ground" };
+            static const char* const kRows[4] = { "sun", "sky", "ground", "toward-sun" };
             std::fprintf(f, "[cloudlight] per altitude km: at x = -245, -35, +245 km (z -35 km), "
-                            "rgb per row sun | sky | ground\n");
+                            "rgb per row sun | sky | ground | sky toward the sun\n");
             for (unsigned int l = 0; l < 8; ++l)
             {
                 std::fprintf(f, "[cloudlight]  %5.2f:", 12.0 * (l + 0.5) / 8.0);
-                for (unsigned int row = 0; row < 3; ++row)
+                for (unsigned int row = 0; row < 4; ++row)
                 {
                     std::fprintf(f, "  %s", kRows[row]);
                     static const unsigned int kX[3] = { 0, 3, 7 };
