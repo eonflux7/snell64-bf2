@@ -47,7 +47,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   on levels with a bake: Muttrah City, Kashan Desert, Kunar Province (real heights; A/B
   `renderer.farGroundScaled 1`, and `renderer.farGround 0` for the retail ring). Colour past the
   map is still the edge colour. Where it meets the map and the clouds behind the haze: Kunar
-  Province `edge-low`, `edge-e`, `horizon`. Elsewhere `renderer.farGround 2` forces it with placeholder heights
+  Province `edge-low`, `edge-e`, `horizon`; it is in the depth prepass (contract 24), so the near
+  clouds no longer draw over it. Elsewhere `renderer.farGround 2` forces it with placeholder heights
   past known ground. Look at with 2: Fallujah West `ft-2000` (no sea
   past the river's mouth), Muttrah City `ft-top` (the sea only by the bay), Kashan Desert
   `ft-1000-y0` (the map's colour at its edge with its detail layers' mean, the detail texture
