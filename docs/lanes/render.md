@@ -892,9 +892,18 @@ Tasks:
    where the two surfaces simplify differently at range; the far ground reaches a pixel into the
    map, sunk under it (clip() drops whole pixels under MSAA); the curvature drop starts 2 km past
    the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. The clouds in the haze: [11](#11-atmosphere-sky-ibl-water-reflections)'s per frame
-   (contract 25), reworked by [18](#18-atmosphere-rework). Open: colour past the
-   map is still the map's edge colour, blurred, with seams along the map's corner lines from
-   above (WorldCover classes next).
+   (contract 25), reworked by [18](#18-atmosphere-rework). Colour past the map
+   (2026-11-23, bake version 3, contract 29): ESA WorldCover's land class per 30 m node after the
+   heights (sea nodes as water). Each class has a reference albedo in the engine
+   (`kLandClasses`), tinted by the map's colour under the bake (one gain per channel over the
+   classes found there; snow untinted), leaning up to halfway toward the class's own mean under the
+   map (full at 3000 texels: placements are borrowed, so a class's own mean is only half
+   trusted). The classes go into a 2048 x 2048 sRGB DXT1 texture over the bake's square; the
+   shader blends to it from the blurred edge colour over 1.5 km past the map. Seen on Kunar
+   Province (`ft-1500`, `jet`, `top-12k`: the valley, forest and bare slopes where the class map
+   has them), Kashan Desert (`ft-2000-y0`: bare, villages and fields), Muttrah City (`ridges`).
+   Open: from above the map reads darker than the ground round it (its tree meshes; the far
+   ground has none); within a class the colour is flat.
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
@@ -1188,6 +1197,7 @@ and add its row here.
 | 26 | One atmosphere (render milestone 18): `RaAtmosphere` rows 1–2 the aerosol's scattering and extinction (1/km in the mixing layer), 2.w its g, 3.w the sky view's height above sea level (km, the camera's 200 m band), 7 the ground's and the mixing layer's top heights above sea level (km), 1 / the aerosol's scale height above it, world y 0's height above sea level (m); 9 the surfaces' sun, 9.w fog end; textures `RaTransmittanceTable`, `RaMultiScatterTable` on the atlas pass. `RaSunFactor` (c199, every pass): the surfaces' sun over the authored, rgb, w 1 once built; `Ra_SunIrradiance` multiplies it in, `Ra_SunDecode` does not (vertex shaders; particles get `RaSunFactorVertex`). Layout in the shaders' `RaAtmosphere.fx` |
 | 27 | The aerial-perspective atlas from the model (render milestone 18): 2080 x 32, 65 blocks of 32 x 32 tiles; slice i at 40 km x ((i + 1) / 32)^3: blocks 0–31 the in-scatter over the sky block's light toward the tile ray's elevation, 32–63 the transmittance (rgb), 64 the sky block (contract 20's layout, the clear sky's radiance). `Ra_GetAerial` returns `Ra_Air` (in-scatter and transmittance, rgb), its in-scatter times the sky block at the pixel's own elevation. The atlas pass reads `RaCloudShadow` and `RaCloudShadowMap` as parameters |
 | 28 | The clouds through the one atmosphere (render milestone 18): `RaCloudNear` reads the atlas on s9 and `RaAerial` (c223) as the lit passes do (the shaders' `RaAerial.fxh`); `RaClouds[18].zw` unused (contract 25 removed); the panorama's air from `RaAtmosphere` rows 0, 2 and 7; the panorama's rgb compressed by its luminance per unit opacity, rgb / (1 + Y / (1 − a)) (`Ra_CloudCompress`; the engine's read-back of the ground panorama decodes the same) |
+| 29 | The far ground's colour past the map (render milestone 17 task 5): `RaFarGround` grows to `float4[9]` ([8] the far colour's uv scale and offset, 1 / the blend from the edge colour in m past the map, 1 when drawn); texture `RaFarGroundColorFar` (sRGB, mips) over the bake's square, the bake's land classes coloured from the map's; bound to the map's colour when the level has no classes |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
