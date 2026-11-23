@@ -540,7 +540,10 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   sits in fog with cloud walls around. Open: the world's transparents (particles, smoke) still draw
   over clouds in front of them; the ground from altitude is the haze's flat colour past fog end
   and the map a dark slab (milestone 11's view distance, not the clouds); close up the 128 m field
-  reads as soft fog. Not measured: the GPU cost (the final GPU pass).
+  reads as soft fog. From altitude (Kashan Desert, 2026-11-23, low sun) a circular step at the
+  handoff: the near field takes the aerial atlas (ground haze in), the panorama the closed form
+  without the ground haze and coarser steps, and they switch at one distance; to fix, the panorama
+  takes the atlas where it reaches and the two cross-fade over a band. Not measured: the GPU cost (the final GPU pass).
 - *Coverage drives the lighting* (task 7; `SkyCube.cpp`, `Atmosphere.cpp`, `Clouds.cpp`; contract 16).
   A 256x128 panorama of the clouds from the level's origin, 2 m over the reference height
   (`RaCloudPanorama` into a small target, no history), is drawn about every 30 s and when a set
@@ -753,6 +756,19 @@ GTAO for small-scale occlusion. Lightmaps are kept, with one owner per channel: 
 range the cascades own sun visibility and the baked sun term is only the fallback beyond the last
 cascade (as now); sky visibility and baked point lights stay baked. Lightmaps are not re-baked at a
 higher resolution unless the reference views show the baked sky term failing.
+
+Found 2026-11-23 (Kashan Desert, sun moved to 4° by `lightManager.sunDirection`): the baked sun
+term is visibility × N.L for the level's authored sun, so with any other sun the map past the
+cascades keeps its noon light in the new sun's colour while the cascades' range and the far ground
+take the real cosine: a dark disc round the camera the size of the cascades' reach, and a bright
+map against a dim far ground. At the authored sun they roughly agree. Proposed (agent, not yet
+planned by the owner): own the sun term at run time everywhere, in three layers: the cascades
+near (as now); one static cascade over the map (terrain and static meshes, about 1 m texels at
+4096²), cached and redrawn only when the sun moves; the terrain's self-shadow out to the far
+ground's edge, marched through the heightmap and the bake toward the sun into one visibility
+texture, also only when the sun moves. The lightmaps' sun channel goes for terrain and static
+meshes; sky visibility and point lights stay. Gives long low-sun shadows; loses the baked soft
+building shadows at range.
 
 ### 17. Far terrain
 
