@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 15, 16 and 18 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights, land classes) | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
+| `render` | Milestones 1–11, 15, 16 and 18 accepted; 12 (clouds) paused | Milestone 13 (bloom, exposure): tasks 1–5 built, awaiting the owner; milestone 17 (far terrain): tasks 1–4 built (generator dropped, owner 2026-11-23); 5: Kunar, Kashan, Muttrah baked (heights, land classes); milestone 19 (hex-tiled detail): task 1 built, 2 (static meshes) next | [render.md](lanes/render.md#13-hdr-bloom--auto-exposure), [17](lanes/render.md#17-far-terrain) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -42,6 +42,10 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 ## Awaiting the owner's look
 
 Built and checked by an agent; an entry goes when the owner has seen it.
+
+- Hex-tiled terrain detail (render milestone 19 task 1, [render.md](lanes/render.md#19-hex-tiled-detail-textures)):
+  A/B `renderer.hexTiling 0`. Muttrah City `valley` (the far hills behind the mountain: the
+  lattice gone), `mountain` (rock, shifted not turned).
 
 - Far ground (render milestone 17, tasks 2–5, [render.md](lanes/render.md#17-far-terrain)): drawn
   on levels with a bake: Muttrah City, Kashan Desert, Kunar Province (real heights; A/B

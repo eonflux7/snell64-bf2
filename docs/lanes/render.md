@@ -978,6 +978,33 @@ about 2 and the clouds aloft at 8 km visibility under about 1.5; a sharper top (
 would thin both. Not in it: shadowed haze (light shafts), humidity-driven cloud cover, rain, fog
 banks.
 
+### 19. Hex-tiled detail textures
+
+Planned by the owner, 2026-11-23, after a lattice seen on Muttrah City's far hills: tiled textures
+repeat on a square grid the eye picks out at range. Replaces the plain tiled lookup with hex-tiling
+(Mikkelsen, "Practical Real-Time Hex-Tiling", JCGT 2022): the plane is cut into hexagons about 0.6
+tiles across, each reading the texture shifted by its own hash; the three around a pixel blend with
+weights sharpened (exponent 7) and steered by their luminance (0.6), so contrast holds and no grid
+repeats. A tap under 0.4 % of the weight is not read, so most pixels read one or two taps, not
+three (the gradients are passed in, so the branch is safe). Retail's low-detail modulation stays on
+top as the large-scale variation. Chosen over histogram-preserving stochastic texturing (needs a
+preprocessed texture and LUT per layer, at odds with the atlases) and over two-tap noise variation
+(blends show on contrasty textures). `renderer.hexTiling` (1) switches it; 0 tiles as retail.
+Shaders' `Ra_SampleTerrainAtlasHex`, contract 30.
+
+- **No turn.** The reference turns each hexagon too; on PR's rock and sand that points their
+  streaks every way (Muttrah City `mountain`: hairy, blotchy), so hexagons are only shifted, top
+  plane and sides alike. Strata stay level.
+- **Cost.** Up to three reads per plane where one was; not timed (the GPU pass waits for the end).
+
+Tasks:
+1. Terrain and far ground (built 2026-11-23): every detail layer's planes in `RaTerrain`, and the
+   far ground's detail fade (which carried the lattice: Muttrah City `valley`, the hills behind
+   the mountain, A/B with `renderer.hexTiling 0`).
+2. Static meshes where a texture tiles (owner, 2026-11-23: rooftops): the detail layers of the
+   static and bundled mesh shaders; not where a texture maps once (atlased or unique uv).
+3. Judged by eye; GPU cost with the final GPU pass.
+
 ## Frame
 
 The frame module (`Frame.cpp`, `frameRender`) owns the scene, items 1–10 below, and the targets it
@@ -1198,6 +1225,7 @@ and add its row here.
 | 27 | The aerial-perspective atlas from the model (render milestone 18): 2080 x 32, 65 blocks of 32 x 32 tiles; slice i at 40 km x ((i + 1) / 32)^3: blocks 0–31 the in-scatter over the sky block's light toward the tile ray's elevation, 32–63 the transmittance (rgb), 64 the sky block (contract 20's layout, the clear sky's radiance). `Ra_GetAerial` returns `Ra_Air` (in-scatter and transmittance, rgb), its in-scatter times the sky block at the pixel's own elevation. The atlas pass reads `RaCloudShadow` and `RaCloudShadowMap` as parameters |
 | 28 | The clouds through the one atmosphere (render milestone 18): `RaCloudNear` reads the atlas on s9 and `RaAerial` (c223) as the lit passes do (the shaders' `RaAerial.fxh`); `RaClouds[18].zw` unused (contract 25 removed); the panorama's air from `RaAtmosphere` rows 0, 2 and 7; the panorama's rgb compressed by its luminance per unit opacity, rgb / (1 + Y / (1 − a)) (`Ra_CloudCompress`; the engine's read-back of the ground panorama decodes the same) |
 | 29 | The far ground's colour past the map (render milestone 17 task 5): `RaFarGround` grows to `float4[9]` ([8] the far colour's uv scale and offset, 1 / the blend from the edge colour in m past the map, 1 when drawn); texture `RaFarGroundColorFar` (sRGB, mips) over the bake's square, the bake's land classes coloured from the map's; bound to the map's colour when the level has no classes |
+| 30 | Hex-tiled detail (render milestone 19): `RaTerrainLayerAtlas[i].w` 1 hex-tiles the layer's planes; `RaFarGroundC[2].w` 1 hex-tiles the far ground's detail fade; both set from `renderer.hexTiling` |
 
 Samplers 9–15 are reserved for renderer frame resources (and 4–8 in water effects, contracts 17–18), and pixel registers
 c188–c223 for `RaWaterFoam`, `RaCloudShadow`, `RaWaterSsr`, `RaSkySH`, `RaSunFactor`, `RASM`, `RaLodDither` and `RaAerial`. No effect may use them for anything else.
