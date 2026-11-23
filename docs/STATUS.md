@@ -49,8 +49,8 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-- The grade (milestone 21, tasks 1, 2, 4): `renderer.gradeCurve 1` the GT curve (default), 0 the old
-  Neutral grade. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night as accepted, the toe
+- The grade (milestone 21, tasks 1, 2, 4): `renderer.gradeCurve 1` the new grade (default: contrast 1.2,
+  toe 1.5, the rational shoulder), 0 the old Neutral grade. Open before acceptance: a fire. Muttrah City `sun`, `street`; The Falklands `gpm_cq 32` `w0` (night as accepted, the toe
   relaxed past the exposure ceiling, a faint grey-blue by `renderer.gradeNight`). Also
   `gradeHighlightShift` (0.5) at a fire, `gradeTemperature`/`gradeTint`, `gradeShoulder`;
   per range `gradeShadowTint`, `gradeMidTint`, `gradeHighlightTint` (`r/g/b`), `gradeShadowSaturation`,
