@@ -1522,6 +1522,22 @@ float getWaterFoam() { return rendererWaterFoam(); }
 void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
                                  kRendererConsoleTag)
+// [RENDER] render milestone 23 task 4: the water type (WaterMedium.cpp), a preset or its constituents.
+int getWaterType() { return rendererWaterType(); }
+void setWaterType(int value) { rendererSetWaterType(value); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterType, int, true, getWaterType(), setWaterType, -1, 10, kRendererConsoleTag)
+float getWaterChlorophyll() { return rendererWaterConstituent(0); }
+void setWaterChlorophyll(float value) { rendererSetWaterConstituent(0, clampf(value, 0.0f, 100.0f)); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterChlorophyll, float, true, getWaterChlorophyll(), setWaterChlorophyll, 0.0f,
+                                 100.0f, kRendererConsoleTag)
+float getWaterCdom() { return rendererWaterConstituent(1); }
+void setWaterCdom(float value) { rendererSetWaterConstituent(1, clampf(value, 0.0f, 20.0f)); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterCdom, float, true, getWaterCdom(), setWaterCdom, 0.0f, 20.0f,
+                                 kRendererConsoleTag)
+float getWaterSediment() { return rendererWaterConstituent(2); }
+void setWaterSediment(float value) { rendererSetWaterConstituent(2, clampf(value, 0.0f, 1000.0f)); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterSediment, float, true, getWaterSediment(), setWaterSediment, 0.0f, 1000.0f,
+                                 kRendererConsoleTag)
 // [RENDER] render milestone 23 task 2's A/B switch, until acceptance: the open-water map bound.
 bool getWaterOpen() { return rendererWaterOpen(); }
 void setWaterOpen(bool value) { rendererWaterOpen() = value; }
@@ -1628,6 +1644,10 @@ const char* rendererVariableHelp(const char* name)
         { "waterWindFrom", "Water's waves: the bearing the wind blows from, degrees (0 from north, +z; 90 from east, +x); -1 from the map's most open sea" },
         { "waterOpen", "Water's open-water map (milestone 23 A/B): waves and foam by the local fetch upwind; off, the level's sea everywhere" },
         { "waterFoam", "Water's foam on the crests: times the whitecap coverage measured for the wind (0-4); 0 none" },
+        { "waterType", "Water's type: 0-4 oceanic I, IA, IB, II, III; 5-9 coastal 1, 3, 5, 7, 9 (Jerlov); 10 glacial river; -1 custom (the constituents below)" },
+        { "waterChlorophyll", "Water's type: phytoplankton chlorophyll, mg/m^3 (open ocean 0.03-1, coastal 1-5, a bloom 10+); sets waterType -1" },
+        { "waterCdom", "Water's type: dissolved organic matter's absorption at 440 nm, per metre (ocean 0.01, coast 0.1-1, a peat river 5); sets waterType -1" },
+        { "waterSediment", "Water's type: suspended sediment, g/m^3 (ocean 0, coast 1-10, a glacial or flooded river 30-500); sets waterType -1" },
         { "cloudPreset", "Sky clouds' climate: 0 desert (high cumulus), 1 maritime (low stratocumulus)" },
         { "cloudBase", "Sky clouds' low layer: base above the terrain's mean height, in metres; 0 the preset's (desert 2000, maritime 500)" },
         { "cloudTop", "Sky clouds' low layer: top above the terrain's mean height, in metres (at least base + 500); 0 the preset's (desert 6000, maritime 4500)" },

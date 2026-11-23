@@ -895,7 +895,7 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
 // renderEntryBindLodDither), the aerial-perspective lookup (RaAerial, stateManagerSetAerial), the
 // surfaces' sun factor (RaSunFactor, stateManagerSetSunFactor)
 // the sky's irradiance (RaSkySH, stateManagerSetSkySh), water's reflection switch (RaWaterSsr, stateManagerSetWaterSsr),
-// water's foam (RaWaterFoam, stateManagerSetWaterFoam)
+// water's foam (RaWaterFoam, stateManagerSetWaterFoam), water's medium (RaWaterMedium, stateManagerSetWaterMedium)
 // the cloud shadow lookup (RaCloudShadow, stateManagerSetCloudShadow)
 // and the run-time sun past the cascades (RaSunStatic, stateManagerSetSunStatic). The effects that read them declare them at those registers, and D3DX
 // uploads the parameters' own zeros at each pass; that part of a write is dropped, so the range
@@ -1656,6 +1656,13 @@ void stateManagerSetWaterSsr(const float* value)
 {
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kWaterSsrRegister, value, 1u);
+}
+
+// [RENDER] RaWaterMedium into its reserved pixel registers (contract 42).
+void stateManagerSetWaterMedium(const float* value)
+{
+    StateManager* const self = sm();
+    constFileWrite(self->psConst, self->psConstDirty, kWaterMediumRegister, value, kWaterMediumVec4s);
 }
 
 // [RENDER] RaWaterFoam into its reserved pixel register (contract 18).

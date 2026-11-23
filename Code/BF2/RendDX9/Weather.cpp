@@ -12,6 +12,9 @@
 //   [gpm_cq 16]
 //   cloudCoverage 0.7
 //
+// The water's type (render milestone 23, task 4) is here too: waterType, or its constituents
+// waterChlorophyll, waterCdom and waterSediment after it.
+//
 // The values go through the console as typed lines, so they take the variables' own ranges, and
 // the console changes them live afterwards (until the next load).
 #ifdef BF2_IMAGE_RENDDX9
@@ -50,6 +53,7 @@ struct WeatherDefault
 const WeatherDefault kDefaults[] = {
     { "weatherVisibility", "25000" }, { "weatherAerosol", "0" }, { "weatherMixing", "1500" },
     { "weatherAltitude", "-100000" }, { "cloudPreset", "0" },     { "cloudCoverage", "0.4" },
+    { "waterType", "5" },   // coastal 1, clear coastal water (render milestone 23, task 4)
 };
 const int kDefaultCount = sizeof(kDefaults) / sizeof(kDefaults[0]);
 
@@ -70,10 +74,16 @@ std::string trim(const std::string& s)
     return s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
 }
 
+// Variables a level's file may set that have no default of their own (waterType's sets them)
+const char* const kAlso[] = { "waterChlorophyll", "waterCdom", "waterSediment" };
+
 bool isWeatherVariable(const std::string& name)
 {
     for (int i = 0; i < kDefaultCount; ++i)
         if (name == kDefaults[i].name)
+            return true;
+    for (size_t i = 0; i < sizeof(kAlso) / sizeof(kAlso[0]); ++i)
+        if (name == kAlso[i])
             return true;
     return false;
 }

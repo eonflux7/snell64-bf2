@@ -972,6 +972,14 @@ bool toolsWriteWater(const char* base, const char*& message)
     std::fprintf(f, "[shore] train period %.2f s (groups %.1f s), significant height %.2f m, deep water (starts it) "
                     "%.1f %% of the water\n", s.omega > 0.0 ? 2.0 * kPi / s.omega : 0.0,
                  s.omegaGroup > 0.0 ? 2.0 * kPi / s.omegaGroup : 0.0, s.hs, 100.0 * s.info.deepShare);
+    {
+        // The water type (task 4, WaterMedium.cpp): its constituents and RaWaterMedium
+        const float* const m = rendererWaterMedium();
+        std::fprintf(f, "[medium] type %d (%s): chlorophyll %.3g mg/m^3, CDOM %.3g /m at 440 nm, sediment %.3g g/m^3; "
+                        "K = a + b_b (r g b) %.4f %.4f %.4f /m, b_b %.5f %.5f %.5f /m\n",
+                     rendererWaterType(), rendererWaterTypeName(rendererWaterType()), rendererWaterConstituent(0),
+                     rendererWaterConstituent(1), rendererWaterConstituent(2), m[0], m[1], m[2], m[4], m[5], m[6]);
+    }
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     double bins[6] = { 0, 0, 0, 0, 0, 0 };
     static const double kBinTop[6] = { 100.0, 1000.0, 5000.0, 20000.0, 100000.0, 1e30 };

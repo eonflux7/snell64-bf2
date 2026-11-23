@@ -642,6 +642,7 @@ void rendererWaterFrame()
     s.foamReady = false;
     if (!device() || !geom::terrain())
         return;
+    rendererWaterMediumFrame();   // milestone 23 task 4: the water type
     if (!s.started)
     {
         QueryPerformanceCounter(&s.start);

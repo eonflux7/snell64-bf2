@@ -884,7 +884,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 41
+#define RA_CONTRACT_VERSION 42
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -1199,8 +1199,24 @@ const unsigned int kCloudShadowRegister = 189;
 // (SunStatic.cpp), published with RASM.
 const unsigned int kSunStaticRegister = 180;
 const unsigned int kSunStaticVec4s = 8;
-const unsigned int kEngineRegisterBegin = 180;
-const unsigned int kEngineRegisterEnd = 224;   // c180..c223 dropped from effect writes
+// [RENDER] Render milestone 23 task 4 (contract 42): RaWaterMedium in c176..c177, the water type's
+// diffuse attenuation K = a + b_b (rgb, per metre) and backscattering b_b (rgb, per metre), per
+// screen channel (WaterMedium.cpp), written every frame by rendererWaterMediumFrame.
+const unsigned int kWaterMediumRegister = 176;
+const unsigned int kWaterMediumVec4s = 2;
+void stateManagerSetWaterMedium(const float* value /* RaWaterMedium, two float4s */);
+// renderer.waterType (a preset, -1 custom) and its constituents (0 chlorophyll mg/m^3, 1 CDOM's
+// absorption at 440 nm per m, 2 sediment g/m^3); setting a constituent makes the type custom.
+int rendererWaterType();
+void rendererSetWaterType(int type);
+int rendererWaterTypeCount();
+const char* rendererWaterTypeName(int type);
+float rendererWaterConstituent(int which);
+void rendererSetWaterConstituent(int which, float value);
+const float* rendererWaterMedium();   // the eight floats published
+void rendererWaterMediumFrame();
+const unsigned int kEngineRegisterBegin = 176;
+const unsigned int kEngineRegisterEnd = 224;   // c176..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
 void stateManagerSetAerial(const float* value /* RaAerial */);
 void stateManagerSetSunFactor(const float* value /* RaSunFactor */);
