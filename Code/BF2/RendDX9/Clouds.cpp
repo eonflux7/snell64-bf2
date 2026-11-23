@@ -676,7 +676,7 @@ void buildStep(void* effect)
     }
 }
 
-// RaClouds [5..8] and [18].zw for the panorama and the near clouds (layout in RaClouds.fx), observed from
+// RaClouds [5..8] for the panorama and the near clouds (layout in RaClouds.fx), observed from
 // `observer` (world) with the near clouds out to `handoff` metres.
 void fillPanoramaConstants(float c[kRows][4], const WeatherInputs& w, double seconds, const float observer[3],
                            float handoff)
@@ -701,10 +701,6 @@ void fillPanoramaConstants(float c[kRows][4], const WeatherInputs& w, double sec
     c[8][1] = observer[2];
     c[8][2] = a.refHeight;
     c[8][3] = handoff;
-    // Contract 25's separate ground haze: none since render milestone 18 (the aerosol is in
-    // RaAtmosphere's rows; task 3 takes the clouds through the same air).
-    c[18][2] = 0.0f;
-    c[18][3] = 0.0f;
 }
 
 // The handoff distance this frame: the near clouds' reach, 0 while they are off.
