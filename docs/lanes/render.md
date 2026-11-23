@@ -891,17 +891,85 @@ Tasks:
    (Kunar: 3.3 m off on average, 21 m at most). A strip 30 m deep under the edge closes gaps
    where the two surfaces simplify differently at range; the far ground reaches a pixel into the
    map, sunk under it (clip() drops whole pixels under MSAA); the curvature drop starts 2 km past
-   the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. The sky's clouds behind the
-   haze (2026-11-23, shader side only, contract 9's `RaAerialHaze` read by the sky pass): the haze
-   layer the ground is seen through, whole along each sky ray (optical depth A H / sin, a spherical
-   layer's air mass at grazing angles), toward the sky's own light, so the clear sky is unchanged
-   and clouds fade into it at the horizon as the far ground does (Kunar Province `horizon`; before,
-   the far ridges cut a hard line against bright clouds). Open: colour past the
+   the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. The clouds in the haze: [11](#11-atmosphere-sky-ibl-water-reflections)'s per frame
+   (contract 25), reworked by [18](#18-atmosphere-rework). Open: colour past the
    map is still the map's edge colour, blurred, with seams along the map's corner lines from
    above (WorldCover classes next).
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
+
+### 18. Atmosphere rework
+
+Planned with the owner, 2026-11-23: haze and clouds as in real life, now that the far ground
+shows real terrain 30+ km out. Milestone 11 drew the sky from Earth's air (Rayleigh, Mie and ozone
+at fixed densities) and laid a separate ground haze over the land (`renderer.hazeVisibility`,
+8 km; `hazeFalloff`, 1200 m) whose light is borrowed from the clear sky in the ray's direction. Two
+layers were chosen when the haze followed PR's fog end (0.5–2 km), which would have turned the
+whole sky to haze; at a real visibility that reason is gone. What looks wrong now (Kunar Province
+`horizon`, 2026-11-23):
+- The haze is blue: distance fades toward the clear sky's colour. Real haze is aerosol, which
+  scatters all wavelengths about equally: milky white-grey, yellow-brown with dust.
+- The sky ignores the haze: at 8 km the land is gone but the sky stays deep blue to the horizon,
+  where a hazy day's sky turns pale.
+- No sun angle: real haze scatters forward, bright toward the sun, dim and grey away from it.
+- No Rayleigh on the land: the atlas holds only the haze, one grey extinction, so far ridges
+  never go blue on a clean day nor redden at a low sun.
+- Every level sits at sea level in the model, Kunar Province included (1170 m by its bake).
+
+**Design.** One atmosphere (Bruneton 2017, Hillaire 2020: what milestone 11 already builds for the
+sky), its aerosol set by the weather instead of fixed:
+- *Aerosol from visibility.* Extinction at the level's ground = 3.912 / V minus the molecules'
+  (about 0.012 /km at 550 nm), spread over a mixing layer (near uniform up to its top, 1–3 km over
+  the ground, then falling at Earth's 1.2 km scale height). Its type sets single-scattering albedo,
+  phase asymmetry and tint: continental (0.9, g 0.75, grey), maritime and humid (0.98, 0.8,
+  white), dust (0.9 with blue absorbed, 0.7, yellow-brown), smoke. Phase Cornette-Shanks.
+- *Altitude.* The level's ground above sea level from its bake's datum offset (`farbake` fit),
+  0 m without one: thinner air at altitude, a deeper blue sky.
+- *Tables.* Transmittance, multiple scattering, sky view and cloud light from this model, built on
+  the CPU as now, rebuilt on a worker when the weather changes (the sky cube already is), so a
+  change in game does not hitch.
+- *Aerial perspective.* The atlas integrates the whole model per tile and slice: Rayleigh and
+  aerosol in-scatter with the sun's phase, the sun through the transmittance table and the
+  clouds' shadow map, multiple scattering from its table, transmittance per colour channel. Slices
+  span the scenery distance (40 km, quadratic), not fog end, so the closed form past fog end goes.
+  The light block (contract 20) stays only if the tiles band on far silhouettes without it.
+- *Clouds.* The near clouds take the atlas at their mean distance, as the ground does; the
+  panorama's air (`Ra_PanoAerial`) comes from the same model, aerosol included, so contract 25's
+  separate haze term goes. The sky pass composites clouds as before.
+- *Weather per level.* One file per level outside this tree (`<mod>/settings/eon64-weather/<level>.txt`):
+  visibility, aerosol type, mixing height, cloud preset and coverage. Console variables
+  (`renderer.weather*`) change each live; the file sets them at load, defaults otherwise (fair: 40
+  km, continental, 1.5 km, milestone 12's preset and coverage). Fog end stays the gameplay view
+  distance and its cut; weather never changes it.
+
+Dropped: the ground-haze layer and its borrowed light (`Ra_HazeLight`'s haze use,
+`renderer.hazeVisibility`, `hazeFalloff`, `RaAerialHaze`), the authored fog colour as the haze's
+albedo (the last retail input to the haze; retail's fog curve stays under water, in first person
+and in thermals), contract 25's cloud haze. Kept: the sky pass, sky cube and SH (they read the
+tables), view-distance cut, under-water and thermal looks.
+
+Cost: the atlas pass does more per step (two media, a transmittance and a multiple-scattering
+read, the phase); about 33,000 texels x 16 steps, expected well under 0.1 ms more. Table rebuilds
+off the main thread. Nothing per pixel beyond today's atlas reads.
+
+Not in it: shadowed haze from terrain and buildings (light shafts, dropped in 11), humidity-driven
+cloud cover (coverage stays explicit, as milestone 12 decided), rain and fog banks.
+
+Tasks:
+1. The model: aerosol from visibility, type and mixing height; altitude from the bake; tables
+   rebuilt on a worker on change; `tools.atmosphere` dumps the new inputs. Check: the sky alone,
+   visibility 100, 40, 15, 5 km (horizon whitening, sun glow).
+2. Aerial perspective from the model, to the scenery distance; the ground haze, its light and the
+   closed form deleted. Check: Kunar Province `horizon` and `ft-1500`, Muttrah City `sun`, `antisun`.
+3. Clouds through the same air: near clouds by the atlas, the panorama's air from the model.
+   Check: Kunar Province `horizon` at 8 and 40 km, no step between near and far clouds.
+4. Weather per level: file, console variables, defaults; a first pick for the baked levels (Kunar
+   Province, Kashan Desert, Muttrah City) from their regions' typical weather, for the owner to set.
+5. Sky cube, SH, water reflections and the night layer checked against the new sky (The Falklands
+   `w0`); low suns (Muttrah City `sunup`).
+6. Judged by eye at milestone 11's reference views and the far-ground views; GPU cost with the final
+   GPU pass.
 
 ## Frame
 

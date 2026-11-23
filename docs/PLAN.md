@@ -27,6 +27,7 @@ Design: [lanes/render.md](lanes/render.md#milestones).
 | 13. HDR bloom + auto-exposure | In progress: tasks 1–5 built (tasks in STATUS.md) | `git log --grep 'milestone 13'` |
 | 14. GTAO + lightmap channel ownership | Not started | — |
 | 17. Far terrain | In progress: tasks 1–4 built; per-level bakes next (no generated ground) | `git log --grep 'milestone 17'` |
+| 18. Atmosphere rework (one atmosphere, weather per level) | Planned (owner, 2026-11-23) | — |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,
