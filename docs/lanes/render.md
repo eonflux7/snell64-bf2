@@ -785,42 +785,76 @@ were deleted (bloom always on, owner 2026-11-23); `bloomStrength` and the `expos
 
 ### 14. Run-time sun term (the lightmaps' sun channel dropped)
 
-Planned by the owner, 2026-11-23. The sun term is owned at run time everywhere; the lightmaps'
-sun channel (`g`) goes for terrain, roads, static meshes, grass and water. Sky visibility and
-baked point lights stay baked. Lightmaps are not re-baked.
+Planned by the owner, 2026-11-23; reviewed and replanned the same day. The sun term is owned at run
+time everywhere; the lightmaps' sun channel (`g`) goes for terrain, roads, static meshes, grass and
+water. Sky visibility and baked point lights stay baked. Lightmaps are not re-baked.
 
-Why: the baked sun term is visibility × N.L for the level's authored sun. Found 2026-11-23
-(Kashan Desert, sun moved to 4° by `lightManager.sunDirection`): with any other sun the map past
-the cascades keeps its noon light in the new sun's colour while the cascades' range and the far
-ground take the real cosine, so a dark disc round the camera the size of the cascades' reach, and
-a bright map against a dim far ground. At the authored sun they roughly agree.
+Why: nothing is authored (owner, 2026-11-23). Each round gets its own weather, sun position and
+clouds (the clouds are already randomized), so the level's own sun is just one case among many and
+the baked term, visibility × N.L for that sun, is wrong almost every round. Found on Kashan Desert
+with the sun at 4° (`lightManager.sunDirection`): past the cascades the map keeps its noon light
+while the cascades and the far ground take the real cosine, so a dark disc round the camera the
+size of the cascades' reach and a bright map against a dim far ground. Run-time shadows also give
+the far ground its first shadows and vehicles shadows past 400 m. A shortcut was weighed and
+dropped: dividing the baked N.L out of `g` and multiplying by the live one fixes the brightness, but
+leaves the shadows pointing at the authored sun.
+
+The sun is fixed for a round (it need not move during one), so everything sun-dependent is drawn
+once at level load, after the round's sun is chosen. Choosing it belongs with milestone 18's
+weather per level; until something does, the sun is set with `lightManager.sunDirection`, and a
+console change redraws everything at once (a hitch is fine for a dev tool).
 
 Three layers of sun visibility, nearest first:
 
-- The cascades (as now).
-- One static cascade over the map: terrain and static meshes, about 1 m texels at 4096², cached
-  and redrawn only when the sun moves. Shares its caching with the cached static casters idea
-  ([STATUS.md](../STATUS.md#open-issues)).
-- The terrain's self-shadow out to the far ground's edge: the heightmap and the far ground bake
-  marched toward the sun into one visibility texture, redrawn only when the sun moves. The far
-  ground (milestone 17) takes it too, its first shadows.
+- The cascades (as now, to 400 m).
+- **One static cascade over the map**: terrain, static meshes, trees (leaf and trunk, alpha-tested)
+  and overgrowth. Its projection is fitted to the map's bounds in light space, not a fixed texel
+  size: at a 4° sun a 4 km map is about 280 m deep in light space. 4096² by default
+  (`renderer.sunStaticResolution`). Casters at fixed LODs, independent of the camera (today's
+  casters take camera LODs, and the terrain's come from the camera's culler,
+  `Terrain::gatherShadowCasters`), so the cache never depends on where the camera is. Its own
+  normal offset and depth bias: the cascades' 1.5 texels would be 1.5 m, and leak through walls and
+  under roofs. Drawn at load and when the sun changes; a static object destroyed or added (PR's
+  buildings and bridges) marks its region for redraw. 64 MB R32F; its D24S8 target only while
+  drawing (freed or shared with the cascades). Shares its caching with the cached static casters
+  idea ([STATUS.md](../STATUS.md#open-issues)).
+- **The far ground's shadow height**: per texel, the world height below which the sun is blocked
+  by terrain, marched toward the sun over the far ground bake with the map's heights included (at a
+  low sun, mountains past the map shadow into it, and the map into them). A height, not a
+  visibility, so anything above the ground (aircraft) reads it right with one fetch. Coarse, over
+  the far ground's extent; on the map the static cascade already holds the terrain. Levels without
+  a far ground bake have none.
+
+Past all three the sun is unshadowed N.L.
 
 Where the baked term enters today, each a `lerp(baked, cascades, weight)`: `Ra_ResolveSunVisibility`
-and `Ra_ResolveSunCosine` (`rasunshadow.fxh`; static meshes, terrain, roads), water
-(`rashaderwaterbase.fx`), grass (`GetGrassSunTerm`, `undergrowth.fx`). The fallback becomes the
-two run-time layers; past them the sun is unshadowed N.L. Particles and vehicles fall back to the
-hemi map's alpha, not the lightmap: out of scope. Thermals keep the baked term.
+and `Ra_ResolveSunCosine` (`rasunshadow.fxh`; static meshes, terrain, roads, decals, and vehicles,
+which pass 1), water (`rashaderwaterbase.fx`), grass (`GetGrassSunTerm`, `undergrowth.fx`). The
+layers go inside those functions, so every receiver that calls them gets them, vehicles and decals
+included. Particles stay on the hemi map's alpha: out of scope. Thermals keep the baked term.
 
-Accepted loss: the baked soft building shadows at range; far shadows are hard and about 1 m.
+Budget, the first constraint: the reserved samplers s8–s15 are all taken (water waves, aerial, sky
+cube, sky BRDF, water scene, cascades, cloud shadow, depth) and the engine-owned pixel constants fill
+c188–c223, the top of ps_3_0's range. Candidates: s12 outside the water pass (only water reads it);
+for the static cascade's rows (about four float4s), engine-owned registers moved below c188, checked
+against every effect's own allocation.
+
+Accepted loss: the baked soft building shadows at range; far shadows are hard-edged and about 1 m.
 
 Tasks:
 
-1. Static map cascade: caster list (terrain, static meshes), its target, cache, redraw on sun move.
-2. Terrain self-shadow texture: heightmap and far ground bake marched toward the sun.
-3. Shaders: the receivers above take the two layers in place of the baked `g`.
-4. Checks: Kashan Desert at a 4° sun (no disc, no bright map against the far ground), the
-   authored sun no worse than today, frame time and memory of the static cascade stated.
-5. On acceptance: the baked sun fallback deleted from the receivers.
+0. Budget: the samplers and constant registers for the two layers, written into the shader
+   contract (a new version).
+1. Run-time N.L past the cascades, unshadowed, behind `renderer.sunBakedFallback` (0 run time, 1
+   baked) for A/B. Kashan Desert at a 4° sun shows no disc. The owner looks here.
+2. Static cascade: fixed-LOD caster list, fitted projection, own bias, drawn at load and on sun
+   change, region redraw on destruction; read in the receiver functions above.
+3. Far ground shadow height: the march at load, read by the far ground and by the receivers past
+   the static cascade.
+4. Checks: Kashan Desert at a 4° sun (no disc, no bright map against the far ground); the level's
+   own sun against `renderer.sunBakedFallback 1` on the reference views; the static cascade's
+   memory and draw time at load stated; frame time with the final GPU pass.
+5. On acceptance: the baked sun fallback and `renderer.sunBakedFallback` deleted.
 
 ### 20. GTAO
 

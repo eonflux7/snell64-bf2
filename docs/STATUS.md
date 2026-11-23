@@ -50,7 +50,8 @@ Built and checked by an agent; an entry goes when the owner has seen it.
 - Sun moved off the level's own (`lightManager.sunDirection`): past the cascades the map keeps the
   baked noon sun term, so a dark disc round the camera and a bright map against the far ground.
   Planned as render milestone 14 (owner, 2026-11-23: the lightmaps' sun channel dropped, the sun
-  term owned at run time; [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped)).
+  term owned at run time; nothing authored, so each round's sun differs and the sun layers are drawn
+  at load; [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped)).
 - Far clouds at dusk shade flat under Kashan's dust haze (visibility 20 km, mixing 3500 m): the
   air's in-scatter, as modelled; whether that haze is right for dusk (a deep dust layer at
   sunset) is the owner's call ([render.md](lanes/render.md#12-clouds), near clouds' notes).
