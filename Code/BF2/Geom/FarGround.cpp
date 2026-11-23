@@ -459,20 +459,6 @@ bool composeHeights()
                 h = sampleGrid(fineHeight, g.fine, sx, sz) + edgeMeet(x, z);
             }
         }
-    // [DEV] A profile across the east edge at z = -300 (render milestone 17: the seam).
-    {
-        world::IHeightmapCluster* const c = heightmapCluster();
-        for (float x = g.mapHalf - 16.0f; x <= g.mapHalf + 24.0f; x += 4.0f)
-        {
-            const float fi = (x - g.edge.origin) / g.edge.cell, fj = (-300.0f - g.edge.origin) / g.edge.cell;
-            const int i = static_cast<int>(std::floor(fi + 0.5f)), j = static_cast<int>(std::floor(fj + 0.5f));
-            const float inside = g.mapHalf - 0.01f;
-            ::renddx9abi::logf("[farground] profile x %.0f: map %.2f edge %.2f fine %.2f",
-                               x, c ? c->getHeightInWorldCoords((std::min)(x, inside), -300.0f) : -1.0f,
-                               edgeHeight[static_cast<std::size_t>(j) * g.edge.n + i],
-                               sampleGrid(fineHeight, g.fine, x, -300.0f));
-        }
-    }
     if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
         || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue)
         || !uploadHeights(edgeHeight, g.edge.n, g.heightEdgeTexture, g.heightEdgeValue))

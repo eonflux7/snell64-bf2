@@ -879,9 +879,18 @@ Tasks:
    valleys). The load logs the bake's correlation with the map, as placed and mirrored, to check
    the placement's orientation (Muttrah City 0.75 as placed, about 0 mirrored; Kunar 0.48). Seen
    in game on Muttrah City (`ridges`, `ft-top`) and Kunar Province (`ft-1500`, the variant
-   switched live). Open: colour past the map is still the map's edge colour, blurred, with seams
-   along the map's corner lines from above (WorldCover classes next); on Kunar Province, water
-   specks along the map's north edge.
+   switched live). Where it meets the map (2026-11-23, contract 23): the mesh starts at 4 m cells
+   (nine levels, about 76,000 triangles with the strip), and an edge height texture at the map's
+   cell (the map plus 256 m) holds the map's *drawn* heights: the compiled patches stitch their
+   last row to the ring (Kunar Province's east edge drawn 6 m under the heightmap there, 11 m at
+   most), so the patches hand their vertices within 64 m of the edge over as they load. Past the
+   edge the ground (the ring's heights) is brought to the edge's height, fading out over 160 m
+   (Kunar: 3.3 m off on average, 21 m at most). A strip 30 m deep under the edge closes gaps
+   where the two surfaces simplify differently at range; the far ground reaches a pixel into the
+   map, sunk under it (clip() drops whole pixels under MSAA); the curvature drop starts 2 km past
+   the map. Seen on Kunar Province `edge-low`, `edge-e`: no step or gap. Open: colour past the
+   map is still the map's edge colour, blurred, with seams along the map's corner lines from
+   above (WorldCover classes next).
 6. Bakes for the other levels, fictional ones from a real place that fits their region.
 7. Judged by eye from a jet on the task 1 levels; GPU and CPU cost (one draw) with the final GPU
    pass.
