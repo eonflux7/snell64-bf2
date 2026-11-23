@@ -480,11 +480,22 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   - March: on spheres of the planet's radius, through the slab from below, inside or above it
     (`Ra_CloudShell`), from the handoff (or the slab, if later) to where the ray leaves it or 150 km; steps of
     100 m or 1.5 % of the distance, whichever is longer (about 60 overhead, 90 at the horizon, at
-    most 128), from a white-noise offset per texel and panorama, until the transmittance is under
-    0.01. A step reads the coarse copy, and only where it bounds cloud the field, the detail noise
+    most 128, and never shorter than what is left over the steps left, so a march reaches its
+    end), from a white-noise offset per texel and panorama, until the transmittance is under
+    0.01. The panorama starts at 0.7 of the handoff and the near clouds' sky pixels end at it, the
+    two densities cross-fading over that band; over the scene the near clouds march to its depth.
+    The air in front of both is one integral, `Ra_AirAlong` (`RaAir.fxh`, contract 32), the aerial
+    atlas's: the panorama per texel at the clouds' mean distance (its own closed-form haze, without
+    the ground haze, left a step at the handoff and a radial edge far out). A step reads the coarse copy, and only where it bounds cloud the field, the detail noise
     and the light volume. Even steps with an interleaved-gradient offset (the first build) left
     a regular stripe pattern in the far deck. The cloud light table is read at the segment's two
-    ends and blended. Light per step as `RaCloud.fxh`.
+    ends and blended. Light per step as `RaCloud.fxh`; the sun's share times an edge albedo by the
+    view ray's opacity so far (Dagor's: 0.8 where the ray enters, back to 1 at sharpness 4, none
+    toward the sun), and the light volume baked from the field eroded by the detail noise
+    (contract 33). Both modest at dusk (Kashan Desert, `hb-owner`, `hb-owner-back`): outlines more
+    defined, undersides still flat. Tried and dropped (owner, 2026-11-23): a density powder term
+    (dims evenly, as Dagor's notes say), and near taps 150 m toward the sun and up (Dagor ships its
+    sun taps off): rounder bases, but not the look.
   - Detail: the 32³ Worley at a 1.5 km tile erodes edges only, density − 0.2 · detail ·
     (1 − density), full to 8 km and none past 25 km (its 47 m texels alias further off).
     Subtracting 0.4 · detail outright first erased most of the field (mean densities are 0.1–0.3)
@@ -540,10 +551,8 @@ coverage 0.3, 0.7 and 1.0, by eye. Its GPU time at
   sits in fog with cloud walls around. Open: the world's transparents (particles, smoke) still draw
   over clouds in front of them; the ground from altitude is the haze's flat colour past fog end
   and the map a dark slab (milestone 11's view distance, not the clouds); close up the 128 m field
-  reads as soft fog. From altitude (Kashan Desert, 2026-11-23, low sun) a circular step at the
-  handoff: the near field takes the aerial atlas (ground haze in), the panorama the closed form
-  without the ground haze and coarser steps, and they switch at one distance; to fix, the panorama
-  takes the atlas where it reaches and the two cross-fade over a band. Not measured: the GPU cost (the final GPU pass).
+  reads as soft fog. Clouds away from the sun shade flat: the light volume's ~250 m cells
+  (Dagor's are the same) hold no shape at the detail's scale. Not measured: the GPU cost (the final GPU pass).
 - *Coverage drives the lighting* (task 7; `SkyCube.cpp`, `Atmosphere.cpp`, `Clouds.cpp`; contract 16).
   A 256x128 panorama of the clouds from the level's origin, 2 m over the reference height
   (`RaCloudPanorama` into a small target, no history), is drawn about every 30 s and when a set

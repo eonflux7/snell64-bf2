@@ -36,7 +36,9 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-Nothing.
+- Clouds (milestone 12, contracts 32–33): no step at the 16 km handoff and no far radial edge
+  (one air integral, a cross-fade band); edge albedo and the eroded light bake. Kashan Desert,
+  views `hb-owner`, `hb-owner-back`, sun `lightManager.sunDirection 0.7/-0.07/0.71`.
 
 ## Open issues
 
@@ -44,8 +46,8 @@ Nothing.
   baked noon sun term, so a dark disc round the camera and a bright map against the far ground.
   Proposed: the sun term owned at run time everywhere (render milestone 14,
   [render.md](lanes/render.md#14-gtao--lightmap-channel-ownership)); not yet planned by the owner.
-- Clouds: a circular step at the near field's handoff (16 km), seen from altitude
-  ([render.md](lanes/render.md#12-clouds), near clouds' open notes).
+- Clouds away from the sun shade flat ([render.md](lanes/render.md#12-clouds), near clouds'
+  open notes); edge albedo and the eroded light bake helped a little, near sun taps did not.
 
 - The default video profile picks 8x antialiasing while the scene runs 4x. Settle on fixed 4x (a
   single-sample HUD back buffer, the scene's own 4x depth; touches device init and reset).
