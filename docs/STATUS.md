@@ -20,7 +20,7 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
-| `render` 23, water at the shore | In progress: tasks 1, 2 built (2026-11-24) | 3 (shore waves, depth-limited waves) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
+| `render` 23, water at the shore | In progress: tasks 1, 2, 3's waves built (2026-11-24) | 3's run-up and wet sand, then 4 (water types) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
 | `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
 | `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
@@ -37,6 +37,9 @@ Built and checked by an agent; an entry goes when the owner has seen it.
   open sea (`renderer.waterWindFrom` a bearing to override; `WaterScroll` no longer the wind), the
   lee fills in by wave energy, diffracting round the breakwaters. Muttrah City `ssr-shore` and the
   harbour from above (where the line from the pier's corner showed): wind from 60°.
+- Shore waves (milestone 23, task 3): the level's peak wave refracted by the bed, shoaling and
+  breaking in bands up the beach, foam from the break in place of the fixed strip. Omaha Beach
+  `surf`, `surf-along`; Muttrah City `beach-e`.
 - Far overgrowth (milestone 22, task 1): trees over the whole map, no setting. Kunar `og-sw`,
   `ft-1500`, `edge-e`.
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast

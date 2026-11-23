@@ -65,13 +65,32 @@ Tasks:
    (east-north-east, onshore), mean effective fetch 22 km, the bay's lee smooth from the
    breakwater's tip; the long breakwater's lee stays calm right behind it. Kunar's rivers not yet looked
    at (task 9).
-3. **Shore waves (Dagor).** The spectrum's waves feel the depth from the distance map: shorter and
-   slower in shallow water (the finite-depth dispersion, ω² = g k tanh(k d)), turning toward the
-   shore's normal (refraction), and lower where the water is too shallow to carry them (a
-   depth-limited, TMA-style spectrum), so the open sea's pattern no longer reaches the waterline
-   unchanged. On top, wave fronts travelling up the distance map's gradient, breaking where the
-   depth falls under their height, foam from the break; run-up sheets on the beach and a wet sand
-   band on the terrain above the waterline. Replaces the fixed shore strip.
+3. **Shore waves (Dagor).** The train and its breaking built (contract 40, 2026-11-24); run-up
+   sheets and the wet sand band on the terrain above the waterline still to do (the terrain shader
+   needs the shore map). Dagor (`fftWater/shaders/shore.dshl`) runs one Gerstner train phased by a
+   shore distance field, faded by depth and distance, foam on a sawtooth of its phase; here the
+   phase is physical instead:
+   - **Shore map** (`WaterOpen.cpp`, beside the open-water map in a 2048-wide texture): the depth
+     under the sea level, and the phase of the level's peak wave (4.7 s at 7 m/s) solving the
+     eikonal equation |∇φ| = k(d) by fast marching from the deep water (k0 d > π), where it is the
+     open sea's plane wave from the wind. Crests are its level sets: they shorten in shallow water
+     and turn parallel to the shore (refraction), wrap round a breakwater's tip, focus over a shoal
+     (Omaha's). Stored modulo 8π; the shader filters four texels, unwrapping each. The land ring at
+     the waterline carries the phase and direction on. `tools.water` writes `-shore.png` (the crests,
+     brighter shallower). The bake grows to 0.9–1.4 s.
+   - **Shader** (`Ra_ShoreWaves`): where the bed is felt (k0 d < π), the train on the phase: k from
+     the dispersion, height the sea's rms (0.71 Hs × the fetch's ratio) × shoaling (√(cg0/cg)),
+     in groups of four waves and a field along the crests (two cross-fading every 50 s), limited to
+     0.78 d (breaking; the surf zone stays at it). Peaked and leaning forward as it nears breaking.
+     Its slopes add to the FFT's; past four pixels a wavelength they become variance. The FFT's
+     503 m cascade (the peak's band) hands over to the train as the bed is felt, the finer two
+     lose their low frequencies by the TMA depth factor, and the random sea is depth-limited.
+     Foam from the breaker's crest, trailing behind it, longer in the inner surf; it replaces the
+     fixed strip (kept with `renderer.waterOpen 0`).
+   - Seen: Omaha Beach `surf`, `surf-along` (bands of broken waves moving up the beach); Muttrah
+     City's shores drop steeply (quay walls, rocks: foam only at the waterline), `beach-e` the cove.
+   - Open: the deep-water start is everywhere deep, so a harbour behind a breakwater starts its own
+     plane wave from the wind (its height is the fetch map's, small).
 4. **Water types.** Pure water's absorption built in, and turbidity (scattering and its tint) as a
    water type from Jerlov's classification, chosen from where the level is set (the Gulf of Oman
    for Muttrah City, a glacial river for Kunar), not fitted to retail. `renderer.waterColor` is
