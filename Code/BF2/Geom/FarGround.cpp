@@ -81,6 +81,7 @@ const float kFineBlend = 1500.0f;                                  // m inside t
 const float kBaseFall = 6000.0f;                                   // m past known ground: at the base height
 const float kBakeBlend = 3000.0f;                                  // m past known ground: on the bake
 const float kEdgeReach = 256.0f;                                   // m past the map: the edge heights at its cell
+const float kEdgeMeet = 160.0f;                                    // m past the map: the ground brought to its edge
 const float kSkirtDepth = 30.0f;                                   // m: the strip under the map's edge
 const int   kSkirtLevel = 9;                                       // its slot in RaFarGroundLevels (origin 0, cell 1)
 const float kSeaNear = 10.0f;                                      // m: a sea level under the map's lowest by more is none
@@ -157,6 +158,9 @@ struct State
     std::vector<float> farDist;
     Grid               edge;      // the map's square plus kEdgeReach, at the map's cell
     std::vector<float> edgeMap;   // its nodes on the map: the map's heights; NaN past it
+    float              mapHalf;
+    int                edgeNodes; // the map's nodes along a side
+    std::vector<float> edgeDelta; // per side (z-, x+, z+, x-) and node: the map's edge minus the ground past it
     float              base;
     bool               seaNear;   // the level's sea lies near the map's heights
     int                variant;   // the bake's variant the heights were composed with (-1 none)
@@ -387,6 +391,25 @@ float pastKnown(float e, float d, float x, float z, bool scaled)
     return e + (bakeHeight(x, z, scaled) - e) * smoothstep(0.0f, kBakeBlend, d);
 }
 
+// The correction past the map at (x, z): the difference at its nearest edge point, fading out over
+// kEdgeMeet.
+float edgeMeet(float x, float z)
+{
+    if (g.edgeDelta.empty())
+        return 0.0f;
+    const float dx = std::fabs(x) - g.mapHalf, dz = std::fabs(z) - g.mapHalf;
+    const float d = std::sqrt((std::max)(dx, 0.0f) * (std::max)(dx, 0.0f) + (std::max)(dz, 0.0f) * (std::max)(dz, 0.0f));
+    if (d >= kEdgeMeet)
+        return 0.0f;
+    const int side = dx >= dz ? (x > 0.0f ? 1 : 3) : (z > 0.0f ? 2 : 0);
+    const float along = side == 1 || side == 3 ? z : x;
+    const float f = (std::min)((std::max)((along + g.mapHalf) / g.edge.cell, 0.0f), static_cast<float>(g.edgeNodes - 1));
+    const int k0 = (std::min)(static_cast<int>(f), g.edgeNodes - 2);
+    const float* const delta = &g.edgeDelta[static_cast<std::size_t>(side) * g.edgeNodes];
+    const float value = delta[k0] + (delta[k0 + 1] - delta[k0]) * (f - static_cast<float>(k0));
+    return value * (1.0f - smoothstep(0.0f, kEdgeMeet, d));
+}
+
 // The heights from what buildHeights kept, for the bake's current variant; uploads both textures.
 bool composeHeights()
 {
@@ -414,13 +437,18 @@ bool composeHeights()
         }
     // The edge heights: the map's own at its nodes (so the far ground's vertices on them meet the
     // map's), the fine heights past it.
+    // Past the map, the ground there (the ring's heights where it is data) brought to the map's edge
+    // height at the edge, the difference fading out over kEdgeMeet.
     std::vector<float> edgeHeight(g.edgeMap);
     for (int j = 0; j != g.edge.n; ++j)
         for (int i = 0; i != g.edge.n; ++i)
         {
             float& h = edgeHeight[static_cast<std::size_t>(j) * g.edge.n + i];
             if (h != h)
-                h = sampleGrid(fineHeight, g.fine, g.edge.x(i), g.edge.x(j));
+            {
+                const float x = g.edge.x(i), z = g.edge.x(j);
+                h = sampleGrid(fineHeight, g.fine, x, z) + edgeMeet(x, z);
+            }
         }
     if (!uploadHeights(fineHeight, g.fine.n, g.heightTexture, g.heightValue)
         || !uploadHeights(g.farHeight, g.coarse.n, g.heightFarTexture, g.heightFarValue)
@@ -659,6 +687,43 @@ bool buildHeights(Terrain* t, world::IHeightmapCluster* cluster, float mapHalf, 
             g.edgeMap[static_cast<std::size_t>(j) * g.edge.n + i] = cluster->getHeightInWorldCoords(
                 (std::max)(-inside, (std::min)(x, inside)), (std::max)(-inside, (std::min)(z, inside)));
         }
+    // Along each side: the map's edge height minus the ground one fine cell past it, smoothed along
+    // the side over +-8 nodes (the ring's cells are coarser than the map's).
+    g.mapHalf = mapHalf;
+    g.edgeNodes = static_cast<int>(std::floor(2.0f * mapHalf / mapCell + 0.5f)) + 1;
+    std::vector<float> raw(static_cast<std::size_t>(4) * g.edgeNodes);
+    double sumAbs = 0.0, maxAbs = 0.0;
+    for (int side = 0; side != 4; ++side)
+        for (int k = 0; k != g.edgeNodes; ++k)
+        {
+            const float t = -mapHalf + static_cast<float>(k) * mapCell;
+            const float ox = side == 1 ? 1.0f : (side == 3 ? -1.0f : 0.0f), oz = side == 2 ? 1.0f : (side == 0 ? -1.0f : 0.0f);
+            const float x = ox != 0.0f ? ox * mapHalf : t, z = oz != 0.0f ? oz * mapHalf : t;
+            const float inside = mapHalf - 0.01f;
+            const float atEdge = cluster->getHeightInWorldCoords((std::max)(-inside, (std::min)(x, inside)),
+                                                                 (std::max)(-inside, (std::min)(z, inside)));
+            const float past = sampleGrid(fineE, fine, x + ox * fine.cell, z + oz * fine.cell);
+            raw[static_cast<std::size_t>(side) * g.edgeNodes + k] = atEdge - past;
+        }
+    g.edgeDelta.assign(raw.size(), 0.0f);
+    for (int side = 0; side != 4; ++side)
+        for (int k = 0; k != g.edgeNodes; ++k)
+        {
+            float sum = 0.0f;
+            int n = 0;
+            for (int o = -8; o <= 8; ++o)
+                if (k + o >= 0 && k + o < g.edgeNodes)
+                {
+                    sum += raw[static_cast<std::size_t>(side) * g.edgeNodes + k + o];
+                    ++n;
+                }
+            const float v = sum / static_cast<float>(n);
+            g.edgeDelta[static_cast<std::size_t>(side) * g.edgeNodes + k] = v;
+            sumAbs += std::fabs(v);
+            maxAbs = (std::max)(maxAbs, static_cast<double>(std::fabs(v)));
+        }
+    ::renddx9abi::logf("[farground] the ground past the map against its edge: %.1f m off on average, %.1f m at most; "
+                       "brought to it over %.0f m", sumAbs / static_cast<double>(g.edgeDelta.size()), maxAbs, kEdgeMeet);
     g.fineE.swap(fineE);
     g.fineDist.swap(fineDist);
     g.farE.swap(farE);
@@ -1278,6 +1343,7 @@ void releaseBuilt()
     std::vector<float>().swap(g.farE);
     std::vector<float>().swap(g.farDist);
     std::vector<float>().swap(g.edgeMap);
+    std::vector<float>().swap(g.edgeDelta);
     std::vector<float>().swap(g.bake);
     g.seaValid = false;
     g.baked = false;
