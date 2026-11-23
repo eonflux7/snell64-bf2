@@ -6,7 +6,7 @@ design and as-built facts live in the lane's document, the story in commit messa
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look; 21 (tonemap and grade) task 1 built | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
+| `render` | Milestones 1–11, 13, 15, 16, 18 and 19 accepted; 12 (clouds) paused; 17 (far terrain) tasks 1–5 seen | Milestone 14 (run-time sun) built, awaiting the owner's look; 21 (tonemap and grade) task 1 built; 22 (far overgrowth) task 1 | [render.md](lanes/render.md#14-run-time-sun-term-the-lightmaps-sun-channel-dropped) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -21,6 +21,11 @@ Tasks 0–4 built and checked by an agent (2026-11-23); design, as built and wha
 owner's look; frame time with the final GPU pass; 5 on acceptance (the baked fallback and
 `renderer.sunBakedFallback` deleted). Left out, for the owner: overgrowth in the static cascade
 (it streams round the camera), static meshes placed during a round (deployables).
+
+## In progress: `render` milestone 22, far overgrowth
+
+The whole-map test (`renderer.overgrowthRange`) seen by the owner (2026-11-23). Next: task 1, one
+cell per patch built at load with buffers sized to its patch ([render.md](lanes/render.md#22-far-overgrowth)).
 
 ## In progress: `render` milestone 21, tonemap and grade
 
@@ -49,9 +54,6 @@ Reference views (`view.save` by the owner; milestone 11's shots `m11acc-<view>`,
 
 Built and checked by an agent; an entry goes when the owner has seen it.
 
-- Far overgrowth over the whole map (test): `renderer.overgrowthRange 3000` set before the level loads
-  (in `eon64-ui.con`), Kunar `og-sw`, `ft-1500`. Little GPU cost, 769 MB of cell buffers; numbers
-  in `lanes/render.md` (render milestone 11's limits).
 - The grade (milestone 21, tasks 1, 2, 4, 6): `renderer.gradeCurve 1` the new grade (default: contrast
   1.2, toe 1.5, the rational shoulder), 0 the old Neutral grade. Auto-exposure lifts dark scenes only
   partly, `renderer.exposureStrength` (0.6; 1 the old full lift): to judge indoors (no interior view

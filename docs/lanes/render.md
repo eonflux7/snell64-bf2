@@ -249,17 +249,8 @@ Left, outside the milestone:
   models take the open sky rather than the visibility under the camera; weapons' metal and fabric
   under colour-map gloss have no class of their own.
 - View distance: the far ground ring (milestone 17; land past the surrounding ring shows sky; below the horizon
-  the sky repeats its horizon row), vegetation past overgrowth's range, jets and anti-air not
+  the sky repeats its horizon row), vegetation past overgrowth's range (milestone 22), jets and anti-air not
   checked, the far scenery's cost.
-- Far overgrowth over the whole map (test, `renderer.overgrowthRange`, read at level load; 0 the
-  level's `Overgrowth.viewDistance`): past the level's range the grid of far cells round the camera
-  widens at the level's cell size (retail grows the cells on its 10 x 10 grid). Kunar (57.7k
-  instances, level range 1000 m) at 3000 m: 26 x 26 cells of 256 m; GPU 5.73 -> 5.85 ms low over the
-  south-west corner, 6.00 -> 6.06 ms from 1500 m up (which drew none before); about 2-3 % fewer
-  frames per second, one sample each. The cost is memory: every cell allocates leaf and trunk buffers
-  for the densest patch (48k / 12k vertices), 769 MB in all. To keep it: size each cell's buffers to
-  its own patch (or one shared pool), and check hitches as rows of 26 cells rebuild while flying.
-  Changing the range at run time through retail's `reload()` path lost every instance (not kept).
 - Banding in the dark blue and the sun's glare: milestone 13 (dither, bloom).
 
 ### 15. Shader pipeline
@@ -967,6 +958,42 @@ unused ACES, AgX, Reinhard and lift/gamma/gain paths (deleted with task 1).
    likewise. No interior view saved yet. `RaHdrPost` grows to `float4[5]` ([4].x the strength).
 5. **Checks**: A/B on Muttrah City `sun`, `street`; Kashan Desert `hb-owner` at dusk; a fire; the
    Falklands' night layer (`w0`, its toe against milestone 13's accepted 25/255).
+
+### 22. Far overgrowth
+
+Overgrowth (PR's placed trees and bushes, `Overgrowth.*` in each level's `overgrowth.con`, the
+instances in `overgrowthcollision.con`) ended at the level's `Overgrowth.viewDistance` (Kunar 1000 m),
+so past it the map was bare ground, and from higher than that range above the ground there was none
+at all. Retail streams a 10 x 10 grid of cells of viewDistance / 4 round the camera: each cell, as
+the camera crosses a boundary, is rebuilt from its patch by appending every instance's `_lod` mesh
+(a few crossed cards) into one leaf and one trunk stream (16-byte vertices, 16-bit indices), and every
+cell's buffers are sized for the densest patch. The near instances (closeDistPercentage, 15 %) draw
+their full meshes, pooled per cell.
+
+The design: the far cells cover the whole map, one cell per patch at the level's cell size, built
+once at load and never moved, each with buffers sized to its own patch. Drops: the camera-following
+ring and its rebuilds. The near full meshes keep the level's range. Cost: memory for the map's `_lod`
+geometry (its sum, not the densest patch times the cells); draws, at most two per cell on screen.
+
+The test (`renderer.overgrowthRange`, `5a91eac7`, read at level load; 0 the level's range): past the
+level's range the grid widens at the level's cell size. Kunar (57.7k instances) at 3000 m: 26 x 26
+cells of 256 m; GPU 5.73 -> 5.85 ms low over the south-west corner (`og-sw`), 6.00 -> 6.06 ms from
+1500 m up (`ft-1500`, none drawn before); 2-3 % fewer frames per second, one sample each; 769 MB of
+cell buffers (the densest patch: 48k leaf, 12k trunk vertices). Seen by the owner (2026-11-23:
+"looks great"). Changing the range at run time through retail's `reload()` lost every instance.
+
+Tasks:
+
+1. **Whole-map cells:** one cell per patch, placed once (`baseUpdateCells` stops re-seating), built
+   at load; each cell's streams sized to its patch. `renderer.overgrowthRange` goes.
+2. **Fade:** far cells end at the view distance (the scenery frustum), not at a fraction of the
+   level's overgrowth range.
+3. **Shadows:** far cells past the dynamic cascades' reach cast nothing; overgrowth in the static
+   cascade (milestone 14's open item) once it no longer streams.
+4. **Index range:** a patch over 65535 vertices (a dense level with a long overgrowth range) is
+   split or logged, not wrapped.
+5. **Checks:** Kunar `og-sw`, `ft-1500`; Saaremaa (overgrowth-heavy); Muttrah City and Fallujah West
+   unchanged near; load time and memory before/after.
 
 ### 17. Far terrain
 
