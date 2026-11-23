@@ -735,6 +735,24 @@ void bindMarchTextures(ID3DXEffect* d3dx, const VolumeSet& v, IDirect3DTexture9*
             d3dx->SetTexture(h, textures[i].texture);
 }
 
+// Binds the air's integral for the clouds' passes (RaAir.fxh, contract 32): the atmosphere's
+// transmittance and multiple-scattering tables and the cloud shadow map with its constants, as the
+// aerial-perspective atlas takes them, so far and near clouds are hazed as the ground is.
+void bindAirTextures(ID3DXEffect* d3dx)
+{
+    const AtmosphereInfo a = rendererAtmosphereInfo();
+    float shadow[2][4];
+    rendererCloudShadowConstants(shadow);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaTransmittanceTable"))
+        d3dx->SetTexture(h, a.transmittance);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaMultiScatterTable"))
+        d3dx->SetTexture(h, a.multiScatter);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShadow"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(shadow), kCloudShadowVec4s);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShadowMap"))
+        d3dx->SetTexture(h, shadow[0][3] > 0.0f ? rendererCloudShadowMap() : 0);
+}
+
 // One full-screen pass of the current technique into `target`'s rows [y, y + rows).
 void drawRows(void* effect, IDirect3DTexture9* target, unsigned int w, unsigned int y, unsigned int rows)
 {
@@ -799,6 +817,7 @@ void panoramaStep(void* effect)
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
     bindMarchTextures(d3dx, v, history);
+    bindAirTextures(d3dx);
     const unsigned int rows = kPanoH / kPanoBands;
     drawRows(effect, s.pano[s.panoDraw], kPanoW, s.panoBand * rows, rows);
 
@@ -842,7 +861,7 @@ void shadowStep(void* effect)
     }
     const VolumeSet& v = s.sets[s.shadowSet];
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
-    if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudShadow"))
+    if (!d3dx || !v.field || !effectSetTechniqueByName(effect, "RaCloudShadowBuild"))
         return;
     float c[kRows][4];
     const float origin[3] = { 0.0f, 0.0f, 0.0f };
@@ -914,6 +933,7 @@ void skyLightStep(void* effect)
         if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaAtmosphere"))
             d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(atmosphere), 16);
         bindMarchTextures(d3dx, v, 0);
+        bindAirTextures(d3dx);
         drawRows(effect, s.skyPano, kSkyLightW, 0, kSkyLightH);
         s.skyStage = 1;
         s.skyDue = false;
@@ -1122,6 +1142,7 @@ void rendererCloudsNear(bool allowed)
     for (size_t i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i)
         if (const D3DXHANDLE hc = d3dx->GetParameterBySemantic(0, textures[i].semantic))
             d3dx->SetTexture(hc, textures[i].texture);
+    bindAirTextures(d3dx);
     const D3DXHANDLE current = d3dx->GetParameterBySemantic(0, "RaCloudNearCurrent");
     const D3DXHANDLE depth = d3dx->GetParameterBySemantic(0, "RaCloudNearDepth");
     const D3DXHANDLE history = d3dx->GetParameterBySemantic(0, "RaCloudNearHistory");
