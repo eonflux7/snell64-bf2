@@ -1,25 +1,30 @@
-// [RENDER] Atmosphere (render milestone 11, docs/lanes/render.md#11-atmosphere-sky-ibl-water-reflections).
+// [RENDER] Atmosphere (render milestones 11 and 18, docs/lanes/render.md#18-atmosphere-rework).
 // Not part of retail BF2.
 //
-// Two layers. The sky atmosphere (Rayleigh, Mie and ozone over a planet of Earth's size, in
-// kilometres) drives the sky; a ground haze (density falling exponentially with height, in metres)
-// drives aerial perspective. At load the model is fitted to the level's authored light:
-//   1. sunlight above the atmosphere = the sun at the ground over the sky's transmittance at the
-//      sun's elevation, clamped to >= 0.1. The sun at the ground is the one every lit surface
-//      takes: the authored sun (Lightmanager.staticSunColor) decoded as the shaders do,
-//      colour^2.2 x 2^2.2 (gamma and the x2 overbright), as irradiance / pi;
-//   2. the sky: Earth's air (a clear sky on every level; overcast is milestone 12's clouds),
-//      physical under that sun. The authored sky and fog colours set no brightness (owner,
-//      2026-11-21: physically correct, the look is adjusted in post);
-//   3. the haze: density from fog end; its full in-scatter is the sky's radiance in each direction
-//      (the horizon's at and below it), so terrain at fog end meets the sky without a seam.
-// The transmittance, multiple-scattering and sky-view tables are built here on the CPU after a fit
-// (the sun does not move; about 100 ms with the fit) and uploaded to managed textures, so they are
-// the very model the fit evaluated and survive device resets. Only the aerial-perspective atlas is
-// drawn per frame, by RaAtmosphere.fx (shader contracts 6 and 8, renderer-pipeline.md), and bound
-// to the reserved sampler s9 for every lit shader (Ra_GetAerial, with RaAerial in c223). Pixel passes for
-// the load-time tables were tried first: this D3DX compiler's loops that are not unrolled came out
-// wrong under DXVK (the multiple-scattering table 10x low), so the atlas's march is unrolled too.
+// One atmosphere over a planet of Earth's size (kilometres; radius 6360 km at sea level): Rayleigh
+// and ozone at Earth's densities, and an aerosol set by the weather (renderer.weather*): its
+// extinction at the level's ground from the visibility (Koschmieder, 3.912 / V, less the
+// molecules'), near uniform up to the mixing layer's top and falling at 1.2 km above it; its type
+// sets the single-scattering albedo, the phase asymmetry (Cornette-Shanks) and the Angstrom
+// exponent (extinction ~ wavelength^-alpha: the haze's colour). The level's ground sits at its
+// altitude (the weather's, else its far-ground bake's, else world y 0 at sea level).
+//
+// The sun: the authored sun (Lightmanager.staticSunColor, decoded as the shaders do: colour^2.2
+// x 2^2.2) is the sun at the ground through a fixed reference air (fair: 25 km, continental,
+// 1.5 km mixing layer, at the level's altitude). Sunlight above the atmosphere = the authored sun
+// over the reference's transmittance at the sun's elevation (clamped >= 0.1: low suns, night
+// layers); the surfaces' sun is that through this weather's air: the authored sun times the
+// factor (this weather's transmittance over the reference's), which the shaders take from
+// RaSunFactor (Ra_SunIrradiance). At the reference the lightmaps' anchor holds exactly.
+//
+// Tables (transmittance, multiple scattering, cloud light, the sky view at the ground for the sky
+// cube) are built on the CPU on a worker thread when the weather or the authored light changes; the
+// last ones stay bound meanwhile. The sky view the camera sees is built at the camera's height in
+// 200 m bands (a jet above the mixing layer sees the clear sky over a haze layer). The
+// aerial-perspective atlas is drawn per frame by RaAtmosphere.fx (contract 27) and bound to s9 for
+// every lit shader (Ra_GetAerial). Pixel passes for the load-time tables were tried first: this
+// D3DX compiler's loops that are not unrolled came out wrong under DXVK (the multiple-scattering
+// table 10x low), so the atlas's march is unrolled too.
 #ifdef BF2_IMAGE_RENDDX9
 
 #define NOMINMAX          // std::min and std::max below
@@ -36,13 +41,16 @@
 #include "../Geom/Terrain.h"
 #include "../Geom/QuadPatch.h"
 #include "../Geom/SkyDome.h"
+#include "../Geom/FarGround.h"
 #include "../GeomMisc/FSQuadDrawer.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace dice {
@@ -65,32 +73,49 @@ namespace {
 const double kPi = 3.14159265358979;
 // 2^2.2: the authored x2 overbright, decoded with the colour's gamma (RA_LIGHTMAP_X2 in the shaders)
 const double kSunOverbright = 4.5948;
-const double kGroundRadius = 6360.0;   // km
+const double kGroundRadius = 6360.0;   // km: sea level
 const double kTopRadius = 6460.0;      // km
 const double kRayleighHeight = 8.0;    // km
-const double kMieHeight = 1.2;         // km
+const double kAerosolHeight = 1.2;     // km: the aerosol's scale height above the mixing layer
 const double kOzoneCentre = 25.0;      // km
 const double kOzoneHalfWidth = 15.0;   // km
-const double kEarthRayleigh[3] = { 5.802e-3, 13.558e-3, 33.1e-3 };   // 1/km
-const double kMieScattering = 3.996e-3;                              // 1/km at density 1
-const double kMieAbsorption = 4.40e-3;                               // 1/km at density 1
-const double kMieG = 0.8;
+const double kEarthRayleigh[3] = { 5.802e-3, 13.558e-3, 33.1e-3 };   // 1/km at sea level
 const double kOzone[3] = { 0.650e-3, 1.881e-3, 0.085e-3 };           // 1/km
+const double kWavelength[3] = { 680.0, 550.0, 440.0 };               // nm, the channels'
+const double kMinAerosol = 2.0e-3;     // 1/km at 550 nm: the cleanest air keeps a trace
 
-// The haze layer: one for every level, set by renderer.hazeVisibility and renderer.hazeFalloff;
-// its density is a visibility's, not fog end's (owner, 2026-11-22: realistic, mostly in the distance). It stays exponential
-// past fog end: the view distance is cut by the radial dither (task 5).
+// Aerosol types (renderer.weatherAerosol): single-scattering albedo per channel, phase asymmetry,
+// Angstrom exponent.
+struct AerosolType
+{
+    const char* name;
+    double albedo[3];
+    double g;
+    double alpha;
+};
+const AerosolType kAerosols[4] = {
+    { "continental", { 0.90, 0.90, 0.90 }, 0.75, 1.3 },   // grey, faintly blue far off
+    { "maritime", { 0.98, 0.98, 0.98 }, 0.80, 0.5 },      // white
+    { "dust", { 0.96, 0.91, 0.80 }, 0.70, 0.2 },          // yellow-brown: blue absorbed
+    { "smoke", { 0.85, 0.85, 0.85 }, 0.65, 1.8 },         // brown-grey, a red sun
+};
+const int kAerosolCount = 4;
+
+// The reference air the sun is fitted against.
+const double kRefVisibility = 25000.0, kRefMixing = 1500.0;
+const int kRefAerosol = 0;
 
 // Sizes, as RaAtmosphere.fx defines them.
 const unsigned int kTransmittanceW = 256, kTransmittanceH = 64;
 const unsigned int kMultiScatterSize = 32;
 const unsigned int kSkyViewW = 192, kSkyViewH = 108;
+// The atlas (contract 27): 32 in-scatter slices, 32 transmittance slices, the sky block.
 const unsigned int kApTiles = 32, kApSlices = 32;
-// The atlas's last block (contract 20): the haze's light per tile column and elevation, so
-// Ra_GetAerial lights each pixel by its own ray's elevation, not its tile's.
-const unsigned int kApBlocks = kApSlices + 1;
+const unsigned int kApBlocks = 2 * kApSlices + 1;
+const double kSkyBandKm = 0.2;          // the camera's sky view: rebuilt per band of height
+const double kSkyBandSlackKm = 0.15;    // from the band's height before it moves (hysteresis)
 
-// The sky (task 3): the model's clear sky and the sun disc.
+// The sky (milestone 11, task 3): the sun disc.
 const double kSunAngularRadius = 0.27;      // degrees, the real sun's
 const double kSunDiscEdge = 0.15;           // the disc's soft edge, as a share of its radius
 const double kSunDiscMaxLuminance = 100.0;  // scene units (the physical disc is ~46000x the sun colour)
@@ -122,26 +147,56 @@ struct Media
     V3 rayleigh, mie, extinction;
 };
 
-// The fitted sky: Rayleigh scattering (1/km) and the Mie density (1 = Earth's).
+// The air: Earth's molecules and this weather's aerosol.
 struct SkyParams
 {
-    V3 rayleigh;
-    double mie;
+    V3 rayleigh;             // 1/km at sea level
+    V3 aerosolScattering;    // 1/km in the mixing layer
+    V3 aerosolExtinction;    // 1/km in the mixing layer
+    double g;                // the aerosol's phase asymmetry
+    double groundKm;         // the level's ground above sea level
+    double mixingTopKm;      // the mixing layer's top above sea level
     V3 groundAlbedo;
 };
+
+// The air for a visibility (m) at the level's ground, an aerosol type and a mixing height (m).
+SkyParams makeAir(double visibilityM, int aerosol, double mixingM, double groundKm, const V3& albedo)
+{
+    const AerosolType& type = kAerosols[std::min(std::max(aerosol, 0), kAerosolCount - 1)];
+    SkyParams p;
+    p.rayleigh = v3(kEarthRayleigh[0], kEarthRayleigh[1], kEarthRayleigh[2]);
+    p.groundKm = std::max(groundKm, 0.0);
+    p.mixingTopKm = p.groundKm + std::max(mixingM, 50.0) / 1000.0;
+    const double molecules = kEarthRayleigh[1] * std::exp(-p.groundKm / kRayleighHeight);
+    const double ext550 = std::max(3912.0 / std::max(visibilityM, 100.0) - molecules, kMinAerosol);
+    double ext[3], scat[3];
+    for (int k = 0; k < 3; ++k)
+    {
+        ext[k] = ext550 * std::pow(kWavelength[k] / 550.0, -type.alpha);
+        scat[k] = ext[k] * type.albedo[k];
+    }
+    p.aerosolExtinction = v3(ext[0], ext[1], ext[2]);
+    p.aerosolScattering = v3(scat[0], scat[1], scat[2]);
+    p.g = type.g;
+    p.groundAlbedo = albedo;
+    return p;
+}
+
+// The aerosol's density (1 in the mixing layer) at h km above sea level.
+double aerosolDensity(const SkyParams& p, double h)
+{
+    return h <= p.mixingTopKm ? 1.0 : std::exp(-(h - p.mixingTopKm) / kAerosolHeight);
+}
 
 Media media(const SkyParams& p, double h)
 {
     const double dr = std::exp(-h / kRayleighHeight);
-    const double dm = std::exp(-h / kMieHeight);
+    const double da = aerosolDensity(p, h);
     const double dozone = std::max(0.0, 1.0 - std::fabs(h - kOzoneCentre) / kOzoneHalfWidth);
     Media m;
     m.rayleigh = p.rayleigh * dr;
-    const double mie = p.mie * kMieScattering * dm;
-    m.mie = v3(mie, mie, mie);
-    const double mieExt = p.mie * (kMieScattering + kMieAbsorption) * dm;
-    m.extinction = m.rayleigh + v3(mieExt, mieExt, mieExt)
-                 + v3(kOzone[0], kOzone[1], kOzone[2]) * dozone;
+    m.mie = p.aerosolScattering * da;
+    m.extinction = m.rayleigh + p.aerosolExtinction * da + v3(kOzone[0], kOzone[1], kOzone[2]) * dozone;
     return m;
 }
 
@@ -163,38 +218,39 @@ bool hitsGround(double r, double mu)
 }
 
 double rayleighPhase(double c) { return 3.0 / (16.0 * kPi) * (1.0 + c * c); }
+// Cornette-Shanks.
 double miePhase(double g, double c)
 {
     const double k = 3.0 / (8.0 * kPi) * (1.0 - g * g) / (2.0 + g * g);
     return k * (1.0 + c * c) / std::pow(std::max(1.0 + g * g - 2.0 * g * c, 1e-4), 1.5);
 }
 
-// Transmittance to the top, marched (no ground test).
+// Transmittance to the top, marched (no ground test). The steps are finer near the start, where
+// the aerosol is.
 V3 transmittanceMarch(const SkyParams& p, double r, double mu, int steps)
 {
     const double len = std::max(raySphere(r, mu, kTopRadius), 0.0);
-    const double dt = len / steps;
     V3 depth = v3(0, 0, 0);
+    double prev = 0.0;
     for (int i = 0; i < steps; ++i)
     {
-        const double t = (i + 0.5) * dt;
+        const double u = static_cast<double>(i + 1) / steps;
+        const double t1 = len * u * u;
+        const double t = 0.5 * (prev + t1);
         const double ri = std::sqrt(r * r + t * t + 2.0 * r * mu * t);
-        depth = depth + media(p, ri - kGroundRadius).extinction * dt;
+        depth = depth + media(p, ri - kGroundRadius).extinction * (t1 - prev);
+        prev = t1;
     }
     return vexp(depth * -1.0);
 }
 
-// The tables. The fit evaluates the model on coarse ones; the frame's are the same functions at
-// full size. Texel i of n holds unit coordinate i / (n - 1): a texel centre, as the shaders'
+// The tables. Texel i of n holds unit coordinate i / (n - 1): a texel centre, as the shaders'
 // UvFromUnit reads it.
 // - Transmittance (kTransmittanceW x kTransmittanceH): Bruneton's parameterization; x the
 //   distance to the top along the ray between its least and greatest values at that radius,
 //   y the radius by the horizon distance (0 ground, 1 top).
 // - Multiple scattering (kMultiScatterSize square): x the sun cosine (0 = -1, 1 = +1), y the
 //   altitude (0 ground, 1 top); Hillaire's L2 / (1 - fms) for unit sunlight.
-const int kFitTransW = 64, kFitTransH = 32;
-const int kFitMsSize = 16;
-
 struct CpuTables
 {
     int tw, th, msn;
@@ -267,7 +323,7 @@ void buildTransmittance(const SkyParams& p, CpuTables& c, int w, int h)
 // Hillaire 2020, section 5.5: for a point lit by unit sunlight, the second-order light arriving
 // from 64 directions under an isotropic phase (L2) and the share the medium around it scatters
 // back (fms); the series sums to L2 / (1 - fms). Its sky contribution is that times the medium's
-// scattering.
+// scattering. Isotropic: it runs dark at a vertical aerosol depth above about 1.
 void buildMultiScatter(const SkyParams& p, CpuTables& c, int n)
 {
     const int dirs = 8, steps = 20;
@@ -292,11 +348,16 @@ void buildMultiScatter(const SkyParams& p, CpuTables& c, int n)
                     const bool ground = hitsGround(r, dir.y);
                     const double len = ground ? raySphere(r, dir.y, kGroundRadius)
                                               : std::max(raySphere(r, dir.y, kTopRadius), 0.0);
-                    const double dt = len / steps;
                     V3 thr = v3(1, 1, 1), l = v3(0, 0, 0), f = v3(0, 0, 0);
+                    double prev = 0.0;
                     for (int s = 0; s < steps; ++s)
                     {
-                        const V3 q = pos + dir * ((s + 0.5) * dt);
+                        // Finer steps near the point, where the aerosol is when it is near the ground.
+                        const double u = static_cast<double>(s + 1) / steps;
+                        const double t1 = len * u * u;
+                        const double dt = t1 - prev;
+                        const V3 q = pos + dir * (0.5 * (prev + t1));
+                        prev = t1;
                         const double rs = length(q);
                         const Media m = media(p, rs - kGroundRadius);
                         const V3 scat = m.rayleigh + m.mie;
@@ -323,27 +384,32 @@ void buildMultiScatter(const SkyParams& p, CpuTables& c, int n)
             l2 = l2 * (1.0 / samples);
             fms = fms * (1.0 / samples);
             c.ms[y * n + x] = v3(l2.x / (1.0 - std::min(fms.x, 0.999)),
-                                          l2.y / (1.0 - std::min(fms.y, 0.999)),
-                                          l2.z / (1.0 - std::min(fms.z, 0.999)));
+                                 l2.y / (1.0 - std::min(fms.y, 0.999)),
+                                 l2.z / (1.0 - std::min(fms.z, 0.999)));
         }
 }
 
 // The sky's in-scatter along a ray from radius r (the frame's y the local up there), for unit
-// sunlight above the atmosphere: single scattering plus the multiple-scattering table.
+// sunlight above the atmosphere: single scattering plus the multiple-scattering table. Steps
+// finer near the eye, where the aerosol is.
 V3 skyInScatter(const SkyParams& p, const CpuTables& c, double r, const V3& dir, const V3& sun,
                 int steps)
 {
     const bool ground = hitsGround(r, dir.y);
     const double len = ground ? raySphere(r, dir.y, kGroundRadius)
                               : std::max(raySphere(r, dir.y, kTopRadius), 0.0);
-    const double dt = len / steps;
     const double cosTheta = dot(dir, sun);
-    const double pr = rayleighPhase(cosTheta), pm = miePhase(kMieG, cosTheta);
+    const double pr = rayleighPhase(cosTheta), pm = miePhase(p.g, cosTheta);
     const V3 pos = v3(0.0, r, 0.0);
     V3 thr = v3(1, 1, 1), l = v3(0, 0, 0);
+    double prev = 0.0;
     for (int s = 0; s < steps; ++s)
     {
-        const V3 q = pos + dir * ((s + 0.5) * dt);
+        const double u = static_cast<double>(s + 1) / steps;
+        const double t1 = len * u * u;
+        const double dt = t1 - prev;
+        const V3 q = pos + dir * (0.5 * (prev + t1));
+        prev = t1;
         const double rs = length(q);
         const double muS = dot(q, sun) / rs;
         const Media m = media(p, rs - kGroundRadius);
@@ -387,7 +453,7 @@ void buildSkyView(const SkyParams& p, const CpuTables& c, double r, const V3& su
             const double cosAz = -(u * u * 2.0 - 1.0);
             const double sinAz = std::sqrt(std::max(0.0, 1.0 - cosAz * cosAz));
             const V3 dir = v3(std::sin(zenith) * cosAz, std::cos(zenith), std::sin(zenith) * sinAz);
-            out[y * w + x] = skyInScatter(p, c, r, dir, sun, 30) * scale;
+            out[y * w + x] = skyInScatter(p, c, r, dir, sun, 40) * scale;
         }
     }
 }
@@ -395,13 +461,12 @@ void buildSkyView(const SkyParams& p, const CpuTables& c, double r, const V3& su
 // ---- cloud light (render milestone 12, task 1) ----
 // The light a cloud receives at its altitude and position, from this model (after Gaijin's Dagor
 // daSkies2, `clouds_light_color`; BSD-3-Clause): the clouds' include (RaCloud.fxh) reads it per
-// sample. One 2D texture of kCloudLightLayers tiles across (altitudes above the reference height,
+// sample. One 2D texture of kCloudLightLayers tiles across (altitudes above the level's ground,
 // layer i at (i + 0.5) / layers of kCloudLightTopKm) by three rows of tiles down: the sun's
 // irradiance there, the sky's mean radiance from above (its irradiance / pi), and the ground's
 // radiance from below. A tile's texel (x, z) sits at world x, z = ((i + 0.5) / tile * 2 - 1) times
 // kCloudLightRangeKm from the level's origin: the planet's curvature lowers the sun far away
-// (sunset on the distant deck first). The haze is left out (its density at 1.5 km is e^-4 of the
-// ground's), and the ground everywhere has the level's albedo.
+// (sunset on the distant deck first). The ground everywhere has the level's albedo.
 const int kCloudLightLayers = 8, kCloudLightTile = 8, kCloudLightRows = 3;
 const double kCloudLightTopKm = 12.0, kCloudLightRangeKm = 280.0;
 const int kCloudLightMuS = 33;   // sun cosines -0.32 .. 1 for the irradiance
@@ -434,12 +499,12 @@ V3 lookupMuS(const std::vector<V3>& t, double muS)
     return t[i] * (1.0 - (f - i)) + t[i + 1] * (f - i);
 }
 
-void buildCloudLight(const SkyParams& p, const CpuTables& c, double refHeightM, const V3& toSun,
-                     const V3& sunTop, std::vector<V3>& out)
+void buildCloudLight(const SkyParams& p, const CpuTables& c, const V3& toSun, const V3& sunTop,
+                     std::vector<V3>& out)
 {
     const int w = kCloudLightLayers * kCloudLightTile, h = kCloudLightRows * kCloudLightTile;
     out.assign(w * h, v3(0, 0, 0));
-    const double rg = kGroundRadius + std::max(refHeightM, 1.0) / 1000.0;
+    const double rg = kGroundRadius + std::max(p.groundKm, 0.001);
     std::vector<V3> groundSky(kCloudLightMuS), layerSky(kCloudLightMuS);
     for (int i = 0; i < kCloudLightMuS; ++i)
         groundSky[i] = skyIrradiance(p, c, rg, cloudLightMuS(i));
@@ -467,7 +532,9 @@ void buildCloudLight(const SkyParams& p, const CpuTables& c, double refHeightM, 
     }
 }
 
-// ---- inputs and the fit ----
+double luminance(const V3& c) { return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z; }
+
+// ---- inputs ----
 
 struct Inputs
 {
@@ -488,23 +555,119 @@ bool sameInputs(const Inputs& a, const Inputs& b)
         && std::memcmp(a.fog, b.fog, sizeof(a.fog)) == 0;
 }
 
+// ---- the builds (worker thread) ----
+
+// A build: on a change of the weather or the authored light every table; on the camera's move
+// to another height band only its sky view, from the live tables.
+struct Job
+{
+    // In.
+    bool weather;
+    SkyParams air, ref;
+    V3 toSun;              // world, unit
+    V3 sunGround;          // the authored sun (the surfaces' at the reference air)
+    double bandKm;         // the camera's sky view: its height above sea level
+    V3 sunTop;             // band jobs: the live one
+    CpuTables tables;      // band jobs: a copy of the live ones
+    Inputs inputs;         // weather jobs: the authored light it was built for
+    double seaOffset;      // weather jobs: m, world y 0's height above sea level
+    // Out.
+    V3 sunFactor;          // weather jobs: the surfaces' sun over the authored
+    V3 zenith, horizon;    // weather jobs: the sky at the ground, for the tools
+    std::vector<V3> groundSkyView, skyView, cloudLight;
+    double ms;
+};
+
+void computeJob(Job& job)
+{
+    const LARGE_INTEGER zero = {};
+    LARGE_INTEGER t0 = zero, t1 = zero, freq = zero;
+    QueryPerformanceCounter(&t0);
+    const double sinE = std::min(std::max(job.toSun.y, -1.0), 1.0);
+    const V3 sunFrame = v3(std::sqrt(std::max(0.0, 1.0 - sinE * sinE)), sinE, 0.0);
+    const double rGround = kGroundRadius + std::max(job.air.groundKm, 0.001);
+    if (job.weather)
+    {
+        // The sun above the atmosphere against the reference air; the surfaces' through this air.
+        const double muS = std::max(sinE, 0.02);
+        const V3 tRef = vmax(transmittanceMarch(job.ref, rGround, muS, 64), 0.1);
+        const V3 tAir = transmittanceMarch(job.air, rGround, muS, 64);
+        job.sunTop = job.sunGround * kPi / tRef;
+        job.sunFactor = tAir / tRef;
+        buildTransmittance(job.air, job.tables, kTransmittanceW, kTransmittanceH);
+        buildMultiScatter(job.air, job.tables, kMultiScatterSize);
+        buildCloudLight(job.air, job.tables, job.toSun, job.sunTop, job.cloudLight);
+        buildSkyView(job.air, job.tables, rGround, sunFrame, job.sunTop, kSkyViewW, kSkyViewH,
+                     job.groundSkyView);
+        const V3 sunMu = v3(std::sqrt(1.0 - muS * muS), muS, 0.0);
+        job.zenith = skyInScatter(job.air, job.tables, rGround, v3(0, 1, 0), sunMu, 40) * job.sunTop;
+        const double ce = std::cos(kPi / 180.0), se = std::sin(kPi / 180.0);
+        V3 sum = v3(0, 0, 0);
+        for (int i = 0; i < 8; ++i)
+        {
+            const double a = 2.0 * kPi * (i + 0.5) / 8;
+            sum = sum + skyInScatter(job.air, job.tables, rGround, v3(ce * std::cos(a), se, ce * std::sin(a)),
+                                     sunMu, 40);
+        }
+        job.horizon = sum * (1.0 / 8) * job.sunTop;
+    }
+    const double rBand = kGroundRadius + std::max(job.bandKm, 0.001);
+    if (job.weather && std::fabs(rBand - rGround) < 1e-6)
+        job.skyView = job.groundSkyView;
+    else
+        buildSkyView(job.air, job.tables, rBand, sunFrame, job.sunTop, kSkyViewW, kSkyViewH, job.skyView);
+    QueryPerformanceCounter(&t1);
+    QueryPerformanceFrequency(&freq);
+    job.ms = freq.QuadPart ? 1000.0 * static_cast<double>(t1.QuadPart - t0.QuadPart) / freq.QuadPart : 0.0;
+}
+
+// What a weather build is made from, to tell when it changes.
+struct WeatherKey
+{
+    AtmosphereWeather weather;
+    double seaOffset;
+    double refHeight;
+    V3 albedo;
+    float toSun[3], sun[3];
+};
+
+bool sameKey(const WeatherKey& a, const WeatherKey& b)
+{
+    return a.weather.visibility == b.weather.visibility && a.weather.aerosol == b.weather.aerosol
+        && a.weather.mixing == b.weather.mixing && a.weather.altitude == b.weather.altitude
+        && a.seaOffset == b.seaOffset && a.refHeight == b.refHeight
+        && a.albedo.x == b.albedo.x && a.albedo.y == b.albedo.y && a.albedo.z == b.albedo.z
+        && std::memcmp(a.toSun, b.toSun, sizeof(a.toSun)) == 0 && std::memcmp(a.sun, b.sun, sizeof(a.sun)) == 0;
+}
+
 struct State
 {
     bool haveInputs;
     Inputs inputs;
-    // Read once per texture or terrain.
+    // Read once per terrain.
     const void* terrainRead;
     double refHeight;        // m: the terrain's mean height
     V3 groundAlbedo;         // linear: the colormaps' mean colour
-    // The fit.
+    // Requests.
+    bool haveKey;
+    WeatherKey key;          // the last weather build requested
+    double seaOffset;        // m: altitude above sea level = world y + this
+    const char* altitudeSource;
+    double requestedBandKm;  // the last camera band requested (-1 none)
+    Job* job;                // running
+    Job* pending;            // to start when it ends
+    // Live: the last finished builds, what the textures and constants hold.
     bool fitted;
     SkyParams sky;
+    Inputs liveInputs;
+    double liveSeaOffset;
     V3 sunTop;               // irradiance above the atmosphere (pi * scene sun units)
+    V3 sunFactor;            // the surfaces' sun over the authored
     V3 zenithModel, horizonModel, horizonTarget;
-    double skyGain;          // horizon luminance: authored over the model's
-    CpuTables tables;        // full size, for the textures
-    std::vector<V3> cloudLightData;   // buildCloudLight
-    double fitMs;
+    double skyGain;          // horizon luminance: authored over the model's (not applied)
+    double bandKm;           // the bound sky view's height above sea level
+    CpuTables tables;
+    double fitMs, bandMs;
     // GPU.
     IDirect3DTexture9* trans;
     IDirect3DTexture9* ms;
@@ -515,28 +678,21 @@ struct State
     bool formatChecked;
     bool atlasVertexFetch;
     bool atlasVertexFilter;
-    bool tablesDirty;        // the fit changed: upload the transmittance and multiple scattering
-    bool skyViewDirty;       // the fit or the blend changed: rebuild and upload the sky view
-    bool cloudLightDirty;    // the fit changed: upload the cloud light
     bool effectMissing;
     bool atlasLive;          // this frame's atlas is drawn and bound to s9
     float cutRange;          // rendererViewDistanceCutRange
-    // Render milestone 12 task 7: the clouded sky from the ground (rendererAtmosphereCloudSky).
-    std::vector<float> skyViewRgb;   // the last sky view, for the sky cube
+    // The sky cube (milestone 11 task 7, milestone 12 task 7): the ground's sky view and the
+    // clouded sky from the ground.
+    std::vector<float> skyViewRgb;   // the sky view at the ground
     std::vector<float> cloudSky;     // rgba, decoded; empty: clear
     unsigned int cloudSkyW, cloudSkyH;
-    bool cubeDirty;          // the clouds changed: rebuild the sky cube from the same sky view
+    bool cubeDirty;
 };
 
 State g = {};
-float g_hazeVisibility = 8000.0f;  // renderer.hazeVisibility: m, a level ray's 2 % contrast at the reference height
-float g_hazeFalloff = 1200.0f;  // renderer.hazeFalloff: m, the haze's density falls by e over this height
-
-// 1/m at the reference height.
-float hazeDensity()
-{
-    return 3.912f / g_hazeVisibility;   // Koschmieder: ln(1 / 0.02)
-}
+std::atomic<bool> g_jobDone(false);
+AtmosphereWeather g_weather = { static_cast<float>(kRefVisibility), kRefAerosol,
+                                static_cast<float>(kRefMixing), kAltitudeAuto };
 
 IDirect3DDevice9* device()
 {
@@ -544,7 +700,7 @@ IDirect3DDevice9* device()
 }
 
 // The surfaces' sun from an authored channel: Ra_SunIrradiance in the shaders (gamma 2.2, the x2
-// overbright decoded with it).
+// overbright decoded with it), before the weather's factor.
 float surfaceSun(float authored)
 {
     return static_cast<float>(std::pow(std::max(static_cast<double>(authored), 0.0), 2.2) * kSunOverbright);
@@ -612,116 +768,197 @@ void readTerrain(const void* terrainPtr)
                             srgbToLinear(colour[2] / read / 255.0));
 }
 
-double luminance(const V3& c) { return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z; }
-
-struct FitContext
+// World y 0's height above sea level (m): from the weather's altitude (the level's ground), else
+// the far ground's bake, else 0.
+double seaOffsetFor(const AtmosphereWeather& w, double refHeight, const char*& source)
 {
-    double r;            // km: the radius the sky is seen from
-    double muS;          // the sun's cosine from the zenith
-    V3 toSun;            // local frame: y up, the sun in the x-y plane
-    V3 sunGround;        // the authored sun
-    V3 sunTop;           // from the last evaluate
-    double horizonElevation;
-    CpuTables tables;    // the transmittance per evaluation; multiple scattering per round
-};
-
-// 1. Sunlight above the atmosphere: the authored sun over the transmittance at the sun's
-// elevation, clamped to >= 0.1 per channel (low suns, night layers).
-V3 sunAbove(const SkyParams& p, const FitContext& f)
-{
-    const V3 t = transmittanceMarch(p, f.r, f.muS, 64);
-    return v3(kPi * f.sunGround.x / std::max(t.x, 0.1), kPi * f.sunGround.y / std::max(t.y, 0.1),
-              kPi * f.sunGround.z / std::max(t.z, 0.1));
-}
-
-// The zenith and the azimuth-averaged horizon, with the parameters' own
-// sunlight above the atmosphere and transmittance, and the context's multiple scattering.
-void evaluate(const SkyParams& p, FitContext& f, V3& zenith, V3& horizon)
-{
-    f.sunTop = sunAbove(p, f);
-    buildTransmittance(p, f.tables, kFitTransW, kFitTransH);
-    zenith = skyInScatter(p, f.tables, f.r, v3(0, 1, 0), f.toSun, 30) * f.sunTop;
-    const int azimuths = 8;
-    const double ce = std::cos(f.horizonElevation), se = std::sin(f.horizonElevation);
-    V3 sum = v3(0, 0, 0);
-    for (int i = 0; i < azimuths; ++i)
+    if (w.altitude > kAltitudeAuto * 0.5f)
     {
-        const double a = 2.0 * kPi * (i + 0.5) / azimuths;
-        sum = sum + skyInScatter(p, f.tables, f.r, v3(ce * std::cos(a), se, ce * std::sin(a)),
-                                 f.toSun, 30);
+        source = "weather";
+        return w.altitude - refHeight;
     }
-    horizon = sum * (1.0 / azimuths) * f.sunTop;
+    float offset = 0.0f;
+    if (geom::farGroundBakeSeaOffset(offset))
+    {
+        source = "bake";
+        return offset;
+    }
+    source = "none: world y 0 at sea level";
+    return 0.0;
 }
 
-// 2. The sky: Earth's air on every level, a clear sky (owner, 2026-11-20). The authored domes'
-// colours are mostly painted cloud and haze; fitted to them, the Rayleigh tint and density greyed
-// Kashan's sky and turned overcast Saaremaa's navy. Overcast is milestone 12's clouds. Nothing
-// else is fitted: the sky is physical under the surfaces' sun (owner, 2026-11-21).
-SkyParams earthSky(const V3& albedo)
+double cameraY()
 {
-    SkyParams p;
-    p.rayleigh = v3(kEarthRayleigh[0], kEarthRayleigh[1], kEarthRayleigh[2]);
-    p.mie = 1.0;
-    p.groundAlbedo = albedo;
-    return p;
+    return rendererGetRenderView()->getViewMatrixPtr()->m[13];
 }
 
-void fit()
+// The camera's band: its height above sea level in kSkyBandKm steps.
+double bandFor(double cameraAltitudeKm)
 {
-    const LARGE_INTEGER zero = {};
-    LARGE_INTEGER t0 = zero, t1 = zero, freq = zero;
-    QueryPerformanceCounter(&t0);
-    const Inputs& in = g.inputs;
-    const double elevation = std::asin(std::min(std::max(static_cast<double>(in.toSun[1]), -1.0), 1.0));
+    return std::max(std::floor(cameraAltitudeKm / kSkyBandKm + 0.5) * kSkyBandKm, 0.0);
+}
 
-    FitContext f;
-    f.r = kGroundRadius + std::max(g.refHeight, 1.0) / 1000.0;
-    f.muS = std::max(std::sin(elevation), 0.02);
-    f.toSun = v3(std::sqrt(1.0 - f.muS * f.muS), f.muS, 0.0);
-    f.sunGround = v3(in.sun[0], in.sun[1], in.sun[2]);
-    f.horizonElevation = 1.0 * kPi / 180.0;
-    const V3 horizonTarget = vmax(v3(srgbToLinear(in.fog[0] / 255.0), srgbToLinear(in.fog[1] / 255.0),
-                                     srgbToLinear(in.fog[2] / 255.0)), 1e-5);
+void startJob(Job* job)
+{
+    if (!job->weather)
+    {
+        // A band job: the live air and tables.
+        job->air = g.sky;
+        job->sunTop = g.sunTop;
+        job->tables = g.tables;
+    }
+    g.job = job;
+    g_jobDone = false;
+    // Detached: the job is only read back through g_jobDone, and a game closing mid-build ends it.
+    std::thread([job]() {
+        computeJob(*job);
+        g_jobDone = true;
+    }).detach();
+}
 
-    g.sky = earthSky(g.groundAlbedo);
-    buildTransmittance(g.sky, f.tables, kFitTransW, kFitTransH);
-    buildMultiScatter(g.sky, f.tables, kFitMsSize);
-    evaluate(g.sky, f, g.zenithModel, g.horizonModel);
-    g.sunTop = f.sunTop;
-    g.horizonTarget = horizonTarget;
-    // The authored horizon over the model's, for the tools: not applied.
-    g.skyGain = luminance(horizonTarget) / std::max(luminance(g.horizonModel), 1e-9);
+void request(Job* job)
+{
+    if (!g.job)
+    {
+        if (job->weather || g.fitted)
+            startJob(job);
+        else
+            delete job;
+        return;
+    }
+    if (g.pending && g.pending->weather && !job->weather)
+    {
+        g.pending->bandKm = job->bandKm;   // the weather build makes the band's sky view too
+        delete job;
+        return;
+    }
+    delete g.pending;   // superseded
+    g.pending = job;
+}
 
-    // 3. The haze: its density follows fog end each frame (hazeDensity); its light is the sky's
-    //    (RaAtmosphere.fx).
+void requestWeather(const WeatherKey& key)
+{
+    Job* const job = new Job();
+    job->weather = true;
+    const double groundKm = (key.refHeight + key.seaOffset) / 1000.0;
+    job->air = makeAir(key.weather.visibility, key.weather.aerosol, key.weather.mixing, groundKm, key.albedo);
+    job->ref = makeAir(kRefVisibility, kRefAerosol, kRefMixing, groundKm, key.albedo);
+    job->toSun = v3(key.toSun[0], key.toSun[1], key.toSun[2]);
+    job->sunGround = v3(key.sun[0], key.sun[1], key.sun[2]);
+    job->bandKm = bandFor((cameraY() + key.seaOffset) / 1000.0);
+    job->inputs = g.inputs;
+    job->seaOffset = key.seaOffset;
+    g.requestedBandKm = job->bandKm;
+    g.seaOffset = key.seaOffset;
+    request(job);
+}
 
-    // The frame's tables at full size (the sky view follows in rendererAtmosphereFrame).
-    buildTransmittance(g.sky, g.tables, kTransmittanceW, kTransmittanceH);
-    buildMultiScatter(g.sky, g.tables, kMultiScatterSize);
-    buildCloudLight(g.sky, g.tables, g.refHeight,
-                    v3(in.toSun[0], in.toSun[1], in.toSun[2]), g.sunTop, g.cloudLightData);
-    QueryPerformanceCounter(&t1);
-    QueryPerformanceFrequency(&freq);
-    g.fitMs = freq.QuadPart ? 1000.0 * static_cast<double>(t1.QuadPart - t0.QuadPart) / freq.QuadPart : 0.0;
-    g.fitted = true;
-    g.tablesDirty = true;
-    g.skyViewDirty = true;
-    g.cloudLightDirty = true;
+void requestBand(double bandKm)
+{
+    Job* const job = new Job();
+    job->weather = false;
+    job->bandKm = bandKm;
+    g.requestedBandKm = bandKm;
+    request(job);
+}
 
-    std::fprintf(stderr,
-        "[ATMOS] fit and tables %.0f ms: sun elevation %.1f deg, reference height %.1f m, fog end %.0f m\n"
-        "[ATMOS]   authored horizon / model %.2f (not applied)\n"
-        "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance)\n"
-        "[ATMOS]   zenith model %.4f %.4f %.4f\n"
-        "[ATMOS]   horizon target %.4f %.4f %.4f model %.4f %.4f %.4f\n"
-        "[ATMOS]   ground albedo %.3f %.3f %.3f\n",
-        g.fitMs, elevation * 180.0 / kPi, g.refHeight, in.fogEnd,
-        g.skyGain,
-        f.sunGround.x, f.sunGround.y, f.sunGround.z, g.sunTop.x, g.sunTop.y, g.sunTop.z,
-        g.zenithModel.x, g.zenithModel.y, g.zenithModel.z,
-        horizonTarget.x, horizonTarget.y, horizonTarget.z,
-        g.horizonModel.x, g.horizonModel.y, g.horizonModel.z,
-        g.groundAlbedo.x, g.groundAlbedo.y, g.groundAlbedo.z);
+void releaseTexture(IDirect3DTexture9*& t);
+bool uploadTable(IDirect3DTexture9*& texture, const std::vector<V3>& data, unsigned int w, unsigned int h);
+
+// A finished build made live: its tables uploaded, its constants used from this frame.
+void finishJob()
+{
+    if (!g.job || !g_jobDone)
+        return;
+    Job* const job = g.job;
+    g.job = 0;
+    bool ok = uploadTable(g.skyView, job->skyView, kSkyViewW, kSkyViewH);
+    if (job->weather)
+    {
+        ok = ok && uploadTable(g.trans, job->tables.trans, kTransmittanceW, kTransmittanceH)
+                && uploadTable(g.ms, job->tables.ms, kMultiScatterSize, kMultiScatterSize)
+                && uploadTable(g.cloudLightTexture, job->cloudLight, kCloudLightLayers * kCloudLightTile,
+                               kCloudLightRows * kCloudLightTile);
+        g.sky = job->air;
+        g.tables.tw = job->tables.tw;
+        g.tables.th = job->tables.th;
+        g.tables.msn = job->tables.msn;
+        g.tables.trans.swap(job->tables.trans);
+        g.tables.ms.swap(job->tables.ms);
+        g.sunTop = job->sunTop;
+        g.sunFactor = job->sunFactor;
+        g.zenithModel = job->zenith;
+        g.horizonModel = job->horizon;
+        g.liveInputs = job->inputs;
+        g.liveSeaOffset = job->seaOffset;
+        g.fitMs = job->ms;
+        const Inputs& in = g.liveInputs;
+        g.horizonTarget = vmax(v3(srgbToLinear(in.fog[0] / 255.0), srgbToLinear(in.fog[1] / 255.0),
+                                  srgbToLinear(in.fog[2] / 255.0)), 1e-5);
+        g.skyGain = luminance(g.horizonTarget) / std::max(luminance(g.horizonModel), 1e-9);
+        g.skyViewRgb.resize(job->groundSkyView.size() * 3);
+        for (size_t i = 0; i < job->groundSkyView.size(); ++i)
+        {
+            g.skyViewRgb[i * 3 + 0] = static_cast<float>(job->groundSkyView[i].x);
+            g.skyViewRgb[i * 3 + 1] = static_cast<float>(job->groundSkyView[i].y);
+            g.skyViewRgb[i * 3 + 2] = static_cast<float>(job->groundSkyView[i].z);
+        }
+        g.cubeDirty = true;
+        const AerosolType& type = kAerosols[std::min(std::max(g_weather.aerosol, 0), kAerosolCount - 1)];
+        std::fprintf(stderr,
+            "[ATMOS] built in %.0f ms: ground %.0f m above sea level (%s), sun elevation %.1f deg, fog end %.0f m\n"
+            "[ATMOS]   aerosol %s, extinction %.4f %.4f %.4f /km, mixing layer to %.0f m\n"
+            "[ATMOS]   sun ground %.3f %.3f %.3f -> above %.3f %.3f %.3f (irradiance); surfaces' factor %.3f %.3f %.3f\n"
+            "[ATMOS]   zenith %.4f %.4f %.4f, horizon %.4f %.4f %.4f; ground albedo %.3f %.3f %.3f\n",
+            job->ms, g.sky.groundKm * 1000.0, g.altitudeSource,
+            std::asin(std::min(std::max(static_cast<double>(in.toSun[1]), -1.0), 1.0)) * 180.0 / kPi, in.fogEnd,
+            type.name, g.sky.aerosolExtinction.x, g.sky.aerosolExtinction.y, g.sky.aerosolExtinction.z,
+            g.sky.mixingTopKm * 1000.0,
+            job->sunGround.x, job->sunGround.y, job->sunGround.z, g.sunTop.x, g.sunTop.y, g.sunTop.z,
+            g.sunFactor.x, g.sunFactor.y, g.sunFactor.z,
+            g.zenithModel.x, g.zenithModel.y, g.zenithModel.z, g.horizonModel.x, g.horizonModel.y,
+            g.horizonModel.z, g.sky.groundAlbedo.x, g.sky.groundAlbedo.y, g.sky.groundAlbedo.z);
+    }
+    else
+        g.bandMs = job->ms;
+    g.bandKm = job->bandKm;
+    g.fitted = g.fitted || (job->weather && ok);
+    if (!ok)
+        std::fprintf(stderr, "[ATMOS] tables not uploaded\n");
+    delete job;
+    if (g.pending)
+    {
+        Job* const next = g.pending;
+        g.pending = 0;
+        startJob(next);
+    }
+}
+
+// The sky cube and its irradiance from the ground's sky view, with the clouds.
+void updateSkyCube()
+{
+    if (!g.cubeDirty || g.skyViewRgb.empty())
+        return;
+    g.cubeDirty = false;
+    SkyCubeSource src;
+    src.skyView = &g.skyViewRgb[0];
+    src.skyViewW = kSkyViewW;
+    src.skyViewH = kSkyViewH;
+    src.groundRadiusKm = kGroundRadius;
+    src.altitudeKm = std::max(g.sky.groundKm, 0.001);
+    for (int k = 0; k < 3; ++k)
+    {
+        src.toSun[k] = g.liveInputs.toSun[k];
+        src.sun[k] = static_cast<float>(g.liveInputs.sun[k] * at(g.sunFactor, k));
+        src.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
+    }
+    // The air's extinction at the ground (1/m, 550 nm), for the ground seen below the horizon.
+    const Media m = media(g.sky, g.sky.groundKm);
+    src.groundExtinction = m.extinction.y / 1000.0;
+    src.clouds = g.cloudSky.empty() ? 0 : &g.cloudSky[0];
+    src.cloudsW = g.cloudSkyW;
+    src.cloudsH = g.cloudSkyH;
+    rendererSkyCubeBuild(src);
 }
 
 // ---- GPU ----
@@ -816,59 +1053,6 @@ bool uploadTable(IDirect3DTexture9*& texture, const std::vector<V3>& data, unsig
     return true;
 }
 
-void updateTables()
-{
-    if (g.tablesDirty)
-    {
-        g.tablesDirty = !(uploadTable(g.trans, g.tables.trans, kTransmittanceW, kTransmittanceH)
-                          && uploadTable(g.ms, g.tables.ms, kMultiScatterSize, kMultiScatterSize));
-    }
-    if (g.cloudLightDirty)
-        g.cloudLightDirty = !uploadTable(g.cloudLightTexture, g.cloudLightData,
-                                         kCloudLightLayers * kCloudLightTile, kCloudLightRows * kCloudLightTile);
-    if (g.skyViewDirty)
-    {
-        const double elevation = std::asin(std::min(std::max(static_cast<double>(g.inputs.toSun[1]), -1.0), 1.0));
-        const double muS = std::sin(elevation);
-        std::vector<V3> sky;
-        buildSkyView(g.sky, g.tables, kGroundRadius + std::max(g.refHeight, 1.0) / 1000.0,
-                     v3(std::sqrt(std::max(0.0, 1.0 - muS * muS)), muS, 0.0), g.sunTop,
-                     kSkyViewW, kSkyViewH, sky);
-        g.skyViewDirty = !uploadTable(g.skyView, sky, kSkyViewW, kSkyViewH);
-        // The sky cube and irradiance (task 7) from this sky view.
-        g.skyViewRgb.resize(sky.size() * 3);
-        for (size_t i = 0; i < sky.size(); ++i)
-        {
-            g.skyViewRgb[i * 3 + 0] = static_cast<float>(sky[i].x);
-            g.skyViewRgb[i * 3 + 1] = static_cast<float>(sky[i].y);
-            g.skyViewRgb[i * 3 + 2] = static_cast<float>(sky[i].z);
-        }
-        g.cubeDirty = true;
-    }
-    if (g.cubeDirty && !g.skyViewRgb.empty())
-    {
-        g.cubeDirty = false;
-        SkyCubeSource src;
-        src.skyView = &g.skyViewRgb[0];
-        src.skyViewW = kSkyViewW;
-        src.skyViewH = kSkyViewH;
-        src.groundRadiusKm = kGroundRadius;
-        src.altitudeKm = std::max(g.refHeight, 1.0) / 1000.0;
-        for (int k = 0; k < 3; ++k)
-        {
-            src.toSun[k] = g.inputs.toSun[k];
-            src.sun[k] = g.inputs.sun[k];
-            src.groundAlbedo[k] = static_cast<float>(at(g.sky.groundAlbedo, k));
-        }
-        src.hazeDensity = hazeDensity();
-        // Milestone 12 task 7: with the clouds as the ground sees them.
-        src.clouds = g.cloudSky.empty() ? 0 : &g.cloudSky[0];
-        src.cloudsW = g.cloudSkyW;
-        src.cloudsH = g.cloudSkyH;
-        rendererSkyCubeBuild(src);
-    }
-}
-
 bool ensureAtlas()
 {
     if (!g.formatChecked)
@@ -886,26 +1070,25 @@ bool ensureAtlas()
     return true;
 }
 
-// RaAtmosphere's 16 float4s (layout in RaAtmosphere.fx).
+// RaAtmosphere's 16 float4s (contract 26; layout in RaAtmosphere.fx).
 void fillConstants(float c[16][4])
 {
     std::memset(c, 0, sizeof(float) * 64);
-    const Inputs& in = g.inputs;
+    const Inputs& in = g.liveInputs;
     const SkyParams& p = g.sky;
-    const float mieS = static_cast<float>(p.mie * kMieScattering);
-    const float mieE = static_cast<float>(p.mie * (kMieScattering + kMieAbsorption));
     const float rows[11][4] = {
         { float(p.rayleigh.x), float(p.rayleigh.y), float(p.rayleigh.z), float(kGroundRadius) },
-        { mieS, mieS, mieS, float(kTopRadius) },
-        { mieE, mieE, mieE, float(kMieG) },
-        { float(kOzone[0]), float(kOzone[1]), float(kOzone[2]), float(std::max(g.refHeight, 1.0) / 1000.0) },
-        { float(g.sunTop.x), float(g.sunTop.y), float(g.sunTop.z),
-          1.0f },
+        { float(p.aerosolScattering.x), float(p.aerosolScattering.y), float(p.aerosolScattering.z),
+          float(kTopRadius) },
+        { float(p.aerosolExtinction.x), float(p.aerosolExtinction.y), float(p.aerosolExtinction.z), float(p.g) },
+        { float(kOzone[0]), float(kOzone[1]), float(kOzone[2]), float(std::max(g.bandKm, 0.001)) },
+        { float(g.sunTop.x), float(g.sunTop.y), float(g.sunTop.z), 0.0f },
         { in.toSun[0], in.toSun[1], in.toSun[2], 0.0f },
         { float(p.groundAlbedo.x), float(p.groundAlbedo.y), float(p.groundAlbedo.z), 0.0f },
-        { hazeDensity(), 1.0f / g_hazeFalloff, float(g.refHeight), in.fogEnd },
+        { float(p.groundKm), float(p.mixingTopKm), float(1.0 / kAerosolHeight), float(g.liveSeaOffset) },
         { 0.0f, 0.0f, 0.0f, 1.0f },   // the air's light under the clouds, below
-        { in.sun[0], in.sun[1], in.sun[2], 0.0f },
+        { float(in.sun[0] * g.sunFactor.x), float(in.sun[1] * g.sunFactor.y), float(in.sun[2] * g.sunFactor.z),
+          g.inputs.fogEnd },
         { in.sky[0], in.sky[1], in.sky[2], 0.0f },
     };
     std::memcpy(c, rows, sizeof(rows));
@@ -972,7 +1155,8 @@ void endPasses(PassTarget& s)
         s.savedDepth->Release();
 }
 
-bool drawPass(void* effect, const std::string& technique, IDirect3DTexture9* target, float c[16][4])
+bool drawPass(void* effect, const std::string& technique, IDirect3DTexture9* target, float c[16][4],
+              const float cloudShadow[2][4])
 {
     ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(effectD3dxHandle(effect));
     D3DSURFACE_DESC desc;
@@ -986,6 +1170,14 @@ bool drawPass(void* effect, const std::string& technique, IDirect3DTexture9* tar
         d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(c), 16);
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaSkyViewTable"))
         d3dx->SetTexture(h, g.skyView);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaTransmittanceTable"))
+        d3dx->SetTexture(h, g.trans);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaMultiScatterTable"))
+        d3dx->SetTexture(h, g.ms);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShadow"))
+        d3dx->SetVectorArray(h, reinterpret_cast<const D3DXVECTOR4*>(cloudShadow), kCloudShadowVec4s);
+    if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaCloudShadowMap"))
+        d3dx->SetTexture(h, cloudShadow[0][3] > 0.0f ? rendererCloudShadowMap() : 0);
 
     IDirect3DSurface9* surface = 0;
     target->GetSurfaceLevel(0, &surface);
@@ -1019,14 +1211,14 @@ void bindAtlas(IDirect3DTexture9* atlas)
 
 } // anonymous namespace
 
-float& rendererHazeVisibility()
+AtmosphereWeather& rendererAtmosphereWeather()
 {
-    return g_hazeVisibility;
+    return g_weather;
 }
 
-float& rendererHazeFalloff()
+const char* rendererAtmosphereAerosolName(int type)
 {
-    return g_hazeFalloff;
+    return kAerosols[std::min(std::max(type, 0), kAerosolCount - 1)].name;
 }
 
 float rendererViewDistanceCutRange()
@@ -1044,28 +1236,55 @@ void rendererAtmosphereFrame()
     g.atlasLive = false;
     if (!device())
         return;
-    struct BindSkyCube   // task 7: at every return below, while the model draws the sky
+    struct BindSkyCube   // milestone 11 task 7: at every return below, while the model draws the sky
     {
         ~BindSkyCube() { rendererSkyCubeFrame(rendererAtmosphereDrawsSky()); }
     } bindSkyCube;
+    finishJob();
     Inputs in;
     if (!gatherInputs(in))
         return;
-    // Under water the fog constants are the water's: keep the last fit.
+    // Under water the fog constants are the water's: keep the last inputs.
     if ((!g.haveInputs || !sameInputs(in, g.inputs)) && !cameraIsUnderWater())
     {
         g.inputs = in;
         g.haveInputs = true;
         if (in.terrain != g.terrainRead || !g.fitted)
             readTerrain(in.terrain);
-        fit();
+    }
+    if (!g.haveInputs)
+        return;
+    WeatherKey key;
+    std::memset(&key, 0, sizeof(key));
+    key.weather = g_weather;
+    key.refHeight = g.refHeight;
+    key.seaOffset = seaOffsetFor(g_weather, g.refHeight, g.altitudeSource);
+    key.albedo = g.groundAlbedo;
+    std::memcpy(key.toSun, g.inputs.toSun, sizeof(key.toSun));
+    std::memcpy(key.sun, g.inputs.sun, sizeof(key.sun));
+    if (!g.haveKey || !sameKey(key, g.key))
+    {
+        g.key = key;
+        g.haveKey = true;
+        requestWeather(key);
+    }
+    else
+    {
+        // The camera's sky view: its band, moved once the camera is kSkyBandSlackKm from it.
+        const double altitude = (cameraY() + g.seaOffset) / 1000.0;
+        if (std::fabs(altitude - g.requestedBandKm) > kSkyBandSlackKm && g.fitted)
+            requestBand(bandFor(altitude));
     }
     if (!g.fitted)
         return;
-    updateTables();
-    if (!rendererAtmosphereDrawsSky() || !ensureAtlas())   // the atlas's light is the sky view's
-        return;
+    updateSkyCube();
+}
 
+void rendererAtmosphereDrawAtlas(const float cloudShadow[2][4])
+{
+    g.atlasLive = false;
+    if (!device() || !rendererAtmosphereDrawsSky() || !ensureAtlas())
+        return;
     void* const effect = shaderManagerGetEffect(g_shaderManager, "Shaders/RaAtmosphere");
     if (!effect || !effectD3dxHandle(effect))
     {
@@ -1085,16 +1304,16 @@ void rendererAtmosphereFrame()
     bindAtlas(0);   // never sampled while it is the target
     beginPasses(saved);
     static const std::string kAp("RaAtmosPerspective");
-    g.atlasLive = drawPass(effect, kAp, g.atlas, c);
+    g.atlasLive = drawPass(effect, kAp, g.atlas, c, cloudShadow);
     endPasses(saved);
     effectRelease(static_cast<Effect*>(effect));
     if (g.atlasLive)
         bindAtlas(g.atlas);
 }
 
-void rendererAtmosphereAerialConstants(float c[8])
+void rendererAtmosphereAerialConstants(float c[4])
 {
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 4; ++i)
         c[i] = 0.0f;
     g.cutRange = 0.0f;
     // The atlas's tiles span the world view's viewport; Ra_GetAerial takes it at the target's origin.
@@ -1107,12 +1326,15 @@ void rendererAtmosphereAerialConstants(float c[8])
     c[2] = 1.0f / g.inputs.fogEnd;
     c[3] = 2.0f;   // 2: Ra_ViewDistanceClip cuts at fog end
     g.cutRange = g.inputs.fogEnd;
-    // RaAerialHaze: the atlas march's density (RaAtmosphere.fx, its exponent capped at 30) at the
-    // camera's height, for the closed-form haze past fog end.
-    const double cameraY = rendererGetRenderView()->getViewMatrixPtr()->m[13];
-    const double falloffs = std::min(-(cameraY - g.refHeight) / g_hazeFalloff, 30.0);
-    c[4] = static_cast<float>(hazeDensity() * std::exp(falloffs));
-    c[5] = 1.0f / g_hazeFalloff;
+}
+
+void rendererAtmosphereSunFactor(float c[4])
+{
+    const bool live = g.fitted;
+    c[0] = live ? static_cast<float>(g.sunFactor.x) : 0.0f;
+    c[1] = live ? static_cast<float>(g.sunFactor.y) : 0.0f;
+    c[2] = live ? static_cast<float>(g.sunFactor.z) : 0.0f;
+    c[3] = live ? 1.0f : 0.0f;
 }
 
 void rendererAtmosphereCloudSky(const float* rgba, unsigned int w, unsigned int h)
@@ -1152,15 +1374,25 @@ AtmosphereInfo rendererAtmosphereInfo()
     i.cloudLight = g.cloudLightTexture;
     i.perspective = g.atlas;
     i.fitMs = static_cast<float>(g.fitMs);
+    i.bandMs = static_cast<float>(g.bandMs);
     i.refHeight = static_cast<float>(g.refHeight);
     i.fogEnd = g.inputs.fogEnd;
     i.skyGain = static_cast<float>(g.skyGain);
-    i.hazeDensity = hazeDensity();
-    i.hazeFalloff = g_hazeFalloff;
+    i.weather = g_weather;
+    i.aerosolName = rendererAtmosphereAerosolName(g_weather.aerosol);
+    i.groundAltitude = static_cast<float>(g.sky.groundKm * 1000.0);
+    i.mixingTop = static_cast<float>(g.sky.mixingTopKm * 1000.0);
+    i.seaOffset = static_cast<float>(g.liveSeaOffset);
+    i.altitudeSource = g.altitudeSource ? g.altitudeSource : "";
+    i.skyViewAltitude = static_cast<float>(g.bandKm * 1000.0);
+    i.aerosolG = static_cast<float>(g.sky.g);
     for (int k = 0; k < 3; ++k)
     {
-        i.toSun[k] = g.inputs.toSun[k];
+        i.toSun[k] = g.liveInputs.toSun[k];
         i.sunTop[k] = static_cast<float>(at(g.sunTop, k));
+        i.sunFactor[k] = static_cast<float>(at(g.sunFactor, k));
+        i.aerosolExtinction[k] = static_cast<float>(at(g.sky.aerosolExtinction, k));
+        i.aerosolScattering[k] = static_cast<float>(at(g.sky.aerosolScattering, k));
         i.zenithModel[k] = static_cast<float>(at(g.zenithModel, k));
         i.horizonTarget[k] = static_cast<float>(at(g.horizonTarget, k));
         i.horizonModel[k] = static_cast<float>(at(g.horizonModel, k));
@@ -1179,13 +1411,13 @@ void rendererAtmosphereConstants(float c[16][4])
 
 bool rendererAtmosphereDrawsSky()
 {
-    return g.fitted && g.skyView && !g.skyViewDirty;
+    return g.fitted && g.skyView;
 }
 
 // The model's sky (contract 7, SkyDome.fx technique RaSky): one full-screen pass at the far plane
 // on the sky dome's effect, in the bound target and viewport, testing the scene depth without
 // writing it. Returns false, drawing nothing, while the model does not draw the sky
-// (no fit yet).
+// (no build yet).
 bool rendererAtmosphereDrawSky(void* effect, bool underWater)
 {
     if (!rendererAtmosphereDrawsSky())
@@ -1206,12 +1438,12 @@ bool rendererAtmosphereDrawSky(void* effect, bool underWater)
     if (const D3DXHANDLE h = d3dx->GetParameterBySemantic(0, "RaSkyViewTable"))
         d3dx->SetTexture(h, g.skyView);
 
-    // The sun disc: the authored sun (the sunlight at the ground, which the fit keeps) spread over
-    // the disc's solid angle, so the disc's irradiance is the sun's; its luminance capped so the
-    // MSAA resolve of its edge stays within a pixel (bloom, milestone 13, spreads it).
+    // The sun disc: the surfaces' sun (the authored sun through this weather's air) spread over the
+    // disc's solid angle, so the disc's irradiance is the sun's; its luminance capped so the MSAA
+    // resolve of its edge stays within a pixel (bloom, milestone 13, spreads it).
     const double radius = kSunAngularRadius * kPi / 180.0;
     const double solidAngle = 2.0 * kPi * (1.0 - std::cos(radius));
-    V3 disc = v3(g.inputs.sun[0], g.inputs.sun[1], g.inputs.sun[2]) * (kPi / solidAngle);
+    V3 disc = v3(g.liveInputs.sun[0], g.liveInputs.sun[1], g.liveInputs.sun[2]) * g.sunFactor * (kPi / solidAngle);
     const double lum = luminance(disc);
     if (lum > kSunDiscMaxLuminance)
         disc = disc * (kSunDiscMaxLuminance / lum);

@@ -174,6 +174,8 @@ struct State
     float              bakeRatio;
     float              bakePivot;
     bool               bakeSea;   // baked with the real sea on the level's (coastal levels)
+    bool               bakeHasSeaOffset;   // version 2: the level's height above sea level
+    float              bakeSeaOffset;      // m: real elevation = level height + this
 };
 
 State g;
@@ -483,8 +485,9 @@ bool composeHeights()
 // Reads the level's bake, if it has one. Layout (little-endian, 64-byte header): "EONFAR1\0",
 // u32 version (1), u32 n (nodes a side), f32 origin (world x and z of node 0), f32 cell (m),
 // f32 height scale and bias (height = bias + scale * value), f32 the scaled variant's ratio and
-// pivot, f32 the sea level it was baked for, 5 reserved words; then n x n int16 rows of z, x
-// across a row.
+// pivot, f32 the sea level it was baked for, then (version 2) f32 the sea offset (the real
+// elevation of level height y is y + offset; render milestone 18's altitude), 4 reserved words
+// (version 1: 5); then n x n int16 rows of z, x across a row.
 bool loadBake()
 {
     std::string mod, level;
@@ -507,11 +510,12 @@ bool loadBake()
     {
         char         magic[8];
         unsigned int version, n;
-        float        origin, cell, scale, bias, ratio, pivot, sea;
-        unsigned int reserved[5];
+        float        origin, cell, scale, bias, ratio, pivot, sea, seaOffset;
+        unsigned int reserved[4];
     } h;
     static_assert(sizeof(Header) == 64, "the bake's header is 64 bytes");
-    bool ok = std::fread(&h, sizeof(h), 1, in) == 1 && std::memcmp(h.magic, "EONFAR1", 8) == 0 && h.version == 1
+    bool ok = std::fread(&h, sizeof(h), 1, in) == 1 && std::memcmp(h.magic, "EONFAR1", 8) == 0
+              && (h.version == 1 || h.version == 2)
               && h.n >= 2 && h.n <= 8192 && h.cell > 0.0f;
     std::vector<short> raw;
     if (ok)
@@ -522,7 +526,7 @@ bool loadBake()
     std::fclose(in);
     if (!ok)
     {
-        ::renddx9abi::logf("[farground] %s: not a bake (version 1)", path.c_str());
+        ::renddx9abi::logf("[farground] %s: not a bake (version 1 or 2)", path.c_str());
         return false;
     }
     g.bake.resize(raw.size());
@@ -534,6 +538,8 @@ bool loadBake()
     g.bakeRatio = h.ratio;
     g.bakePivot = h.pivot;
     g.bakeSea = h.sea > -1.0e8f;
+    g.bakeHasSeaOffset = h.version >= 2;
+    g.bakeSeaOffset = h.version >= 2 ? h.seaOffset : 0.0f;
     ::renddx9abi::logf("[farground] bake %s: %ux%u of %.1f m from %.0f m; scaled variant x%.3f about %.1f m; "
                        "%s",
                        path.c_str(), h.n, h.n, h.cell, h.origin, h.ratio, h.pivot,
@@ -1362,6 +1368,12 @@ void farGroundDrawDepth(Terrain* terrain)
 {
     static const std::string name("RaFarGroundDepth");
     drawWith(terrain, name);
+}
+
+bool farGroundBakeSeaOffset(float& offset)
+{
+    offset = g.bakeSeaOffset;
+    return g.baked && g.bakeHasSeaOffset;
 }
 
 void farGroundRelease()

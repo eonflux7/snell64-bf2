@@ -892,7 +892,8 @@ int __stdcall smSetVertexShaderConstantF(StateManager* self, unsigned int reg, c
 // PE 0x10026A80.
 // [RENDER] The registers kEngineRegisterBegin..kEngineRegisterEnd hold the frame's sun cascade
 // constants (RASM, stateManagerSetSunCascadeConstants), the entry's LOD dither (RaLodDither,
-// renderEntryBindLodDither), the aerial-perspective lookup (RaAerial and RaAerialHaze, stateManagerSetAerial)
+// renderEntryBindLodDither), the aerial-perspective lookup (RaAerial, stateManagerSetAerial), the
+// surfaces' sun factor (RaSunFactor, stateManagerSetSunFactor)
 // the sky's irradiance (RaSkySH, stateManagerSetSkySh), water's reflection switch (RaWaterSsr, stateManagerSetWaterSsr),
 // water's foam (RaWaterFoam, stateManagerSetWaterFoam)
 // and the cloud shadow lookup (RaCloudShadow, stateManagerSetCloudShadow). The effects that read them declare them at those registers, and D3DX
@@ -1628,12 +1629,18 @@ void stateManagerSetLodDither(float a, float b)
     constFileWrite(self->psConst, self->psConstDirty, kLodDitherRegister, value, 1u);
 }
 
-// [RENDER] RaAerial and RaAerialHaze into their reserved pixel registers, past the filter above.
+// [RENDER] RaAerial into its reserved pixel register, past the filter above.
 void stateManagerSetAerial(const float* value)
 {
     StateManager* const self = sm();
     constFileWrite(self->psConst, self->psConstDirty, kAerialRegister, value, 1u);
-    constFileWrite(self->psConst, self->psConstDirty, kAerialHazeRegister, value + 4, 1u);
+}
+
+// [RENDER] RaSunFactor into its reserved pixel register, past the filter above.
+void stateManagerSetSunFactor(const float* value)
+{
+    StateManager* const self = sm();
+    constFileWrite(self->psConst, self->psConstDirty, kSunFactorRegister, value, 1u);
 }
 
 // [RENDER] RaSkySH into its reserved pixel registers, past the filter above.

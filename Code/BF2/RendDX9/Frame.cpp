@@ -185,7 +185,8 @@ IDirect3DTexture9* g_linearDepthTexture = 0;
 IDirect3DSurface9* g_linearDepthSamples = 0;   // multisampled, or null when the scene is not
 const DWORD kLinearDepthSampler = 15;
 float g_sunCascadeConstants[kSunCascadeVec4s * 4] = {};   // RASM for this frame's world view
-float g_aerialConstants[8] = {};    // RaAerial, RaAerialHaze for this frame's world view
+float g_aerialConstants[4] = {};    // RaAerial for this frame's world view
+float g_sunFactor[4] = {};          // RaSunFactor for this frame, every pass
 const float kNoSunCascades[kSunCascadeVec4s * 4] = {};
 float g_cloudShadowConstants[kCloudShadowVec4s * 4] = {};   // RaCloudShadow for this frame's world view
 bool g_sunCascadesLive = false;     // RASM is published: the world pass or its transparents draw
@@ -221,6 +222,7 @@ void publishSunCascadeConstants(bool zero)
     stateManagerSetSunCascadeConstants(zero ? kNoSunCascades : g_sunCascadeConstants);
     stateManagerSetAerial(zero ? kNoSunCascades : g_aerialConstants);
     stateManagerSetCloudShadow(zero ? kNoSunCascades : g_cloudShadowConstants);
+    stateManagerSetSunFactor(g_sunFactor);   // the sun is the same in every pass
 }
 
 // The linear depth targets for the scene depth `depth`: same size, same sample count.
@@ -291,6 +293,8 @@ void rendererBindParticleLighting(void* effect)
     static const std::string kCloudShadow("RaCloudShadow");
     effectGetShaderParameterBorrowedTyped(fx, kCloudShadow)->setValue(
         g_sunCascadesLive ? g_cloudShadowConstants : kNoSunCascades, kCloudShadowVec4s);
+    static const std::string kSunFactor("RaSunFactorVertex");
+    effectGetShaderParameterBorrowedTyped(fx, kSunFactor)->setValue(g_sunFactor, 0);
     static const std::string kSkySh("RaSkyShVertex");
     effectGetShaderParameterBorrowedTyped(fx, kSkySh)->setValue(rendererSkyShFrame(), kSkyShVec4s);
     // The atlas as a texture parameter: D3DX binds it to the vertex sampler it assigned. Set on
@@ -349,7 +353,10 @@ void rendererDepthPrepass(bool drawTerrain, float time)
     rendererCloudsFrame();       // [RENDER] milestone 12: the clouds' volumes, over frames
     rendererWaterFrame();        // [RENDER] milestone 16: the waves
     rendererCloudShadowConstants(reinterpret_cast<float(*)[4]>(g_cloudShadowConstants));
+    rendererAtmosphereDrawAtlas(reinterpret_cast<const float(*)[4]>(g_cloudShadowConstants));
     rendererAtmosphereAerialConstants(g_aerialConstants);
+    rendererAtmosphereSunFactor(g_sunFactor);
+    stateManagerSetSunFactor(g_sunFactor);
     {
         IRenderView* const view = rendererGetRenderView();
         const float* const c = view->getViewMatrixPtr()->m;

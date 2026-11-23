@@ -410,7 +410,20 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
         return false;
     }
     std::fprintf(f, "# tools.atmosphere (render milestone 11): the fit and its tables as drawn\n");
-    std::fprintf(f, "[fit] %.0f ms; reference height %.1f m; fog end %.0f m\n", a.fitMs, a.refHeight, a.fogEnd);
+    std::fprintf(f, "# tables built on a worker; the live build may lag the settings by a frame or two\n");
+    std::fprintf(f, "[fit] %.0f ms (camera sky view %.0f ms); reference height %.1f m; fog end %.0f m\n", a.fitMs,
+                 a.bandMs, a.refHeight, a.fogEnd);
+    std::fprintf(f, "[weather] visibility %.0f m, aerosol %d (%s), mixing %.0f m, altitude %s\n",
+                 a.weather.visibility, a.weather.aerosol, a.aerosolName, a.weather.mixing,
+                 a.weather.altitude < -1000.0f ? "auto" : "set");
+    std::fprintf(f, "[air] ground %.1f m above sea level (%s); world y 0 at %.1f m; mixing layer to %.1f m\n",
+                 a.groundAltitude, a.altitudeSource, a.seaOffset, a.mixingTop);
+    std::fprintf(f, "[air] aerosol extinction %.5f %.5f %.5f /km, scattering %.5f %.5f %.5f /km, g %.2f\n",
+                 a.aerosolExtinction[0], a.aerosolExtinction[1], a.aerosolExtinction[2], a.aerosolScattering[0],
+                 a.aerosolScattering[1], a.aerosolScattering[2], a.aerosolG);
+    std::fprintf(f, "[air] camera sky view at %.0f m above sea level\n", a.skyViewAltitude);
+    std::fprintf(f, "[sun] surfaces' factor %.4f %.4f %.4f (this air over the reference's)\n", a.sunFactor[0],
+                 a.sunFactor[1], a.sunFactor[2]);
     std::fprintf(f, "[fit] authored horizon / model %.4f (not applied)\n", a.skyGain);
     std::fprintf(f, "[fit] sun above the atmosphere %.4f %.4f %.4f (irradiance)\n", a.sunTop[0], a.sunTop[1], a.sunTop[2]);
     std::fprintf(f, "[fit] zenith model %.4f %.4f %.4f\n",
@@ -419,7 +432,6 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
                  a.horizonTarget[0], a.horizonTarget[1], a.horizonTarget[2], a.horizonModel[0],
                  a.horizonModel[1], a.horizonModel[2]);
     std::fprintf(f, "[fit] ground albedo %.4f %.4f %.4f\n", a.groundAlbedo[0], a.groundAlbedo[1], a.groundAlbedo[2]);
-    std::fprintf(f, "[fit] haze density %.4e /m\n", a.hazeDensity);
     std::fprintf(f, "[atlas] format %s, vertex fetch %s, filtered %s\n",
                  a.atlasFloat32 ? "A32B32G32R32F" : "A16B16G16R16F", a.atlasVertexFetch ? "yes" : "no",
                  a.atlasVertexFilter ? "yes" : "no");
@@ -467,27 +479,30 @@ bool toolsWriteAtmosphere(const char* base, const char*& message)
         }
         else
         {
-            const std::string alphaPng = root + "-perspective-transmittance.png";
-            float alphaScale = 0.0f;
-            if (writePng(t, alphaPng, true, alphaScale))
-                std::fprintf(f, "[perspective] png %s (transmittance x %.4g)\n", alphaPng.c_str(), alphaScale);
-            // Per slice, at four tiles: the screen centre, the top centre, and the middle row's left
-            // and right edges. rgb in-scatter | transmittance.
+            // Contract 27: in-scatter slices (rgb over the sky light toward the tile's ray), then
+            // transmittance slices (rgb), then the sky block. Per slice, at four tiles: the screen
+            // centre, the top centre, and the middle row's left and right edges.
             static const unsigned int kTiles[4][2] = { { 16, 16 }, { 16, 2 }, { 0, 16 }, { 31, 16 } };
             static const char* const kTileNames[4] = { "centre", "top", "left", "right" };
-            std::fprintf(f, "[perspective] per slice (distance = fog end * ((slice + 1) / 32)^2): "
-                            "in-scatter rgb | transmittance\n");
-            for (unsigned int s = 0; s < 32; ++s)
+            std::fprintf(f, "[perspective] per slice (distance = 40 km * ((slice + 1) / 32)^3): "
+                            "in-scatter / sky light rgb | transmittance rgb\n");
+            for (unsigned int s = 0; s < 32 && t.w >= 65 * 32; ++s)
             {
-                const float d = a.fogEnd * ((s + 1) / 32.0f) * ((s + 1) / 32.0f);
-                std::fprintf(f, "[perspective]  slice %2u %6.1f m:", s, d);
+                const float u = (s + 1) / 32.0f;
+                std::fprintf(f, "[perspective]  slice %2u %8.1f m:", s, 40000.0f * u * u * u);
                 for (int k = 0; k < 4; ++k)
                 {
                     std::fprintf(f, "  %s", kTileNames[k]);
-                    writeRgb(f, t.at(s * 32 + kTiles[k][0], kTiles[k][1]), true);
+                    writeRgb(f, t.at(s * 32 + kTiles[k][0], kTiles[k][1]), false);
+                    std::fprintf(f, " |");
+                    writeRgb(f, t.at((32 + s) * 32 + kTiles[k][0], kTiles[k][1]), false);
                 }
                 std::fprintf(f, "\n");
             }
+            std::fprintf(f, "[perspective] sky block, column 16, rows 0 (horizon), 4, 8, 16, 31 (zenith):");
+            for (unsigned int r = 0; r < 32 && t.w >= 65 * 32; r = r == 16 ? 31 : r == 0 ? 4 : r * 2)
+                writeRgb(f, t.at(64 * 32 + 16, r), false);
+            std::fprintf(f, "\n");
         }
     }
     // Render milestone 12: the clouds' light (Atmosphere.cpp, buildCloudLight).

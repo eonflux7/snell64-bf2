@@ -346,8 +346,8 @@ struct Radiance
         if (d.y >= 0.0f)
             return horizonOrSky;
         // Seen from kGroundViewHeight: the ground at height / sin(depression), hazed over that path
-        // by the haze's density at the reference height; full haze is the horizon's radiance.
-        const double depth = src->hazeDensity * kGroundViewHeight / std::max(static_cast<double>(-d.y), 1e-4);
+        // by the air's extinction at the ground; full haze is the horizon's radiance.
+        const double depth = src->groundExtinction * kGroundViewHeight / std::max(static_cast<double>(-d.y), 1e-4);
         const float clear = static_cast<float>(std::exp(-depth));
         return ground * clear + horizonOrSky * (1.0f - clear);
     }

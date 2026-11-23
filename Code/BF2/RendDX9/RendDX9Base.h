@@ -840,7 +840,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/lanes/render.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 22
+#define RA_CONTRACT_VERSION 27
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 
@@ -850,14 +850,24 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // rows of RASM. Returns false when nothing was rendered (nothing is then covered: baked sunlight).
 bool rendererSunShadowsRender(float time, float* constants /* kSunCascadeVec4s float4s */);
 void rendererSunShadowsRelease();
-// [RENDER] Atmosphere (Atmosphere.cpp, render milestone 11). Run from the depth prepass after the
-// sun cascades: fits the sky and haze to the level's authored light when it changes (at load),
-// draws the transmittance, multiple-scattering and sky-view tables after a fit or a device reset
-// and the aerial-perspective atlas every frame, through Shaders/RaAtmosphere (contract 6).
-// The haze (renderer.hazeVisibility, renderer.hazeFalloff): the visibility (m) at the reference
-// height and the height (m) over which its density falls by e.
-float& rendererHazeVisibility();
-float& rendererHazeFalloff();
+// [RENDER] Atmosphere (Atmosphere.cpp, render milestones 11 and 18). One atmosphere whose aerosol
+// the weather sets; its tables are built on a worker thread when the weather or the level's light
+// changes (rendererAtmosphereFrame, run from the depth prepass after the sun cascades), and the
+// aerial-perspective atlas is drawn every frame through Shaders/RaAtmosphere (contracts 6, 27).
+// The weather (renderer.weather*): visibility (m: a level ray at the level's ground keeps 2 %
+// contrast there), aerosol type (0 continental, 1 maritime, 2 dust, 3 smoke), mixing height (m
+// over the ground), the level's ground above sea level (m; kAltitudeAuto: its far-ground bake's,
+// else world y 0 at sea level).
+struct AtmosphereWeather
+{
+    float visibility;
+    int aerosol;
+    float mixing;
+    float altitude;
+};
+const float kAltitudeAuto = -100000.0f;
+AtmosphereWeather& rendererAtmosphereWeather();
+const char* rendererAtmosphereAerosolName(int type);
 // How far the land past the view distance reaches (m): terrain and its surrounding ring are culled
 // against the world view's frustum taken out to here.
 float rendererSceneryDistance();
@@ -866,15 +876,19 @@ float rendererSceneryDistance();
 // their size on screen (renderer.contributionCull).
 float rendererViewDistanceCutRange();
 void rendererAtmosphereFrame();
+// Draws this frame's aerial-perspective atlas (contract 27), the air's sunlight shadowed by the
+// clouds (RaCloudShadow's constants, rendererCloudShadowConstants), and binds it to s9.
+void rendererAtmosphereDrawAtlas(const float cloudShadow[2][4]);
 void rendererAtmosphereRelease();
 // The aerial-perspective atlas is bound to the reserved sampler s9 once drawn. RaAerial (pixel
 // register kAerialRegister, contract 8) for the world pass: 1 / the viewport's width and height,
-// 1 / fog end, 2 (the view-distance cut, contract 9; 1 before it); then RaAerialHaze (kAerialHazeRegister):
-// the haze's density at the camera's height, 1 / its height falloff, 0, 0. All zero (the shaders'
-// retail fog) while no atlas was drawn this frame, under water, or with a viewport off the target's
-// origin.
+// 1 / fog end, 2 (the view-distance cut, contract 9; 1 before it). All zero (the shaders' retail
+// fog) while no atlas was drawn this frame, under water, or with a viewport off the target's origin.
 const unsigned int kAerialSampler = 9;
-void rendererAtmosphereAerialConstants(float c[8]);
+void rendererAtmosphereAerialConstants(float c[4]);
+// RaSunFactor (pixel register kSunFactorRegister, contract 26): the surfaces' sun over the
+// authored one, rgb, w 1 once built (zero before: the shaders take 1). Published in every pass.
+void rendererAtmosphereSunFactor(float c[4]);
 // Whether the model draws the sky (the fit done and the sky-view table built). The sky is one
 // full-screen pass (rendererAtmosphereDrawSky); before the first fit nothing draws there.
 bool rendererAtmosphereDrawsSky();
@@ -891,9 +905,17 @@ struct AtmosphereInfo
     IDirect3DTexture9* multiScatter;    // 32 x 32
     IDirect3DTexture9* skyView;         // 192 x 108
     IDirect3DTexture9* cloudLight;      // 64 x 24: 8 altitudes x (sun, sky, ground) tiles of 8 x 8
-    IDirect3DTexture9* perspective;     // 1024 x 32: 32 slices of 32 x 32 tiles
-    float fitMs, refHeight, fogEnd, hazeDensity;
-    float hazeFalloff;                  // m: the haze's density falls by e over this height
+    IDirect3DTexture9* perspective;     // 2080 x 32: 65 blocks of 32 x 32 tiles (contract 27)
+    float fitMs, bandMs, refHeight, fogEnd;
+    AtmosphereWeather weather;          // as set (the live build may lag a frame or two)
+    const char* aerosolName;
+    const char* altitudeSource;
+    float groundAltitude, mixingTop;    // m above sea level, as built
+    float seaOffset;                    // m: world y 0's height above sea level
+    float skyViewAltitude;              // m above sea level: the camera's band
+    float aerosolExtinction[3], aerosolScattering[3];   // 1/km in the mixing layer
+    float aerosolG;
+    float sunFactor[3];                 // the surfaces' sun over the authored
     float toSun[3];                     // world, unit
     float skyGain;                      // the authored horizon over the model's (not applied)
     float sunTop[3];
@@ -1023,7 +1045,7 @@ struct SkyCubeSource
     float toSun[3];                // world, unit
     float sun[3];                  // the surfaces' sun (irradiance / pi)
     float groundAlbedo[3];         // linear
-    double hazeDensity;            // 1/m at the reference height
+    double groundExtinction;       // 1/m: the air's at the ground (550 nm)
     // [RENDER] Milestone 12 task 7: the clouds from the ground (rendererAtmosphereCloudSky's
     // panorama, RaCloudPanorama.fxh's mapping), composited over the sky; null for a clear sky.
     const float* clouds;           // rgba per texel: rgb the light added, a the transmittance
@@ -1076,10 +1098,9 @@ const unsigned int kLodDitherRegister = 222;
 // [RENDER] Milestone 11 aerial perspective: RaAerial, one float4 in pixel register c223 (the last
 // ps_3_0 register), engine-owned like RASM and published with it (rendererAtmosphereAerialConstants).
 const unsigned int kAerialRegister = 223;
-// [RENDER] Milestone 11 view distance (contract 9): RaAerialHaze in c199, the haze's density at the
-// camera's height and 1 / its height falloff, for Ra_GetAerial's haze past fog end. Published with
-// RaAerial.
-const unsigned int kAerialHazeRegister = 199;
+// [RENDER] Milestone 18 (contract 26): RaSunFactor in c199, the surfaces' sun through this
+// weather's air over the authored sun (rendererAtmosphereSunFactor), in every pass.
+const unsigned int kSunFactorRegister = 199;
 // [RENDER] Milestone 11 sky cube (contract 10): RaSkySH, the sky's irradiance as 7 float4s in
 // c192..c198 (SkyCube.cpp), written each frame by rendererSkyCubeFrame.
 const unsigned int kSkyShRegister = 192;
@@ -1091,7 +1112,8 @@ const unsigned int kCloudShadowRegister = 189;
 const unsigned int kEngineRegisterBegin = 188;
 const unsigned int kEngineRegisterEnd = 224;   // c189..c223 dropped from effect writes
 void stateManagerSetLodDither(float a, float b);
-void stateManagerSetAerial(const float* value /* RaAerial, RaAerialHaze */);
+void stateManagerSetAerial(const float* value /* RaAerial */);
+void stateManagerSetSunFactor(const float* value /* RaSunFactor */);
 void stateManagerSetSkySh(const float* value /* RaSkySH, kSkyShVec4s float4s */);
 void stateManagerSetWaterSsr(const float* value /* RaWaterSsr, one float4 */);
 void stateManagerSetCloudShadow(const float* value /* RaCloudShadow, kCloudShadowVec4s float4s */);

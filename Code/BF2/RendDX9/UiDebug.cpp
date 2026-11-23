@@ -702,29 +702,33 @@ void drawAtmosphereTab()
         ImGui::EndChild();
         return;
     }
-    drawVariableTable("##haze", "", "haze", false);   // full names: no prefix
+    drawVariableTable("##weather", "", "weather", false);   // full names: no prefix
     const AtmosphereInfo a = rendererAtmosphereInfo();
     if (!a.fitted)
         ImGui::TextDisabled("No fit yet: it runs once a level with a sky dome and fog has drawn.");
     else
     {
-        ImGui::Text("fit %.0f ms, reference height %.1f m, fog end %.0f m", a.fitMs, a.refHeight,
-                    a.fogEnd);
+        ImGui::Text("built %.0f ms (sky view %.0f ms), reference height %.1f m, fog end %.0f m", a.fitMs,
+                    a.bandMs, a.refHeight, a.fogEnd);
+        ImGui::Text("ground %.0f m above sea level (%s), mixing layer to %.0f m, sky view at %.0f m",
+                    a.groundAltitude, a.altitudeSource, a.mixingTop, a.skyViewAltitude);
+        ImGui::Text("aerosol %s, g %.2f", a.aerosolName, a.aerosolG);
+        atmosphereRgb("extinction /km", a.aerosolExtinction);
+        atmosphereRgb("surfaces' sun x", a.sunFactor);
         ImGui::Text("%-18s %.2f (not applied)", "authored / model", a.skyGain);
         atmosphereRgb("sun above", a.sunTop);
         atmosphereRgb("zenith model", a.zenithModel);
         atmosphereRgb("horizon target", a.horizonTarget);
         atmosphereRgb("horizon model", a.horizonModel);
         atmosphereRgb("ground albedo", a.groundAlbedo);
-        ImGui::Text("%-18s %.3e /m", "haze density", a.hazeDensity);
         ImGui::Text("atlas %s: vertex fetch %s, filtered %s", a.atlasFloat32 ? "A32B32G32R32F" : "A16B16G16R16F",
                     a.atlasVertexFetch ? "yes" : "no", a.atlasVertexFilter ? "yes" : "no");
         ImGui::Separator();
         atmosphereTable("transmittance (x: view angle, y: altitude)", a.transmittance, 512.0f, 128.0f);
         atmosphereTable("multiple scattering (x: sun angle, y: altitude)", a.multiScatter, 128.0f, 128.0f);
         atmosphereTable("sky view (x: azimuth from the sun, y: zenith to nadir)", a.skyView, 384.0f, 216.0f);
-        atmosphereTable("aerial perspective (32 slices near to far; rgb in-scatter)", a.perspective,
-                        1024.0f, 32.0f);
+        atmosphereTable("aerial perspective (in-scatter, transmittance slices near to far; sky block)",
+                        a.perspective, 1040.0f, 16.0f);
     }
     ImGui::EndChild();
 }

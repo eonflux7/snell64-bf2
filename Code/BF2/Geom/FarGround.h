@@ -64,6 +64,9 @@ bool farGroundActive();
 // Whether the far ground's heights fall under the sea anywhere in the world xz box (the box is
 // clamped to the heights' extent, past which they hold their edge). False without a sea.
 bool farGroundSeaIn(float x0, float z0, float x1, float z1);
+// The level's height above sea level from its bake (version 2): real elevation = level height +
+// `offset` (m). False without a bake or with a version 1 bake. Render milestone 18's altitude.
+bool farGroundBakeSeaOffset(float& offset);
 void farGroundRelease();
 
 } // namespace geom

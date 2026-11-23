@@ -1386,16 +1386,28 @@ void setSoftParticleDistance(float value)
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(softParticleDistance, float, true, getSoftParticleDistance(),
                                  setSoftParticleDistance, 0.1f, 20.0f, kRendererConsoleTag)
 
-// [RENDER] The haze's density and shape (render milestone 11).
+// [RENDER] The weather's air (render milestone 18): the atmosphere rebuilds its tables on a worker
+// when one changes.
 float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
-float getHazeVisibility() { return rendererHazeVisibility(); }
-void setHazeVisibility(float value) { rendererHazeVisibility() = clampf(value, 500.0f, 200000.0f); }
-BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeVisibility, float, true, getHazeVisibility(), setHazeVisibility, 500.0f, 200000.0f,
+float getWeatherVisibility() { return rendererAtmosphereWeather().visibility; }
+void setWeatherVisibility(float value) { rendererAtmosphereWeather().visibility = clampf(value, 1000.0f, 200000.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(weatherVisibility, float, true, getWeatherVisibility(), setWeatherVisibility,
+                                 1000.0f, 200000.0f, kRendererConsoleTag)
+int getWeatherAerosol() { return rendererAtmosphereWeather().aerosol; }
+void setWeatherAerosol(int value) { rendererAtmosphereWeather().aerosol = value < 0 ? 0 : value > 3 ? 3 : value; }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(weatherAerosol, int, true, getWeatherAerosol(), setWeatherAerosol, 0, 3,
                                  kRendererConsoleTag)
-float getHazeFalloff() { return rendererHazeFalloff(); }
-void setHazeFalloff(float value) { rendererHazeFalloff() = clampf(value, 25.0f, 5000.0f); }
-BF2_CONSOLE_PROPERTY_FN_RANGED_T(hazeFalloff, float, true, getHazeFalloff(), setHazeFalloff, 25.0f, 5000.0f,
+float getWeatherMixing() { return rendererAtmosphereWeather().mixing; }
+void setWeatherMixing(float value) { rendererAtmosphereWeather().mixing = clampf(value, 100.0f, 5000.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(weatherMixing, float, true, getWeatherMixing(), setWeatherMixing, 100.0f, 5000.0f,
                                  kRendererConsoleTag)
+float getWeatherAltitude() { return rendererAtmosphereWeather().altitude; }
+void setWeatherAltitude(float value)
+{
+    rendererAtmosphereWeather().altitude = value < -1000.0f ? kAltitudeAuto : clampf(value, -500.0f, 6000.0f);
+}
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(weatherAltitude, float, true, getWeatherAltitude(), setWeatherAltitude,
+                                 kAltitudeAuto, 6000.0f, kRendererConsoleTag)
 
 // [RENDER] The sky clouds (render milestone 12): drawn or not, how many, and which climate's.
 bool getClouds() { return rendererCloudsEnabled(); }
@@ -1539,8 +1551,10 @@ const char* rendererVariableHelp(const char* name)
         { "sunShadowNormalOffset", "Receiver offset along its normal, in cascade texels (against acne)" },
         { "sunShadowDepthBias", "Receiver offset toward the sun, in cascade texels (against acne)" },
         { "contributionCull", "Static meshes whose bounding sphere spans fewer pixels than this are not drawn, faded out just above it; 0 off" },
-        { "hazeVisibility", "Haze: metres at which a level ray at the reference height keeps 2 % contrast (lower: hazier)" },
-        { "hazeFalloff", "Haze: height in metres over which its density falls by e (lower: valleys hazier than ridges)" },
+        { "weatherVisibility", "Weather: metres at which a level ray at the level's ground keeps 2 % contrast (lower: hazier)" },
+        { "weatherAerosol", "Weather: the haze's kind, 0 continental (grey), 1 maritime (white), 2 dust (yellow-brown), 3 smoke" },
+        { "weatherMixing", "Weather: how high over the ground the haze reaches, metres; it thins above" },
+        { "weatherAltitude", "Weather: the level's ground above sea level, metres; below -1000 from its far-ground bake, else sea level" },
         { "clouds", "Sky clouds; off, the clear sky (and no cloud volumes are built)" },
         { "cloudCoverage", "Sky clouds: how much of the sky they cover, 0 clear to 1 overcast" },
         { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
