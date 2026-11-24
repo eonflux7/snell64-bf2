@@ -41,11 +41,12 @@
 //       (under kShoreLandHeight above the sea, the swash's reach), and the open-water map's fetch
 //   b a its direction of travel, unit; zero where no train runs (higher land, water the march missed)
 //
-// Beside that (columns 2 kSide to 3 kSide - 1) the flow map (task 7, contract 45; flowBake):
+// Beside that (columns 2 kSide to 3 kSide - 1) the flow map (task 7, contracts 45-46; flowBake):
 //
 //   r g the rivers' depth-averaged velocity, world x and z, over their mean speed (which the
 //       table's constants texel carries, m/s); zero in still water
-//   b a zero
+//   b   the foam the rivers carry, its coverage (0-1), made where their standing waves break
+//   a   the distance downstream along the flow, metres modulo kFlowWrap: the standing waves' phase
 //
 // Two rows below the map hold a table over log2 fetch, kTable entries from kTableFirst (one per
 // octave), written by Water.cpp whenever the spectrum changes (rendererWaterOpenTable): row 0 each
@@ -114,6 +115,12 @@ const double kFlowTolerance = 1e-5;  // and the residual it stops at, against th
 const double kFlowRefWidth = 30.0;   // m: a river this wide
 const double kFlowRefSpeed = 1.0;    // m/s: flows this fast on average
 const double kFlowWidthPower = 0.2;  // and the mean speed goes as the width to this
+const double kFlowWrap = 16.0;       // m: the stored distance downstream's period (16-bit floats)
+const double kFlowBedRelief = 0.1;   // m: the bed's relief that forces the standing waves [chosen: a cobble bed's]
+const double kFlowStokes = 0.44;     // the steepest wave, a k (Stokes: H / lambda 0.142)
+const double kFlowBreakDepth = 0.39; // and the highest, a / h (the breaking index 0.78, the shore's)
+const double kFlowFoamRise = 1.0;    // s: breaking whitens its water in about this [chosen: a wave's period]
+const double kFlowFoamLife = 8.0;    // s: the foam's life on the water [chosen: fresh water's, seconds]
 
 struct Bake
 {
@@ -128,9 +135,12 @@ struct Bake
     std::vector<float> texels;       // kSide^2 x 4, the map's r g b a
     std::vector<float> shore;        // kSide^2 x 4, the shore map's r g b a
     double flowTo;                   // the rivers' bearing (radians, 0 toward +z, pi/2 toward +x); negative none
+    double flowSpeedSet;             // renderer.waterFlowSpeed, m/s; 0 from the width
     std::vector<float> flow;         // kSide^2 x 4, the flow map's r g b a
     int flowInlets, flowOutlets, flowIterations;
     double flowArea, flowWidth, flowSpeed, flowResidual;   // m^2, m, m/s from the width; the solve's
+    double flowFroude[5];            // of the flowing water, Froude number under 0.3, 0.6, 0.8, 1, past it
+    double flowBreaking, flowFoam;   // of it, where the standing waves break; the mean foam carried
     double deepShare;                // of the water, deep enough to start the train
     double waterShare, meanLog2Fetch, ms;
     int openEdges;                   // edge runs taken as open sea
@@ -142,7 +152,7 @@ struct OpenState
     bool haveKey;
     float keySea, keyHalf;
     bool keyAutomatic;
-    double keyDirX, keyDirZ, keyFetch, keyWavelength, keyFlowTo;
+    double keyDirX, keyDirZ, keyFetch, keyWavelength, keyFlowTo, keyFlowSpeed;
     float keySpreading[kWaterOpenRadials];
     bool haveDir;                    // a bake's direction (automatic or given) for rendererWaterOpenWind
     std::thread thread;
@@ -610,6 +620,37 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
         }
 }
 
+// The standing waves of a current U (m/s) over depth h (m): waves that hold still against the
+// flow, their phase speed U, so U^2 = (g / k) tanh(k h): with x = k h, tanh(x) / x = Fr^2 (Fr =
+// U / sqrt(g h), the Froude number), which has a root only under critical flow (Fr < 1); Newton's
+// steps from the deep-water root x = 1 / Fr^2 (the function is concave, so they fall monotonically
+// to it). The bed's relief forces them: the surface over a bed feature of height b stands
+// b Fr^2 / (1 - Fr^2) (shallow-water linear theory), the bed's effect at the waves' wavenumber
+// weakened by 1 / cosh(k h) through the depth. They hold at most kFlowStokes / k and kFlowBreakDepth
+// h; past that they break. Returns the forced amplitude over the most the waves hold (above 1
+// breaking; infinite past critical flow, a hydraulic jump's whitewater); k and the drawn amplitude
+// out. The water shader mirrors it (rashaderwaterbase.fx, Ra_WaterStanding).
+double standingWaves(double U, double h, double& k, double& a)
+{
+    k = a = 0.0;
+    const double fr2 = U * U / (kGravity * h);
+    if (fr2 <= 1e-6)
+        return 0.0;
+    if (fr2 >= 1.0)
+        return 1e30;
+    double x = 1.0 / fr2;
+    for (int n = 0; n < 8; ++n)
+    {
+        const double c = std::cosh(x);
+        x -= (std::tanh(x) - fr2 * x) / (1.0 / (c * c) - fr2);
+    }
+    k = x / h;
+    const double forced = x < 80.0 ? kFlowBedRelief * fr2 / (1.0 - fr2) / std::cosh(x) : 0.0;
+    const double most = std::min(kFlowStokes / k, kFlowBreakDepth * h);
+    a = std::min(forced, most);
+    return forced / most;
+}
+
 // The rivers' current (task 7): a steady depth-averaged flow over the water from the map's edges.
 // The water is one flat plane, so neither the surface's slope nor the discharge is in the data: the
 // flow's shape comes from the channel, its sense from the level (renderer.waterFlowTo, the bearing
@@ -631,12 +672,23 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
 // surface's slope, which the flat water lacks, would set it]; renderer.waterFlowSpeed overrides it.
 // The width is the flowing water's area over half its banks' length (Cauchy-Crofton: pi / 4 of the
 // texel faces between water and land). The map stores the velocity over that mean speed.
+//
+// Contract 46: the standing waves (standingWaves) and the foam the rivers carry. Where the waves
+// break the foam is made at a rate (1 - 1 / B) / kFlowFoamRise toward full cover (B the forced
+// amplitude over the most the waves hold); it rides the surface's velocity and fades over
+// kFlowFoamLife: steady, u . grad(C) = P (1 - C) - C / life, solved upwind in one pass over the
+// texels in falling potential (each texel's inflow comes from higher phi), as finite volumes, so
+// where the surface's flow converges (slack water by the banks) the foam gathers, up to full cover.
+// The distance downstream s solves u . grad(s) = |u| the same way (zero at the entries): its level
+// sets cross the flow, the standing waves' crests.
 void flowBake(Bake& b, const std::vector<unsigned char>& water, const std::vector<unsigned char> open[4], double cell)
 {
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     b.flow.assign(count * 4, 0.0f);
     b.flowInlets = b.flowOutlets = b.flowIterations = 0;
     b.flowArea = b.flowWidth = b.flowSpeed = b.flowResidual = 0.0;
+    b.flowBreaking = b.flowFoam = 0.0;
+    std::fill(b.flowFroude, b.flowFroude + 5, 0.0);
     if (b.flowTo < 0.0)
         return;
     const double toX = std::sin(b.flowTo), toZ = std::cos(b.flowTo);
@@ -829,6 +881,59 @@ void flowBake(Bake& b, const std::vector<unsigned char>& water, const std::vecto
         b.flow[cells[u] * 4 + 0] = static_cast<float>(vx[u] / mean);
         b.flow[cells[u] * 4 + 1] = static_cast<float>(vz[u] / mean);
     }
+
+    // The standing waves' breaking and the foam carried, the distance downstream (contract 46): in
+    // m/s at the speed the shader draws
+    const double speed = b.flowSpeedSet > 0.0 ? b.flowSpeedSet : b.flowSpeed;
+    const double scale = speed / mean;   // the conductances' fluxes to unit discharges, m^2/s
+    std::vector<std::size_t> order(n);
+    for (std::size_t u = 0; u < n; ++u)
+        order[u] = u;
+    std::sort(order.begin(), order.end(), [&phi](std::size_t l, std::size_t r) { return phi[l] > phi[r]; });
+    std::vector<double> foam(n, 0.0), along(n, 0.0);
+    static const double kFroudeTop[4] = { 0.3, 0.6, 0.8, 1.0 };
+    for (std::size_t o = 0; o < n; ++o)
+    {
+        const std::size_t u = order[o];
+        const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
+        const double U = scale * std::sqrt(vx[u] * vx[u] + vz[u] * vz[u]);
+        double k, a;
+        const double B = standingWaves(U, h, k, a);
+        const double fr = U / std::sqrt(kGravity * h);
+        int band = 0;
+        while (band < 4 && fr >= kFroudeTop[band])
+            ++band;
+        b.flowFroude[band] += 1.0;
+        const double P = B > 1.0 ? (1.0 - 1.0 / B) / kFlowFoamRise : 0.0;
+        b.flowBreaking += B > 1.0 ? 1.0 : 0.0;
+        // The faces' surface velocities times C (or s) in, and out
+        double in = 0.0, inFoam = 0.0, inAlong = 0.0, out = 0.0;
+        for (int f = 0; f < 4; ++f)
+        {
+            const double other = across[u * 4 + f] >= 0 ? phi[across[u * 4 + f]] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
+            const double flux = scale * c[u * 4 + f] * (other - phi[u]);
+            const int m = across[u * 4 + f];
+            const double hf = m >= 0 ? 0.5 * (h + std::max(static_cast<double>(b.sea - b.heights[cells[m]]), kFlowMinDepth)) : h;
+            const double v = flux / hf;
+            if (v > 0.0)
+            {
+                in += v;
+                inFoam += m >= 0 ? v * foam[m] : 0.0;   // the entries bring none
+                inAlong += m >= 0 ? v * along[m] : 0.0;
+            }
+            else
+                out -= v;
+        }
+        foam[u] = std::min((inFoam + cell * P) / std::max(out + cell * (P + 1.0 / kFlowFoamLife), 1e-12), 1.0);
+        along[u] = in > 1e-9 ? (inAlong + cell * U) / in : 0.0;
+        b.flowFoam += foam[u];
+        b.flow[cells[u] * 4 + 2] = static_cast<float>(foam[u]);
+        b.flow[cells[u] * 4 + 3] = static_cast<float>(std::fmod(along[u], kFlowWrap));
+    }
+    for (int band = 0; band < 5; ++band)
+        b.flowFroude[band] /= static_cast<double>(n);
+    b.flowBreaking /= static_cast<double>(n);
+    b.flowFoam /= static_cast<double>(n);
 }
 
 void runBake(Bake& b)
@@ -1067,9 +1172,10 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                      std::exp2(s.info.meanLog2Fetch), 100.0 * s.info.deepShare, s.info.ms);
         if (s.info.flowTo >= 0.0)
             std::fprintf(stderr, "[WATER] flow toward %.0f degrees: %d entries, %d exits, %.0f m^2 flowing, %.1f m wide, "
-                         "%.2f m/s from the width; %d iterations, residual %.1e\n", s.info.flowTo * 180.0 / kPi,
+                         "%.2f m/s from the width; %d iterations, residual %.1e; standing waves break over %.2f %%, "
+                         "foam carried %.2f %%\n", s.info.flowTo * 180.0 / kPi,
                          s.info.flowInlets, s.info.flowOutlets, s.info.flowArea, s.info.flowWidth, s.info.flowSpeed,
-                         s.info.flowIterations, s.info.flowResidual);
+                         s.info.flowIterations, s.info.flowResidual, 100.0 * s.info.flowBreaking, 100.0 * s.info.flowFoam);
     }
 
     // A new level, a new sea (the spreading and the level's fetch come with each spectrum) or the
@@ -1081,7 +1187,9 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         const float half = 0.5f * static_cast<float>(t->m_patchCount * t->m_patchSize) * t->m_primaryWorldScale.x;
         const float sea = cluster->getSeaWaterLevel();
         const double flowTo = g_flowTo < 0.0f ? -1.0 : g_flowTo * kPi / 180.0;
-        const bool changed = !s.haveKey || sea != s.keySea || flowTo != s.keyFlowTo || half != s.keyHalf || automatic != s.keyAutomatic
+        const double flowSpeed = g_flowSpeed;
+        const bool changed = !s.haveKey || sea != s.keySea || flowTo != s.keyFlowTo || (flowTo >= 0.0 && flowSpeed != s.keyFlowSpeed)
+                          || half != s.keyHalf || automatic != s.keyAutomatic
                           || (!automatic && (windX != s.keyDirX || windZ != s.keyDirZ)) || s.fetch != s.keyFetch || s.wavelength != s.keyWavelength
                           || std::memcmp(s.spreading, s.keySpreading, sizeof(s.spreading)) != 0;
         if (changed && half > 0.0f)
@@ -1096,6 +1204,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
             s.keyFetch = s.fetch;
             s.keyWavelength = s.wavelength;
             s.keyFlowTo = flowTo;
+            s.keyFlowSpeed = flowSpeed;
             std::memcpy(s.keySpreading, s.spreading, sizeof(s.spreading));
             Bake& b = s.bake;
             b.sea = sea;
@@ -1107,6 +1216,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
             b.wavelength = s.wavelength;
             b.omega = s.omega;
             b.flowTo = flowTo;
+            b.flowSpeedSet = flowSpeed;
             std::memcpy(b.spreading, s.spreading, sizeof(s.spreading));
             b.heights.resize(static_cast<std::size_t>(kSide) * kSide);
             const float cell = 2.0f * half / kSide, inside = half - 0.01f;
@@ -1128,7 +1238,8 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
     }
 
     // The mean speed rides with the table's constants
-    const float speed = s.info.flowTo < 0.0 ? 0.0f : g_flowSpeed > 0.0f ? g_flowSpeed : static_cast<float>(s.info.flowSpeed);
+    const float speed = s.info.flowTo < 0.0 ? 0.0f
+                      : static_cast<float>(s.info.flowSpeedSet > 0.0 ? s.info.flowSpeedSet : s.info.flowSpeed);
     if (speed != s.flowSpeed)
         s.tableNew = s.haveTable;
     if ((s.mapNew || s.tableNew) && !s.map.empty() && ensureTexture(s))
@@ -1200,7 +1311,8 @@ void rendererWaterOpenUnbind()
 // [TOOLS] tools.water (render milestone 23): the open-water map's state and table to base.txt, its
 // signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black), its fetch
 // to base-fetch.png (log2, 16 m black to 64 km white), the shore map's crests to base-shore.png and
-// the rivers' speed to base-flow.png (white twice the mean).
+// the rivers' speed to base-flow.png (white twice the mean) and the foam they carry to
+// base-flowfoam.png (white full cover).
 bool toolsWriteWater(const char* base, const char*& message)
 {
     OpenState& s = st();
@@ -1256,6 +1368,12 @@ bool toolsWriteWater(const char* base, const char*& message)
                      s.info.flowArea, s.info.flowWidth, s.flowSpeed,
                      rendererWaterFlowSpeed() > 0.0f ? "renderer.waterFlowSpeed" : "from the width",
                      s.info.flowIterations, s.info.flowResidual);
+    if (s.info.flowTo >= 0.0)
+        std::fprintf(f, "[standing] of the flowing water, Froude number under 0.3 %.1f %%, 0.3-0.6 %.1f %%, 0.6-0.8 %.1f %%, "
+                        "0.8-1 %.1f %%, past 1 %.1f %%; the standing waves break over %.2f %%, the foam carried covers "
+                        "%.2f %% on average\n", 100.0 * s.info.flowFroude[0], 100.0 * s.info.flowFroude[1],
+                     100.0 * s.info.flowFroude[2], 100.0 * s.info.flowFroude[3], 100.0 * s.info.flowFroude[4],
+                     100.0 * s.info.flowBreaking, 100.0 * s.info.flowFoam);
     else
         std::fprintf(f, "[flow] still water (renderer.waterFlowTo -1)\n");
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
@@ -1287,7 +1405,7 @@ bool toolsWriteWater(const char* base, const char*& message)
 
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
-    for (int image = 0; image < 4 && ok && !(image == 2 && s.shore.empty()) && !(image == 3 && s.flow.empty()); ++image)
+    for (int image = 0; image < 5 && ok && !(image == 2 && s.shore.empty()) && !(image >= 3 && s.flow.empty()); ++image)
     {
         IDirect3DSurface9* surface = 0;
         ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
@@ -1299,11 +1417,12 @@ bool toolsWriteWater(const char* base, const char*& message)
                 {
                     const std::size_t c = (static_cast<std::size_t>(j) * kSide + i) * 4;
                     const float* const p = &s.map[c];
-                    const float* const q = image == 2 ? &s.shore[c] : image == 3 ? &s.flow[c] : p;
+                    const float* const q = image == 2 ? &s.shore[c] : image >= 3 ? &s.flow[c] : p;
                     // The shore map: the crests (cos of the phase) where the train runs, dimmer the
                     // deeper (to half the peak wavelength), land black
-                    // The flow map: the speed over twice the mean, white
-                    const float t = image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
+                    // The flow map: the speed over twice the mean, white; the foam it carries
+                    const float t = image == 4 ? q[2]
+                                  : image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
                                   : image == 0 ? 0.5f + p[0] / 512.0f
                                   : image == 1 ? (p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f)
                                   : (q[0] > 0.0f && (q[2] != 0.0f || q[3] != 0.0f))
@@ -1315,7 +1434,7 @@ bool toolsWriteWater(const char* base, const char*& message)
                         + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
                 }
             surface->UnlockRect();
-            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : "-flow.png")).c_str(),
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : image == 3 ? "-flow.png" : "-flowfoam.png")).c_str(),
                                         D3DXIFF_PNG, surface, 0, 0) >= 0;
         }
         else
