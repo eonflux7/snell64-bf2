@@ -625,8 +625,9 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
 // U / sqrt(g h), the Froude number), which has a root only under critical flow (Fr < 1); Newton's
 // steps from the deep-water root x = 1 / Fr^2 (the function is concave, so they fall monotonically
 // to it). The bed's relief forces them: the surface over a bed feature of height b stands
-// b Fr^2 / (1 - Fr^2) (shallow-water linear theory), the bed's effect at the waves' wavenumber
-// weakened by 1 / cosh(k h) through the depth. They hold at most kFlowStokes / k and kFlowBreakDepth
+// b Fr^2 / (1 - Fr^2) (shallow-water linear theory, for b small against h: at the waterline, where
+// it is not, b h / (b + h)), the bed's effect at the waves' wavenumber weakened by 1 / cosh(k h)
+// through the depth. They hold at most kFlowStokes / k and kFlowBreakDepth
 // h; past that they break. Returns the forced amplitude over the most the waves hold (above 1
 // breaking; infinite past critical flow, a hydraulic jump's whitewater); k and the drawn amplitude
 // out. The water shader mirrors it (rashaderwaterbase.fx, Ra_WaterStanding).
@@ -645,7 +646,8 @@ double standingWaves(double U, double h, double& k, double& a)
         x -= (std::tanh(x) - fr2 * x) / (1.0 / (c * c) - fr2);
     }
     k = x / h;
-    const double forced = x < 80.0 ? kFlowBedRelief * fr2 / (1.0 - fr2) / std::cosh(x) : 0.0;
+    const double relief = kFlowBedRelief * h / (kFlowBedRelief + h);
+    const double forced = x < 80.0 ? relief * fr2 / (1.0 - fr2) / std::cosh(x) : 0.0;
     const double most = std::min(kFlowStokes / k, kFlowBreakDepth * h);
     a = std::min(forced, most);
     return forced / most;
