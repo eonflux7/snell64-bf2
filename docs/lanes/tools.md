@@ -455,7 +455,7 @@ layers as last drawn. Fails before they are drawn.
 `tools.water [NAME]` (render milestone 23, task 2; `tools(water)`) writes
 `<outputDir>/<map>/water/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
 `RendDX9/WaterOpen.cpp`: the open-water map as last baked and its fetch table. Fails before the
-first bake.
+first bake; while a re-bake runs (a level load, a changed sea or current) it writes the last one.
 
 - `[map]`: its size, the texel, the sea level, the wind it was baked for, whether it is bound.
   `[bake]`: the water's share of the map, the edge runs taken as open sea, the bake's time.
@@ -463,6 +463,11 @@ first bake.
 - `[table e]`: per entry its fetch, the three cascades' amplitudes, the height and whitecap ratios.
 - `<NAME>-distance.png`: the signed distance (grey the shore, white 256 m out, black 256 m inland);
   `<NAME>-fetch.png`: log2 of the fetch over water (16 m black, 64 km white), land black. North up.
+- With a current (task 7): `[flow]` the solve, `[obstacles]` the water texels rocks and piers stand
+  in, `[standing]` the flowing water's share by Froude number, where its standing waves break and
+  the mean foam carried. `<NAME>-flow.png` the speed (white twice the mean), `<NAME>-flowfoam.png`
+  the foam carried, `<NAME>-obstacles.png` the share of each texel's section closed (grey open
+  water, white closed), `<NAME>-potential.png` the flow's potential in bands 1/64 apart.
 
 ## Clouds
 

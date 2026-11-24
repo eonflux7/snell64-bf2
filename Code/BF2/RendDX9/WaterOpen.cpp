@@ -113,9 +113,9 @@ const float kShoreLandHeight = 4.0f; // m above the sea the train's phase is car
 const int kShoreLandRings = 128;     // and at most this many texels in from the water
 const double kFlowMinDepth = 0.05;   // m: the flow's least depth (its conductance and velocity)
 const int kFlowIterations = 100000;  // the flow's conjugate gradients: at most
-const double kFlowTolerance = 1e-10; // and the residual it stops at, against the first (the potential
-                                     // falls ~1e-4 a texel along a long river: 1e-5 left beads and
-                                     // still reaches)
+const double kFlowTolerance = 1e-10; // and the residual it stops at, against the inlets' (the potential
+                                     // falls ~1e-4 a texel along a long river; Kunar's solve takes
+                                     // about as many iterations as at 1e-5)
 const double kFlowRefWidth = 30.0;   // m: a river this wide
 const double kFlowRefSpeed = 1.0;    // m/s: flows this fast on average
 const double kFlowWidthPower = 0.2;  // and the mean speed goes as the width to this

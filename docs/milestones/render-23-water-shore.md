@@ -186,8 +186,28 @@ Tasks:
    where the phases hand over (two phases do not fit the registers). Kunar: one entry, one exit,
    20.9 m wide, 0.93 m/s, the solve 1685 iterations. `tools.water` writes `[flow]` and
    `NAME-flow.png`. Seen by an agent: the flow map (fast in narrow reaches, still at the banks),
-   Kunar `river` draws; the motion is the owner's to judge. Next: standing waves and foam behind rocks and banks (where the flow is
-   shallow and fast, Froude number near 1), and foam the river carries.
+   Kunar `river` draws; the motion seen by the owner.
+   Standing waves and the foam the rivers carry: built (contract 46, 2026-11-24). Rocks and piers
+   are found by rays through the objects' collision meshes just above the surface (four along each
+   axis per water texel, on levels with a current); the share hit closes that much of the texel's
+   section, a porous medium (conductance and the discharge's section times the open share; closed
+   on every ray, a bank), so the current parts round them and speeds up. Kunar: 720 texels touched.
+   Standing waves hold still against the current (phase speed U: U^2 = (g/k) tanh(kh), roots only
+   under critical flow), forced by the bed's relief (0.1 m [chosen: a cobble bed], the surface
+   Fr^2 / (1 - Fr^2) of it by shallow-water linear theory, b h / (b + h) at the waterline, weakened by
+   1 / cosh(kh)), at most the Stokes steepness (a k 0.44) and 0.39 h. Past that, or past Fr 1, they
+   break and make foam at (1 - 1/B) / 1 s toward full cover (B the forcing over what they hold); the
+   foam rides the surface velocity and fades over 8 s [chosen], gathering where the flow converges:
+   the steady advection and the distance downstream (the crests' phase) solved upwind in one pass in
+   falling potential. The flow map's b holds the foam, a the distance downstream (m modulo 16). The
+   velocity is each face's discharge over that face's section (over the texel's own, the banks
+   spiked to supercritical); the solve goes to 1e-10. The shader draws the waves with k as whole
+   waves per 16 m wrap, cross-faded, their crests broken over 2 m (the bed's features), the slope
+   fading into variance past the footprint; their variance is shared between the axes (the
+   direction does not fit ps_3_0's registers). `renderer.waterFlowSpeed` re-bakes. Kunar at
+   0.93 m/s: Froude under 0.6 over 94 % of the river, breaking over 1.9 %, foam 2.7 %; at 2.5 m/s
+   40 % and 45 %. `tools.water` writes `[obstacles]`, `[standing]`, `NAME-flowfoam.png`,
+   `NAME-obstacles.png`, `NAME-potential.png`. Seen by an agent: Kunar `river-narrows`.
 8. **Whitecaps.** Wind gusts varying over hundreds of metres, and breaking weighted by the 503 m
    cascade's crests too, so no scale reads as a tile.
 9. **Checks.** Muttrah City `ssr-shore`, `seahigh`; The Falklands; Kunar's rivers; GPU cost.
