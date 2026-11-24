@@ -112,8 +112,10 @@ const double kShoreGroupWaves = 7.0; // waves to a group
 const float kShoreLandHeight = 4.0f; // m above the sea the train's phase is carried up the beach (the swash's reach)
 const int kShoreLandRings = 128;     // and at most this many texels in from the water
 const double kFlowMinDepth = 0.05;   // m: the flow's least depth (its conductance and velocity)
-const int kFlowIterations = 20000;   // the flow's conjugate gradients: at most
-const double kFlowTolerance = 1e-5;  // and the residual it stops at, against the first
+const int kFlowIterations = 100000;  // the flow's conjugate gradients: at most
+const double kFlowTolerance = 1e-10; // and the residual it stops at, against the first (the potential
+                                     // falls ~1e-4 a texel along a long river: 1e-5 left beads and
+                                     // still reaches)
 const double kFlowRefWidth = 30.0;   // m: a river this wide
 const double kFlowRefSpeed = 1.0;    // m/s: flows this fast on average
 const double kFlowWidthPower = 0.2;  // and the mean speed goes as the width to this
@@ -1456,11 +1458,13 @@ bool toolsWriteWater(const char* base, const char*& message)
 
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
+    auto skip = [&s](int image) {
+        return (image == 2 && s.shore.empty()) || ((image == 3 || image == 4) && s.flow.empty()) || (image == 5 && s.obstacle.empty());
+    };
     for (int image = 0; image < 6 && ok; ++image)
     {
-        if ((image == 2 && s.shore.empty()) || ((image == 3 || image == 4) && s.flow.empty()) || (image == 5 && s.obstacle.empty()))
+        if (skip(image))
             continue;
-    {
         IDirect3DSurface9* surface = 0;
         ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
         D3DLOCKED_RECT locked;
@@ -1497,7 +1501,6 @@ bool toolsWriteWater(const char* base, const char*& message)
             ok = false;
         if (surface)
             surface->Release();
-        }
     }
     s.message = ok ? root + ".txt" : "could not write the images";
     message = s.message.c_str();
