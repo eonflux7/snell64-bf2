@@ -22,6 +22,12 @@ long fxCompileEffect(const char* source, unsigned int sourceSize, const char* so
                      const D3DXMACRO* defines, ID3DXInclude* include, unsigned long flags,
                      ID3DXBuffer** blobOut, ID3DXBuffer** messagesOut);
 
+// d3dcompiler_47's D3DPreprocess: the source with its includes and defines expanded (and #line
+// directives), for a compile on another thread that needs no include handler. Any thread.
+long fxPreprocess(const char* source, unsigned int sourceSize, const char* sourceName,
+                  const D3DXMACRO* defines, ID3DXInclude* include, ID3DXBuffer** textOut,
+                  ID3DXBuffer** messagesOut);
+
 } // namespace dx9rend
 } // namespace hfe
 } // namespace dice

@@ -784,6 +784,7 @@ void frameRoadPass(const FrameInputs& in)
 bool frameRender(const FrameInputs& in, IDirect3DSurface9*& overlayDepthStencil)
 {
     overlayDepthStencil = 0;
+    rendererEffectsAsyncPoll();   // [PERF] effects compiled on workers swap in between frames
     if (postProductionOn(in))
     {
         rendererHdrBeginScene();                                     // [RENDER] HDR

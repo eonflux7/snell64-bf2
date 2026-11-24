@@ -575,6 +575,9 @@ void*         shaderManagerInclude(void* shaderManager);
 unsigned long shaderManagerEffectFlags(void* shaderManager);
 void*         renderDevice();
 void*         compileEffectFromFile(const char* rawPath);   // Effect.cpp, sub_1001E010
+// [PERF] Effect.cpp: binds the effects whose stale cache compiled on a worker (Effect::reload hands
+// them there; BF2_PERF_FXASYNC=0 compiles them on the main thread). From the frame's start.
+void          rendererEffectsAsyncPoll();
 void*         shaderManagerGetEffect(void* shaderManager, const char* rawPath);
 class Effect;
 class ShaderParameter;

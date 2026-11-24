@@ -20,6 +20,12 @@
 #include "../RendMisc/IRenderer.h"
 #include "../GeomMisc/Debug.h"
 
+#include <algorithm>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 #include <new>
 #include <map>
 #include <string>
@@ -48,6 +54,8 @@ void stateManagerPush();
 void stateManagerPop();
 extern IBase* g_Renderer;       // BF2Render.cpp
 static ID3DXEffect* compileEffectFile(const char* path, ID3DXBuffer** errors);
+class Effect;
+bool fxsReloadAsync(Effect* effect, const std::string& rawPath);   // [PERF] below
 
 
 // The Effect constructor's tail is a first-time-only block: if the global exists it is AddRef'd,
@@ -1196,6 +1204,9 @@ void* const kEffectVtable[4] =
 bool Effect::reload(const std::string& path)
 {
     m_string0C = path;                                                  // +0x0C assign
+    // [PERF] A stale cache compiles on a worker while the effect shows what it has (fxsReloadAsync)
+    if (fxsReloadAsync(this, m_string0C))
+        return true;
     static const bool maxValidation = readBoolSetting("GSMaxValidation", false);   // byte_1023C6C4
     ID3DXBuffer* errors = 0;
     for (;;)
@@ -1549,6 +1560,99 @@ void fxsWrite(const std::string& cachePath, unsigned long long sourceHash,
     out->release();
 }
 
+// The cache's keys: the defines' and flags' hash (in the file's name), the source's (in the file)
+void fxsKeys(const char* path, const void* source, unsigned int sourceSize, const std::vector<const char*>& macros,
+             unsigned long flags, unsigned long long& sourceHash, std::string& cachePath)
+{
+    unsigned long long definesHash = 14695981039346656037ull;
+    for (std::size_t i = 0; i + 1 < macros.size(); ++i)
+        definesHash = fxsFnv(definesHash, macros[i], ::strlen(macros[i]) + 1);
+    definesHash = fxsFnv(definesHash, &flags, sizeof flags);
+    const unsigned char compilerByte = 47;   // [RENDER] d3dcompiler_47
+    definesHash = fxsFnv(definesHash, &compilerByte, 1);
+    sourceHash = fxsFnv(definesHash, source, sourceSize);
+    cachePath = fxsCachePath(path, definesHash);
+}
+
+// [PERF] The last bytecode an effect compiled to, whatever its source and defines since: what an
+// effect shows while its new bytecode compiles on a worker (fxsReloadAsync).
+// @HOME@/<mod>/cache/fxsrc/<path with '/' as '_'>.last.fxs: magic, size, bytecode.
+const char kFxsLastMagic[8] = { 'B', 'F', '2', 'F', 'X', 'L', '1', 0 };
+
+std::string fxsLastPath(const char* path)
+{
+    std::string p = fxsCachePath(path, 0);
+    return p.substr(0, p.size() - (sizeof(".0000000000000000.fxs") - 1)) + ".last.fxs";
+}
+
+ID3DXBuffer* fxsReadLast(const char* path)
+{
+    if (!::dice::hfe::fileManager)
+        return 0;
+    io::IStream* const in = ::dice::hfe::fileManager->open(
+        fxsLastPath(path), static_cast<io::FileMode>(2), static_cast<io::FileAccess>(0), 0);
+    if (!in)
+        return 0;
+    ID3DXBuffer* blob = 0;
+    char magic[8];
+    unsigned int size = 0;
+    const bool ok = in->read(magic, 8) == 8 && ::memcmp(magic, kFxsLastMagic, 8) == 0 && in->read(&size, 4) == 4
+                    && size > 0 && size < (64u << 20) && D3DXCreateBuffer(size, &blob) == 0
+                    && in->read(blob->GetBufferPointer(), size) == size;
+    in->release();
+    if (!ok && blob)
+    {
+        blob->Release();
+        blob = 0;
+    }
+    return blob;
+}
+
+// Writes it when fresh (just compiled) or when there is none yet
+void fxsKeepLast(const char* path, ID3DXBuffer* blob, bool fresh)
+{
+    if (!::dice::hfe::fileManager || !blob)
+        return;
+    const std::string lastPath = fxsLastPath(path);
+    if (!fresh)
+    {
+        io::IStream* const in = ::dice::hfe::fileManager->open(
+            lastPath, static_cast<io::FileMode>(2), static_cast<io::FileAccess>(0), 0);
+        if (in)
+        {
+            in->release();
+            return;
+        }
+    }
+    io::IStream* const out = ::dice::hfe::fileManager->open(
+        lastPath, static_cast<io::FileMode>(0), static_cast<io::FileAccess>(2), 0);
+    if (!out)
+        return;
+    const unsigned int size = blob->GetBufferSize();
+    out->write(kFxsLastMagic, 8);
+    out->write(&size, 4);
+    out->write(blob->GetBufferPointer(), size);
+    out->release();
+}
+
+// An effect from bytecode; null when D3DX reports anything
+ID3DXEffect* fxsCreateFromBlob(IDirect3DDevice9* device, ID3DXBuffer* blob, unsigned long flags)
+{
+    ID3DXEffect* effect = 0;
+    ID3DXBuffer* messages = 0;
+    const HRESULT hr = D3DXCreateEffect(device, blob->GetBufferPointer(), blob->GetBufferSize(), 0, 0,
+                                        flags, 0, &effect, &messages);
+    const bool clean = hr >= 0 && effect && (!messages || messages->GetBufferSize() <= 1);
+    if (messages)
+        messages->Release();
+    if (!clean && effect)
+    {
+        effect->Release();
+        effect = 0;
+    }
+    return effect;
+}
+
 // The effect from cached or freshly compiled bytecode; null sends the caller to the retail call.
 ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int sourceSize,
                        const std::vector<const char*>& macros, ID3DXInclude* include,
@@ -1556,20 +1660,16 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
 {
     if (!device || !include || !::dice::hfe::fileManager)
         return 0;
-    unsigned long long definesHash = 14695981039346656037ull;
-    for (std::size_t i = 0; i + 1 < macros.size(); ++i)
-        definesHash = fxsFnv(definesHash, macros[i], ::strlen(macros[i]) + 1);
-    definesHash = fxsFnv(definesHash, &flags, sizeof flags);
-    const unsigned char compilerByte = 47;   // [RENDER] d3dcompiler_47
-    definesHash = fxsFnv(definesHash, &compilerByte, 1);
-    const unsigned long long sourceHash = fxsFnv(definesHash, source, sourceSize);
-    const std::string cachePath = fxsCachePath(path, definesHash);
+    unsigned long long sourceHash = 0;
+    std::string cachePath;
+    fxsKeys(path, source, sourceSize, macros, flags, sourceHash, cachePath);
 
     ID3DXBuffer* blob = 0;
     {
         ::dice::hfe::loadtrace::Scope trace("fx.src.cache", path);   // [DEV] BF2_LOAD_TRACE
         blob = fxsRead(cachePath, sourceHash, include);
     }
+    const bool fresh = !blob;
     if (!blob)
     {
         ::dice::hfe::loadtrace::Scope trace("fx.src.compile", path);   // [DEV] BF2_LOAD_TRACE
@@ -1612,25 +1712,39 @@ ID3DXEffect* fxsCreate(const char* path, const void* source, unsigned int source
         }
         fxsWrite(cachePath, sourceHash, recording.seen, blob);
     }
+    fxsKeepLast(path, blob, fresh);
 
-    ID3DXEffect* effect = 0;
-    ID3DXBuffer* messages = 0;
-    const HRESULT hr = D3DXCreateEffect(device, blob->GetBufferPointer(), blob->GetBufferSize(), 0, 0,
-                                        flags, 0, &effect, &messages);
+    ID3DXEffect* const effect = fxsCreateFromBlob(device, blob, flags);
     blob->Release();
-    const bool clean = hr >= 0 && effect && (!messages || messages->GetBufferSize() <= 1);
-    if (messages)
-        messages->Release();
-    if (!clean && effect)
-    {
-        effect->Release();
-        effect = 0;
-    }
     return effect;
 }
 
 } // anonymous namespace
 
+
+// GSLoadObfuscated, read once and cached by the original. Its default is true.
+static bool effectLoadObfuscated()
+{
+    static int s_loadObfuscated = -1;
+    if (s_loadObfuscated < 0)
+        s_loadObfuscated = readBoolSetting("GSLoadObfuscated", true) ? 1 : 0;
+    return s_loadObfuscated != 0;
+}
+
+// The macro array, flattened from the ShaderManager's vector of 28-byte strings; returns the
+// count before the terminator.
+static unsigned int effectMacros(std::vector<const char*>& macros)
+{
+    if (g_shaderManager)
+    {
+        ShaderManagerDefines defines = shaderManagerDefines(g_shaderManager);
+        for (unsigned int i = 0; i < defines.count; ++i)
+            macros.push_back(defines.at(i));
+    }
+    const unsigned int macroCount = static_cast<unsigned int>(macros.size());
+    macros.push_back(0); // Retail appends only a null Name, not a complete D3DXMACRO.
+    return macroCount;
+}
 
 // Loads and compiles an effect using ShaderManager definitions and its include resolver.
 // Adapter for callers that do not consume compiler messages.
@@ -1665,23 +1779,11 @@ static ID3DXEffect* compileEffectFile(const char* rawPath, ID3DXBuffer** errors)
         file = ::renddx9abi::readEngineFile(path);
     }
 
-    // GSLoadObfuscated, read once and cached by the original. Its default is true.
-    static int s_loadObfuscated = -1;
-    if (s_loadObfuscated < 0)
-        s_loadObfuscated = readBoolSetting("GSLoadObfuscated", true) ? 1 : 0;
-    if (s_loadObfuscated)
+    if (effectLoadObfuscated())
         deobfuscateShader(file.data, file.size);
 
-    // The macro array, flattened from the ShaderManager's vector of 28-byte strings.
     std::vector<const char*> macros;
-    if (g_shaderManager)
-    {
-        ShaderManagerDefines defines = shaderManagerDefines(g_shaderManager);
-        for (unsigned int i = 0; i < defines.count; ++i)
-            macros.push_back(defines.at(i));
-    }
-    const unsigned int macroCount = static_cast<unsigned int>(macros.size());
-    macros.push_back(0); // Retail appends only a null Name, not a complete D3DXMACRO.
+    const unsigned int macroCount = effectMacros(macros);
 
     // Save the source size before freeEngineFile clears the structure.
     const unsigned int sourceBytes = file.size;
@@ -1752,6 +1854,236 @@ static ID3DXEffect* compileEffectFile(const char* rawPath, ID3DXBuffer** errors)
                        "%u macro pairs", path, ::renddx9abi::addr(effect), sourceBytes,
                        macroCount / 2);
     return effect;
+}
+
+// [PERF] Effects from source compiled off the main thread (BF2_PERF_FXASYNC=0: the serial path).
+// Retail compiles an effect whose cache is stale on the main thread when it is first asked for or
+// its file changes, and the game stands still meanwhile (the water's effects take minutes after a
+// contract change). Here Effect::reload hands such a compile to a worker: the main thread reads
+// the source and expands its includes and defines (D3DPreprocess through the ShaderManager's
+// include handler, recording what it opened for the cache, as fxsCreate does), and the worker
+// compiles the expanded text, which needs no include handler. Meanwhile the effect keeps what it
+// has bound (a reload) or binds the last bytecode it compiled to (fxsKeepLast; a new contract or
+// edited source draws with the old shader for a while). rendererEffectsAsyncPoll, at the start of
+// each frame, writes the cache and binds each finished compile; a failed one logs the compiler's
+// messages as compileEffectFromFile does and keeps the old effect. An effect with nothing to show
+// (never compiled) still compiles on the main thread. "[FXASYNC]" lines on stderr: each compile
+// queued and swapped in, and "idle" when none is left.
+namespace {
+
+struct FxsJob
+{
+    Effect*                 effect;       // held by a reference until the job is retired
+    unsigned int            generation;   // the effect's latest job's, or this one is dropped
+    std::string             path;
+    std::string             cachePath;
+    unsigned long long      sourceHash;
+    std::vector<FxsInclude> includes;
+    std::string             text;         // expanded source
+    unsigned long           flags;
+    // The worker's
+    ID3DXBuffer*            blob;
+    std::string             messages;
+    long                    hr;
+    double                  seconds;
+};
+
+struct FxsPool
+{
+    std::mutex              mutex;
+    std::condition_variable work;
+    std::deque<FxsJob*>     queue;
+    std::vector<FxsJob*>    finished;
+};
+
+FxsPool* g_fxsPool = 0;                                   // never destroyed, as the Ra prefetch's
+std::map<Effect*, unsigned int> g_fxsGeneration;          // main thread only
+int g_fxsPending = 0;                                     // main thread only
+
+bool fxsAsyncEnabled()
+{
+    static const int on = [] {
+        const char* const v = ::getenv("BF2_PERF_FXASYNC");
+        return (v && v[0] == '0') ? 0 : 1;
+    }();
+    return on != 0;
+}
+
+void fxsWorker(FxsPool* pool)
+{
+    for (;;)
+    {
+        FxsJob* job = 0;
+        {
+            std::unique_lock<std::mutex> lock(pool->mutex);
+            pool->work.wait(lock, [pool] { return !pool->queue.empty(); });
+            job = pool->queue.front();
+            pool->queue.pop_front();
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        ID3DXBuffer* messages = 0;
+        job->hr = fxCompileEffect(job->text.data(), static_cast<unsigned int>(job->text.size()), job->path.c_str(),
+                                  0, 0, job->flags, &job->blob, &messages);
+        if (messages)
+        {
+            const char* const m = static_cast<const char*>(messages->GetBufferPointer());
+            job->messages.assign(m, ::strnlen(m, messages->GetBufferSize()));
+            messages->Release();
+        }
+        job->seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::lock_guard<std::mutex> lock(pool->mutex);
+        pool->finished.push_back(job);
+    }
+}
+
+void fxsQueue(FxsJob* job)
+{
+    if (!g_fxsPool)
+    {
+        g_fxsPool = new FxsPool;
+        unsigned int threads = std::thread::hardware_concurrency();
+        threads = threads > 2 ? (std::min)(threads - 1, 4u) : 1u;
+        for (unsigned int i = 0; i < threads; ++i)
+            std::thread(fxsWorker, g_fxsPool).detach();
+    }
+    ++g_fxsPending;
+    {
+        std::lock_guard<std::mutex> lock(g_fxsPool->mutex);
+        g_fxsPool->queue.push_back(job);
+    }
+    g_fxsPool->work.notify_one();
+}
+
+} // namespace
+
+bool fxsReloadAsync(Effect* effect, const std::string& rawPath)
+{
+    IDirect3DDevice9* const device = static_cast<IDirect3DDevice9*>(renderDevice());
+    ID3DXInclude* const include = g_shaderManager ? static_cast<ID3DXInclude*>(shaderManagerInclude(g_shaderManager)) : 0;
+    if (!fxsAsyncEnabled() || !fxCompilerAvailable() || !device || !include || !::dice::hfe::fileManager)
+        return false;
+    const unsigned long flags = shaderManagerEffectFlags(g_shaderManager);
+    const std::string sourcePath = effectSourcePath(rawPath);
+    const char* const path = sourcePath.c_str();
+    ::renddx9abi::EngineFileData file = ::renddx9abi::readEngineFile(path);
+    if (!file.ok())
+        return false;   // the serial path's retry dialog
+    if (effectLoadObfuscated())
+        deobfuscateShader(file.data, file.size);
+    std::vector<const char*> macros;
+    effectMacros(macros);
+
+    FxsJob* const job = new FxsJob();
+    job->effect = effect;
+    job->path = sourcePath;
+    job->flags = flags;
+    job->blob = 0;
+    job->hr = 0;
+    job->seconds = 0.0;
+    fxsKeys(path, file.data, file.size, macros, flags, job->sourceHash, job->cachePath);
+
+    // Current: the serial path takes it from the cache
+    if (ID3DXBuffer* const cached = fxsRead(job->cachePath, job->sourceHash, include))
+    {
+        cached->Release();
+        ::renddx9abi::freeEngineFile(file);
+        delete job;
+        return false;
+    }
+
+    // Stale: expanded here, compiled there
+    FxsRecordingInclude recording(include);
+    ID3DXBuffer* text = 0;
+    const long hr = fxPreprocess(static_cast<const char*>(static_cast<const void*>(file.data)), file.size, path,
+                                 reinterpret_cast<const D3DXMACRO*>(macros.data()), &recording, &text, 0);
+    ::renddx9abi::freeEngineFile(file);
+    if (hr < 0 || !text)
+    {
+        if (text)
+            text->Release();
+        delete job;
+        return false;   // the serial compile reports it
+    }
+    const char* const t = static_cast<const char*>(text->GetBufferPointer());
+    job->text.assign(t, ::strnlen(t, text->GetBufferSize()));
+    text->Release();
+    job->includes = recording.seen;
+
+    // Meanwhile: what is bound, or the last bytecode
+    const char* shown = "the current effect kept";
+    if (!effect->d3dxEffect())
+    {
+        ID3DXBuffer* const last = fxsReadLast(path);
+        ID3DXEffect* const fx = last ? fxsCreateFromBlob(device, last, flags) : 0;
+        if (last)
+            last->Release();
+        const bool bound = fx && effect->bind(fx);
+        if (fx)
+            fx->Release();
+        if (!bound)
+        {
+            delete job;
+            return false;   // nothing to show: compiled here
+        }
+        shown = "the last bytecode bound";
+    }
+    effect->addRef();
+    job->generation = ++g_fxsGeneration[effect];
+    fxsQueue(job);
+    ::fprintf(stderr, "[FXASYNC] %s: compiling on a worker, %s; %d pending\n", path, shown, g_fxsPending);
+    ::fflush(stderr);
+    return true;
+}
+
+void rendererEffectsAsyncPoll()
+{
+    if (!g_fxsPool)
+        return;
+    std::vector<FxsJob*> finished;
+    {
+        std::lock_guard<std::mutex> lock(g_fxsPool->mutex);
+        finished.swap(g_fxsPool->finished);
+    }
+    if (finished.empty())
+        return;
+    IDirect3DDevice9* const device = static_cast<IDirect3DDevice9*>(renderDevice());
+    for (std::size_t i = 0; i < finished.size(); ++i)
+    {
+        FxsJob* const job = finished[i];
+        --g_fxsPending;
+        const bool latest = g_fxsGeneration[job->effect] == job->generation;
+        if (!job->blob)
+        {
+            ::renddx9abi::logf("compileEffectFromFile(\"%s\"): D3DXCreateEffect FAILED hr=0x%08X (on a worker)",
+                               job->path.c_str(), static_cast<unsigned>(job->hr));
+            ::renddx9abi::logf("compileEffectFromFile(\"%s\"): compiler says: %s", job->path.c_str(), job->messages.c_str());
+            ::fprintf(stderr, "[FXASYNC] %s: failed after %.1f s; the old effect kept\n", job->path.c_str(), job->seconds);
+        }
+        else if (!latest)
+            ::fprintf(stderr, "[FXASYNC] %s: superseded after %.1f s\n", job->path.c_str(), job->seconds);
+        else
+        {
+            fxsWrite(job->cachePath, job->sourceHash, job->includes, job->blob);
+            fxsKeepLast(job->path.c_str(), job->blob, true);
+            ID3DXEffect* const fx = device ? fxsCreateFromBlob(device, job->blob, job->flags) : 0;
+            const bool bound = fx && job->effect->bind(fx);
+            if (fx)
+                fx->Release();
+            ::renddx9abi::logf("compileEffectFromFile(\"%s\"): COMPILED on a worker in %.1f s%s", job->path.c_str(),
+                               job->seconds, bound ? "" : "; did not bind");
+            ::fprintf(stderr, "[FXASYNC] %s: %s after %.1f s\n", job->path.c_str(),
+                      bound ? "swapped in" : "compiled but did not bind", job->seconds);
+        }
+        if (job->blob)
+            job->blob->Release();
+        if (latest)
+            g_fxsGeneration.erase(job->effect);
+        job->effect->release();
+        delete job;
+    }
+    if (g_fxsPending == 0)
+        ::fprintf(stderr, "[FXASYNC] idle\n");
+    ::fflush(stderr);
 }
 
 } // namespace dx9rend

@@ -77,11 +77,48 @@ ID3DXBuffer* withoutDeprecation(ID3DXBuffer* messages)
     return out;
 }
 
+// D3DPreprocess, same layouts
+typedef HRESULT (WINAPI* D3DPreprocessFn)(LPCVOID, SIZE_T, LPCSTR, const D3DXMACRO*, ID3DXInclude*,
+                                          ID3DXBuffer**, ID3DXBuffer**);
+
+D3DPreprocessFn preprocessEntry()
+{
+    static const D3DPreprocessFn entry = []() -> D3DPreprocessFn {
+        const HMODULE module = ::LoadLibraryA("d3dcompiler_47.dll");
+        return module ? reinterpret_cast<D3DPreprocessFn>(::GetProcAddress(module, "D3DPreprocess")) : 0;
+    }();
+    return entry;
+}
+
 } // anonymous namespace
 
 bool fxCompilerAvailable()
 {
     return compileEntry() != 0;
+}
+
+long fxPreprocess(const char* source, unsigned int sourceSize, const char* sourceName,
+                  const D3DXMACRO* defines, ID3DXInclude* include, ID3DXBuffer** textOut,
+                  ID3DXBuffer** messagesOut)
+{
+    *textOut = 0;
+    if (messagesOut)
+        *messagesOut = 0;
+    const D3DPreprocessFn preprocess = preprocessEntry();
+    if (!preprocess)
+        return static_cast<long>(0x80004005);                 // E_FAIL
+    ID3DXBuffer* messages = 0;
+    const HRESULT hr = preprocess(source, sourceSize, sourceName, defines, include, textOut, &messages);
+    if (messagesOut)
+        *messagesOut = messages;
+    else if (messages)
+        messages->Release();
+    if (FAILED(hr) && *textOut)
+    {
+        (*textOut)->Release();
+        *textOut = 0;
+    }
+    return hr;
 }
 
 long fxCompileEffect(const char* source, unsigned int sourceSize, const char* sourceName,
@@ -113,6 +150,15 @@ long fxCompileEffect(const char* source, unsigned int sourceSize, const char* so
 bool fxCompilerAvailable()
 {
     return false;
+}
+
+long fxPreprocess(const char*, unsigned int, const char*, const D3DXMACRO*, ID3DXInclude*,
+                  ID3DXBuffer** textOut, ID3DXBuffer** messagesOut)
+{
+    *textOut = 0;
+    if (messagesOut)
+        *messagesOut = 0;
+    return static_cast<long>(0x80004001);                     // E_NOTIMPL
 }
 
 long fxCompileEffect(const char*, unsigned int, const char*, const D3DXMACRO*, ID3DXInclude*,
