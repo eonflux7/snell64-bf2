@@ -18,7 +18,6 @@ Every change belongs to exactly one lane.
 | `fix` | A bug in the engine (crash, wrong behaviour, x64 hazard) | Smallest correct change. Match retail where the evidence exists; say so when it was not checked. Committed on its own and independent of other lanes' code |
 | `compat` | What PR's content, scripts or launcher need from the engine | Specified by what PR does, never by guesswork about rhooks internals. No visual changes |
 | `render` | The renderer: a new design, not retail | Propose the modern technique first, with its cost, and name the retail piece it drops; retail assets are inputs (colours to fit), not the drawn result. Clean rewrites, no workaround kept "for now": a missing hook is built. Rewrite only for a big groundwork, visual or perf win, not for its own sake. No legacy path kept beside its replacement once the milestone is accepted |
-| `platform` | The renderer rebuilt from the ground up on D3D9 as the `render` module, every shader written from scratch ([platform.md](docs/lanes/platform.md)) | On branch `platform` until its last milestone merges it. Nothing copied from the old renderer or PR's shaders, nothing named "Ra", no bridge to the old renderer. `render` lane milestones are paused meanwhile |
 | `perf` | Load and frame time: threading, caching, avoiding repeated work, cheaper algorithms | Changes what work costs, never what it produces: the loaded state matches the old path's, and frames draw the same |
 | `build` | Toolchain, CMake/Ninja, build scripts, ABI checks | Never changes runtime behaviour |
 | `dev` | Diagnostics and developer hooks (traces, autohost, file monitor) | Off by default; when unset, behaviour and cost are unchanged |
@@ -30,10 +29,9 @@ the StateManager MRT slot overflow, found in `render` work) is committed on its 
 
 ## Milestones
 
-`render`, `platform`, `ui` and `tools` plan their work as numbered **milestones**, broken into **tasks**; their
+`render`, `ui` and `tools` plan their work as numbered **milestones**, broken into **tasks**; their
 order and state are in `docs/PLAN.md`. Several milestones may be open at once (in progress or
-paused). An open `render` or `platform` milestone has its own document,
-`docs/milestones/<lane>-<n>-<name>.md`:
+paused). An open `render` milestone has its own document, `docs/milestones/render-<n>-<name>.md`:
 design, tasks with their state, checks; that is the only place its task state is kept, and
 `docs/STATUS.md` lists the open milestones with one line each. (`tools` and `ui` keep their
 milestones in their lane documents for now.) Outside the lane's own documents, name the lane:
@@ -46,7 +44,6 @@ commits, and its row leaves `STATUS.md`. Commit messages before 2026-11-19 say "
 
 - This repository (`eonflux7/openbf2-eon64`, branch `main`) is **public**. Only engine code and
   engine-side documentation go here.
-- The `platform` lane's shaders (`Shaders/`) are public: written from scratch, never from PR's.
 - PR's shaders, decompiled PR scripts, PR's private Python shims and anything else derived from PR's
   closed content live in **private** repositories and directories outside this tree. Never copy them
   here, and never quote them in commits, comments or docs. Describing an engine-side contract that
@@ -140,9 +137,9 @@ the same comment. A marker is a pointer, not a justification.
 |---|---|
 | `docs/STATUS.md` | An index: where each lane stands, the open milestones (one line each), what awaits the owner's look, open issues |
 | `docs/PLAN.md` | What comes next: each lane's milestones, their state and their order |
-| `docs/milestones/` | One document per open `render` or `platform` milestone: design, tasks and their state, checks |
+| `docs/milestones/` | One document per open `render` milestone: design, tasks and their state, checks |
 | `docs/render/` | The renderer as built, one document per subsystem (`README.md` indexes them: the frame, the shader contract, submission, shadows, terrain, atmosphere, water, post, particles) |
-| `docs/lanes/<lane>.md` | One per other lane (`platform`, `tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
+| `docs/lanes/<lane>.md` | One per other lane (`tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
 | `docs/archive/` | OpenBF2's documentation, inherited |
 
 - Read `docs/STATUS.md` first, then only the document it links to for the task (`grep -n '^#'

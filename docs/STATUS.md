@@ -6,8 +6,7 @@ live only in its document in [milestones/](milestones/); the row here gives the 
 
 | Lane | State | Next | Detail |
 |---|---|---|---|
-| `platform` | Started 2026-11-24, branch `platform` | Milestone 1 ([below](#open-milestones)) | [platform.md](lanes/platform.md) |
-| `render` | Milestones 1–11, 13–16, 18 and 19 accepted | Paused for `platform` (owner, 2026-11-24): 12, 17, 21, 22, 23 open | [render/](render/README.md) |
+| `render` | Milestones 1–11, 13–16, 18 and 19 accepted | 21, 22, 23 in progress; 12, 17 paused ([below](#open-milestones)) | [render/](render/README.md) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
 | `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
@@ -21,10 +20,9 @@ Several may run at once; each session works in one milestone's document.
 
 | Milestone | State | Next | Document |
 |---|---|---|---|
-| `platform` 1, framework and 2D | In progress (branch `platform`) | 0 (baseline on `main`), 1 (branch and module) | [platform-1-framework.md](milestones/platform-1-framework.md) |
-| `render` 23, water at the shore | Paused for `platform`: tasks 1–7 built (2026-11-24) | 8 (whitecaps), 9 (checks) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
-| `render` 22, far overgrowth | Paused for `platform`: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
-| `render` 21, tonemap and grade | Paused for `platform`: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
+| `render` 23, water at the shore | In progress: tasks 1–7 built (2026-11-24) | 8 (whitecaps), 9 (checks) | [render-23-water-shore.md](milestones/render-23-water-shore.md) |
+| `render` 22, far overgrowth | In progress: task 1 built (2026-11-23) | 3 (shadows), 4 (index range), 5 (checks) | [render-22-far-overgrowth.md](milestones/render-22-far-overgrowth.md) |
+| `render` 21, tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 (the LUT) deferred with per-level looks (owner, 2026-11-23) | 5 (checks; a fire) | [render-21-grade.md](milestones/render-21-grade.md) |
 | `render` 17, far terrain | Paused: tasks 1–5 seen by the owner (2026-11-23, fine for now) | 6 (bakes for the other levels), 7 (from a jet, cost) | [render-17-far-terrain.md](milestones/render-17-far-terrain.md) |
 | `render` 12, clouds | Paused (owner, 2026-11-22): tasks 1–7 and 8's day sky done | 8's night layers (a star catalog: the owner's call), 9 | [render-12-clouds.md](milestones/render-12-clouds.md) |
 
