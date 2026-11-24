@@ -126,6 +126,7 @@ const double kFlowBreakDepth = 0.39; // and the highest, a / h (the breaking ind
 const double kFlowFoamRise = 1.0;    // s: breaking whitens its water in about this [chosen: a wave's period]
 const double kFlowFoamLife = 8.0;    // s: the foam's life on the water [chosen: fresh water's, seconds]
 const float kFlowObstacleRise = 0.05f;   // m above the sea the obstacles' rays run (what stands out of the water)
+const int kFlowObstacleRays = 4;     // rays across each water texel along each axis
 
 struct Bake
 {
@@ -142,8 +143,8 @@ struct Bake
     double flowTo;                   // the rivers' bearing (radians, 0 toward +z, pi/2 toward +x); negative none
     double flowSpeedSet;             // renderer.waterFlowSpeed, m/s; 0 from the width
     std::vector<float> flow;         // kSide^2 x 4, the flow map's r g b a
-    std::vector<unsigned char> obstacle;   // kSide^2: water texels an object stands out of (rocks, piers)
-    int flowObstacles;
+    std::vector<unsigned char> obstacle;   // kSide^2: of a water texel's 2 kFlowObstacleRays rays, those an object (rock, pier) stood in
+    int flowObstacles;               // water texels with any
     int flowInlets, flowOutlets, flowIterations;
     double flowArea, flowWidth, flowSpeed, flowResidual;   // m^2, m, m/s from the width; the solve's
     double flowFroude[5];            // of the flowing water, Froude number under 0.3, 0.6, 0.8, 1, past it
@@ -684,7 +685,10 @@ double standingWaves(double U, double h, double& k, double& a)
 // texel faces between water and land). The map stores the velocity over that mean speed.
 //
 // Objects standing out of the water (rocks, piers: rays through their collision meshes, sampled
-// with the heights) are banks to the flow.
+// with the heights) close the share of a texel's section their rays hit, as a porous medium: the
+// conductance and the section the discharge passes through times the open share (a rock of half a
+// texel on a river four texels wide narrows it, it does not dam it); a texel closed on every ray is a
+// bank.
 //
 // Contract 46: the standing waves (standingWaves) and the foam the rivers carry. Where the waves
 // break the foam is made at a rate (1 - 1 / B) / kFlowFoamRise toward full cover (B the forced
@@ -696,10 +700,14 @@ double standingWaves(double U, double h, double& k, double& a)
 // sets cross the flow, the standing waves' crests.
 void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<unsigned char> open[4], double cell)
 {
-    // The objects standing out of the water (rocks, piers) are banks to the flow
+    // The objects standing out of the water (rocks, piers) close the share of each texel's section
+    // their rays hit; a texel closed on every ray is a bank
     std::vector<unsigned char> water(sea);
     for (std::size_t k = 0; k < water.size() && k < b.obstacle.size(); ++k)
-        water[k] = water[k] && !b.obstacle[k];
+        water[k] = water[k] && b.obstacle[k] < 2 * kFlowObstacleRays;
+    auto openShare = [&b](std::size_t k) {
+        return k < b.obstacle.size() ? 1.0 - static_cast<double>(b.obstacle[k]) / (2 * kFlowObstacleRays) : 1.0;
+    };
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     b.flow.assign(count * 4, 0.0f);
     b.flowInlets = b.flowOutlets = b.flowIterations = 0;
@@ -779,7 +787,7 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
     // neighbour across each (-1 past the map or land) and the value past the map (-1 none)
     std::vector<double> T(n);
     for (std::size_t u = 0; u < n; ++u)
-        T[u] = std::pow(std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth), 5.0 / 3.0);
+        T[u] = std::pow(std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth), 5.0 / 3.0) * openShare(cells[u]);
     std::vector<double> c(n * 4, 0.0), ghost(n * 4, -1.0), diag(n, 0.0), rhs(n, 0.0);
     std::vector<int> across(n * 4, -1);
     std::size_t banks = 0;
@@ -870,20 +878,24 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
     b.flowIterations = it;
     b.flowResidual = norm / norm0;
 
-    // The velocities: each face's flux over the face's depth (the two texels' mean), each axis's two
-    // faces averaged (positive along +x, +z). Over the texel's own depth instead, a bank texel beside
-    // deep water would take the deep face's discharge through its few centimetres
+    // The velocities: each face's flux over the face's section per metre (the two texels' mean depth
+    // times their open share), each axis's two faces averaged (positive along +x, +z). Over the
+    // texel's own instead, a bank texel beside deep water would take the deep face's discharge
+    // through its few centimetres
+    auto section = [&](std::size_t u) {
+        return std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth) * std::max(openShare(cells[u]), 0.125);
+    };
     std::vector<double> vx(n), vz(n);
     double mean = 0.0;
     for (std::size_t u = 0; u < n; ++u)
     {
-        const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
+        const double h = section(u);
         double v[4];
         for (int f = 0; f < 4; ++f)
         {
             const int m = across[u * 4 + f];
             const double other = m >= 0 ? phi[m] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
-            const double hf = m >= 0 ? 0.5 * (h + std::max(static_cast<double>(b.sea - b.heights[cells[m]]), kFlowMinDepth)) : h;
+            const double hf = m >= 0 ? 0.5 * (h + section(m)) : h;
             v[f] = c[u * 4 + f] * (other - phi[u]) / hf;   // into this texel through face f
         }
         vx[u] = 0.5 * (v[0] - v[1]);
@@ -918,6 +930,7 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
         const std::size_t u = order[o];
         const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
         const double U = scale * std::sqrt(vx[u] * vx[u] + vz[u] * vz[u]);
+        const double open = std::max(openShare(cells[u]), 0.125);
         double k, a;
         const double B = standingWaves(U, h, k, a);
         const double fr = U / std::sqrt(kGravity * h);
@@ -934,7 +947,7 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
             const double other = across[u * 4 + f] >= 0 ? phi[across[u * 4 + f]] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
             const double flux = scale * c[u * 4 + f] * (other - phi[u]);
             const int m = across[u * 4 + f];
-            const double hf = m >= 0 ? 0.5 * (h + std::max(static_cast<double>(b.sea - b.heights[cells[m]]), kFlowMinDepth)) : h;
+            const double hf = m >= 0 ? 0.5 * (section(u) + section(m)) : section(u);
             const double v = flux / hf;
             if (v > 0.0)
             {
@@ -945,7 +958,8 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
             else
                 out -= v;
         }
-        foam[u] = std::min((inFoam + cell * P) / std::max(out + cell * (P + 1.0 / kFlowFoamLife), 1e-12), 1.0);
+        // (the open share of the texel's area makes and holds the foam)
+        foam[u] = std::min((inFoam + open * cell * P) / std::max(out + open * cell * (P + 1.0 / kFlowFoamLife), 1e-12), 1.0);
         along[u] = in > 1e-9 ? (inAlong + cell * U) / in : 0.0;
         b.flowFoam += foam[u];
         b.flow[cells[u] * 4 + 2] = static_cast<float>(foam[u]);
@@ -1251,9 +1265,10 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                     const float z = std::min(-half + (j + 0.5f) * cell, inside);
                     b.heights[static_cast<std::size_t>(j) * kSide + i] = cluster->getHeightInWorldCoords(x, z);
                 }
-            // Task 7 (contract 46): what stands out of the rivers' water, for the flow. Two rays across
-            // each water texel just above the surface, along x and z, through the objects' collision
-            // meshes: a rock or a pier is hit, a bridge's deck above the water is not
+            // Task 7 (contract 46): what stands out of the rivers' water, for the flow. kFlowObstacleRays
+            // rays across each water texel along x and as many along z, just above the surface,
+            // through the objects' collision meshes: a rock or a pier is hit, a bridge's deck above
+            // the water is not. The share hit is how much of the texel's section the objects close
             b.obstacle.clear();
             b.flowObstacles = 0;
             if (flowTo >= 0.0 && objectManager)
@@ -1267,14 +1282,18 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                         const std::size_t k = static_cast<std::size_t>(j) * kSide + i;
                         if (!(b.heights[k] < sea))
                             continue;
-                        const float x = -half + (i + 0.5f) * cell, z = -half + (j + 0.5f) * cell;
-                        const Vec3 fromX = { x - 0.5f * cell, y, z }, alongX = { cell, 0.0f, 0.0f };
-                        const Vec3 fromZ = { x, y, z - 0.5f * cell }, alongZ = { 0.0f, 0.0f, cell };
-                        if (objects->raycast(fromX, alongX, 0, 0, 0) || objects->raycast(fromZ, alongZ, 0, 0, 0))
+                        const float x0 = -half + i * cell, z0 = -half + j * cell;
+                        const Vec3 alongX = { cell, 0.0f, 0.0f }, alongZ = { 0.0f, 0.0f, cell };
+                        int hits = 0;
+                        for (int r = 0; r < kFlowObstacleRays; ++r)
                         {
-                            b.obstacle[k] = 1;
-                            ++b.flowObstacles;
+                            const float t = (r + 0.5f) * cell / kFlowObstacleRays;
+                            const Vec3 fromX = { x0, y, z0 + t }, fromZ = { x0 + t, y, z0 };
+                            hits += objects->raycast(fromX, alongX, 0, 0, 0) ? 1 : 0;
+                            hits += objects->raycast(fromZ, alongZ, 0, 0, 0) ? 1 : 0;
                         }
+                        b.obstacle[k] = static_cast<unsigned char>(hits);
+                        b.flowObstacles += hits ? 1 : 0;
                     }
             }
             s.done = false;
@@ -1419,7 +1438,7 @@ bool toolsWriteWater(const char* base, const char*& message)
                      rendererWaterFlowSpeed() > 0.0f ? "renderer.waterFlowSpeed" : "from the width",
                      s.info.flowIterations, s.info.flowResidual);
     if (s.info.flowTo >= 0.0)
-        std::fprintf(f, "[obstacles] %d water texels an object stands out of (rocks, piers): banks to the flow\n",
+        std::fprintf(f, "[obstacles] %d water texels an object stands out of (rocks, piers), closing part of the flow's section\n",
                      s.info.flowObstacles);
     if (s.info.flowTo >= 0.0)
         std::fprintf(f, "[standing] of the flowing water, Froude number under 0.3 %.1f %%, 0.3-0.6 %.1f %%, 0.6-0.8 %.1f %%, "
@@ -1479,8 +1498,8 @@ bool toolsWriteWater(const char* base, const char*& message)
                     // The shore map: the crests (cos of the phase) where the train runs, dimmer the
                     // deeper (to half the peak wavelength), land black
                     // The flow map: the speed over twice the mean, white; the foam it carries
-                    // The obstacles white, the other water grey
-                    const float t = image == 5 ? (s.obstacle[c / 4] ? 1.0f : p[0] > 0.0f ? 0.3f : 0.0f)
+                    // The share of the section the obstacles close, grey 0.3 open water to white closed
+                    const float t = image == 5 ? (p[0] > 0.0f || s.obstacle[c / 4] ? 0.3f + 0.7f * s.obstacle[c / 4] / (2.0f * kFlowObstacleRays) : 0.0f)
                                   : image == 4 ? q[2]
                                   : image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
                                   : image == 0 ? 0.5f + p[0] / 512.0f
