@@ -805,6 +805,13 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ);
 bool rendererWaterOpenWind(double& x, double& z);
 float rendererWaterOpenBind();
 bool& rendererWaterOpen();   // renderer.waterOpen, milestone 23's A/B switch (1)
+// Task 7, contract 45: beside the shore map (columns 2 kWaterOpenSide on) the flow map, rg the
+// rivers' depth-averaged velocity (world x, z) over its mean speed, which the table's constants
+// texel carries in w (m/s; 0 still water). renderer.waterFlowTo the bearing the rivers run toward
+// (degrees, 0 toward +z, 90 toward +x; -1 still water: the level's weather file sets it),
+// renderer.waterFlowSpeed their mean speed (m/s; 0 from the channel's width).
+float& rendererWaterFlowTo();
+float& rendererWaterFlowSpeed();
 void rendererWaterOpenUnbind();
 // Contract 41: the open-water texture as an effect texture value for the terrain's swash, with
 // shore = (1 / the map's side in m, the waves' loop seconds, the sea level the map was baked at, 0);
@@ -884,7 +891,7 @@ void renderQueuesDrawShadowCasters(unsigned int key, const float* viewProjection
 // needs a newer contract stops with #error instead of running against an engine without it. Raised
 // whenever the engine changes what the shaders may rely on; docs/render/contract.md lists
 // what each version adds.
-#define RA_CONTRACT_VERSION 44
+#define RA_CONTRACT_VERSION 45
 #define RA_CONTRACT_TEXT_(v) #v
 #define RA_CONTRACT_TEXT(v) RA_CONTRACT_TEXT_(v)
 

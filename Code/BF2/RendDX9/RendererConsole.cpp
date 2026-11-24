@@ -1518,6 +1518,15 @@ float getWaterWindFrom() { return rendererWaterWindFrom(); }
 void setWaterWindFrom(float value) { rendererWaterWindFrom() = value < 0.0f ? -1.0f : std::fmod(value, 360.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterWindFrom, float, true, getWaterWindFrom(), setWaterWindFrom, -1.0f, 360.0f,
                                  kRendererConsoleTag)
+// [RENDER] render milestone 23 task 7: the rivers' current, its sense and mean speed.
+float getWaterFlowTo() { return rendererWaterFlowTo(); }
+void setWaterFlowTo(float value) { rendererWaterFlowTo() = value < 0.0f ? -1.0f : std::fmod(value, 360.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFlowTo, float, true, getWaterFlowTo(), setWaterFlowTo, -1.0f, 360.0f,
+                                 kRendererConsoleTag)
+float getWaterFlowSpeed() { return rendererWaterFlowSpeed(); }
+void setWaterFlowSpeed(float value) { rendererWaterFlowSpeed() = clampf(value, 0.0f, 10.0f); }
+BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFlowSpeed, float, true, getWaterFlowSpeed(), setWaterFlowSpeed, 0.0f, 10.0f,
+                                 kRendererConsoleTag)
 float getWaterFoam() { return rendererWaterFoam(); }
 void setWaterFoam(float value) { rendererWaterFoam() = clampf(value, 0.0f, 4.0f); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterFoam, float, true, getWaterFoam(), setWaterFoam, 0.0f, 4.0f,
@@ -1652,6 +1661,8 @@ const char* rendererVariableHelp(const char* name)
         { "waterWind", "Water's waves: the wind speed, m/s (1-30)" },
         { "waterFetch", "Water's waves: the fetch, how far the wind has blown over water, km (1-1000)" },
         { "waterWindFrom", "Water's waves: the bearing the wind blows from, degrees (0 from north, +z; 90 from east, +x); -1 from the map's most open sea" },
+        { "waterFlowTo", "Water's current: the bearing the rivers run toward, degrees (0 toward north, +z; 90 east, +x); -1 still water (the level's weather file sets it)" },
+        { "waterFlowSpeed", "Water's current: the rivers' mean speed, m/s; 0 from the channel's width (1 m/s at 30 m, as width^0.2)" },
         { "waterOpen", "Water's open-water map (milestone 23 A/B): waves and foam by the local fetch upwind; off, the level's sea everywhere" },
         { "waterFoam", "Water's foam on the crests: times the whitecap coverage measured for the wind (0-4); 0 none" },
         { "waterType", "Water's type: 0-4 oceanic I, IA, IB, II, III; 5-9 coastal 1, 3, 5, 7, 9 (Jerlov); 10 glacial river; -1 custom (the constituents below)" },

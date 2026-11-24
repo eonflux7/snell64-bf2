@@ -41,12 +41,19 @@
 //       (under kShoreLandHeight above the sea, the swash's reach), and the open-water map's fetch
 //   b a its direction of travel, unit; zero where no train runs (higher land, water the march missed)
 //
+// Beside that (columns 2 kSide to 3 kSide - 1) the flow map (task 7, contract 45; flowBake):
+//
+//   r g the rivers' depth-averaged velocity, world x and z, over their mean speed (which the
+//       table's constants texel carries, m/s); zero in still water
+//   b a zero
+//
 // Two rows below the map hold a table over log2 fetch, kTable entries from kTableFirst (one per
 // octave), written by Water.cpp whenever the spectrum changes (rendererWaterOpenTable): row 0 each
 // wave cascade's slope amplitude against the level's fetch and the significant height's ratio;
 // row 1 the whitecap coverage's ratio. Row 0's texel kShoreConstants holds the shore train's angular
-// frequency, its groups' (both whole cycles of the waves' loop) and the level's significant height.
-// The texture is A16B16G16R16F, 2 kSide x (kSide + 2), managed,
+// frequency, its groups' (both whole cycles of the waves' loop), the level's significant height and
+// the rivers' mean speed (m/s, 0 still water).
+// The texture is A16B16G16R16F, 3 kSide x (kSide + 2), managed,
 // one level; while the water queue draws with waves it is on kWaterOpenSampler (bilinear, clamp)
 // and RaWaterFoam.w is 1 / the map's side in metres (0 without it). The map is centred on the
 // world's origin, row j at z, column i at x.
@@ -85,7 +92,7 @@ extern void* g_rendererBase;
 namespace {
 
 const int kSide = 1024;              // the map's texels per side
-const int kTexWidth = 2 * kSide;     // the open-water map, then the shore map
+const int kTexWidth = 3 * kSide;     // the open-water map, the shore map, the flow map
 const int kTexRows = kSide + 2;      // and the table's two rows
 const int kShoreConstants = kWaterOpenTable;   // the shore train's constants: this column of the table's first row
 const int kRadials = kWaterOpenRadials;   // about the wind, kWaterOpenRadialStep apart
@@ -101,6 +108,12 @@ const double kShorePhaseWrap = 8.0 * kPi;   // the stored phase's period (16-bit
 const double kShoreGroupWaves = 7.0; // waves to a group
 const float kShoreLandHeight = 4.0f; // m above the sea the train's phase is carried up the beach (the swash's reach)
 const int kShoreLandRings = 128;     // and at most this many texels in from the water
+const double kFlowMinDepth = 0.05;   // m: the flow's least depth (its conductance and velocity)
+const int kFlowIterations = 20000;   // the flow's conjugate gradients: at most
+const double kFlowTolerance = 1e-5;  // and the residual it stops at, against the first
+const double kFlowRefWidth = 30.0;   // m: a river this wide
+const double kFlowRefSpeed = 1.0;    // m/s: flows this fast on average
+const double kFlowWidthPower = 0.2;  // and the mean speed goes as the width to this
 
 struct Bake
 {
@@ -114,6 +127,10 @@ struct Bake
     float spreading[kWaterOpenRadials];
     std::vector<float> texels;       // kSide^2 x 4, the map's r g b a
     std::vector<float> shore;        // kSide^2 x 4, the shore map's r g b a
+    double flowTo;                   // the rivers' bearing (radians, 0 toward +z, pi/2 toward +x); negative none
+    std::vector<float> flow;         // kSide^2 x 4, the flow map's r g b a
+    int flowInlets, flowOutlets, flowIterations;
+    double flowArea, flowWidth, flowSpeed, flowResidual;   // m^2, m, m/s from the width; the solve's
     double deepShare;                // of the water, deep enough to start the train
     double waterShare, meanLog2Fetch, ms;
     int openEdges;                   // edge runs taken as open sea
@@ -125,7 +142,7 @@ struct OpenState
     bool haveKey;
     float keySea, keyHalf;
     bool keyAutomatic;
-    double keyDirX, keyDirZ, keyFetch, keyWavelength;
+    double keyDirX, keyDirZ, keyFetch, keyWavelength, keyFlowTo;
     float keySpreading[kWaterOpenRadials];
     bool haveDir;                    // a bake's direction (automatic or given) for rendererWaterOpenWind
     std::thread thread;
@@ -134,6 +151,8 @@ struct OpenState
     Bake bake;                       // the worker's while building
     std::vector<float> map;          // the last bake's texels (kept for tools.water)
     std::vector<float> shore;        // and its shore map
+    std::vector<float> flow;         // and its flow map
+    float flowSpeed;                 // the mean speed uploaded with the constants, m/s
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
     float table[kWaterOpenTableRows][kWaterOpenTable][4];
@@ -147,6 +166,8 @@ struct OpenState
 };
 
 OpenState* g_open = 0;
+float g_flowTo = -1.0f;              // renderer.waterFlowTo, degrees; negative still water
+float g_flowSpeed = 0.0f;            // renderer.waterFlowSpeed, m/s; 0 from the width
 OpenState& st()
 {
     if (!g_open)
@@ -589,6 +610,227 @@ void shoreBake(Bake& b, const std::vector<unsigned char>& water, double cell)
         }
 }
 
+// The rivers' current (task 7): a steady depth-averaged flow over the water from the map's edges.
+// The water is one flat plane, so neither the surface's slope nor the discharge is in the data: the
+// flow's shape comes from the channel, its sense from the level (renderer.waterFlowTo, the bearing
+// it runs toward) and its mean speed from the channel's width.
+//
+// Friction-dominated open-channel flow (Manning) carries a unit discharge q = h^(5/3) S^(1/2) / n
+// down the surface's slope S: with the slope's magnitude folded into the scale, q = -T grad(phi),
+// T = h^(5/3), and continuity div(q) = 0 makes phi the solution of div(T grad(phi)) = 0 over the
+// water: phi 1 where a river enters the map (an edge run of water shorter than kOpenRun whose
+// outward normal is against the bearing), 0 where it leaves (with it) and along open sea, no flux
+// through the banks. Each texel's velocity is q / h (the faces' fluxes averaged per axis), deep
+// water faster than the shallows and zero at the banks; continuity makes a narrow reach faster than
+// a wide one. Solved by conjugate gradients with a diagonal preconditioner over the water connected
+// to an entry or an exit; other water (lakes, a sea without a river) is still.
+//
+// The mean speed (area-weighted over the flowing water) follows downstream hydraulic geometry
+// (Leopold and Maddock 1953: width ~ Q^0.5, velocity ~ Q^0.1, so velocity ~ width^0.2), anchored at
+// kFlowRefSpeed for a kFlowRefWidth-wide river [chosen: a typical river's mean velocity; the
+// surface's slope, which the flat water lacks, would set it]; renderer.waterFlowSpeed overrides it.
+// The width is the flowing water's area over half its banks' length (Cauchy-Crofton: pi / 4 of the
+// texel faces between water and land). The map stores the velocity over that mean speed.
+void flowBake(Bake& b, const std::vector<unsigned char>& water, const std::vector<unsigned char> open[4], double cell)
+{
+    const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
+    b.flow.assign(count * 4, 0.0f);
+    b.flowInlets = b.flowOutlets = b.flowIterations = 0;
+    b.flowArea = b.flowWidth = b.flowSpeed = b.flowResidual = 0.0;
+    if (b.flowTo < 0.0)
+        return;
+    const double toX = std::sin(b.flowTo), toZ = std::cos(b.flowTo);
+
+    // Each edge texel's value past the map: -1 none (land or a closed edge), 0 an exit, 1 an entry
+    static const double kOutX[4] = { -1.0, 1.0, 0.0, 0.0 }, kOutZ[4] = { 0.0, 0.0, -1.0, 1.0 };
+    std::vector<signed char> edge[4];
+    for (int e = 0; e < 4; ++e)
+    {
+        edge[e].assign(kSide, -1);
+        const signed char sense = kOutX[e] * toX + kOutZ[e] * toZ > 0.0 ? 0 : 1;
+        int start = -1;
+        for (int t = 0; t <= kSide; ++t)
+        {
+            bool w = false;
+            if (t < kSide)
+            {
+                const int i = e == 0 ? 0 : e == 1 ? kSide - 1 : t;
+                const int j = e == 2 ? 0 : e == 3 ? kSide - 1 : t;
+                w = water[static_cast<std::size_t>(j) * kSide + i] != 0;
+            }
+            if (w && start < 0)
+                start = t;
+            if (!w && start >= 0)
+            {
+                const signed char v = open[e][start] ? 0 : sense;
+                std::fill(edge[e].begin() + start, edge[e].begin() + t, v);
+                if (!open[e][start])
+                    ++(v ? b.flowInlets : b.flowOutlets);
+                start = -1;
+            }
+        }
+    }
+    if (!b.flowInlets || (!b.flowOutlets && !b.openEdges))
+        return;
+
+    // The water connected to an entry or an exit; its unknowns' indices
+    std::vector<int> index(count, -1);
+    std::vector<std::size_t> cells;
+    for (int e = 0; e < 4; ++e)
+        for (int t = 0; t < kSide; ++t)
+            if (edge[e][t] >= 0)
+            {
+                const int i = e == 0 ? 0 : e == 1 ? kSide - 1 : t;
+                const int j = e == 2 ? 0 : e == 3 ? kSide - 1 : t;
+                const std::size_t k = static_cast<std::size_t>(j) * kSide + i;
+                if (index[k] < 0)
+                {
+                    index[k] = static_cast<int>(cells.size());
+                    cells.push_back(k);
+                }
+            }
+    for (std::size_t n = 0; n < cells.size(); ++n)
+    {
+        const int i = static_cast<int>(cells[n] % kSide), j = static_cast<int>(cells[n] / kSide);
+        const int ni[4] = { i - 1, i + 1, i, i }, nj[4] = { j, j, j - 1, j + 1 };
+        for (int f = 0; f < 4; ++f)
+            if (ni[f] >= 0 && ni[f] < kSide && nj[f] >= 0 && nj[f] < kSide)
+            {
+                const std::size_t m = static_cast<std::size_t>(nj[f]) * kSide + ni[f];
+                if (water[m] && index[m] < 0)
+                {
+                    index[m] = static_cast<int>(cells.size());
+                    cells.push_back(m);
+                }
+            }
+    }
+    const std::size_t n = cells.size();
+
+    // Per unknown: its four faces' conductances (x low, x high, z low, z high; zero at a bank), the
+    // neighbour across each (-1 past the map or land) and the value past the map (-1 none)
+    std::vector<double> T(n);
+    for (std::size_t u = 0; u < n; ++u)
+        T[u] = std::pow(std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth), 5.0 / 3.0);
+    std::vector<double> c(n * 4, 0.0), ghost(n * 4, -1.0), diag(n, 0.0), rhs(n, 0.0);
+    std::vector<int> across(n * 4, -1);
+    std::size_t banks = 0;
+    for (std::size_t u = 0; u < n; ++u)
+    {
+        const int i = static_cast<int>(cells[u] % kSide), j = static_cast<int>(cells[u] / kSide);
+        const int ni[4] = { i - 1, i + 1, i, i }, nj[4] = { j, j, j - 1, j + 1 };
+        for (int f = 0; f < 4; ++f)
+        {
+            if (ni[f] < 0 || ni[f] >= kSide || nj[f] < 0 || nj[f] >= kSide)
+            {
+                const int e = f, t = f < 2 ? j : i;
+                if (edge[e][t] >= 0)
+                {
+                    c[u * 4 + f] = T[u];
+                    ghost[u * 4 + f] = edge[e][t];
+                    rhs[u] += T[u] * edge[e][t];
+                }
+            }
+            else
+            {
+                const int m = index[static_cast<std::size_t>(nj[f]) * kSide + ni[f]];
+                if (m >= 0)
+                {
+                    c[u * 4 + f] = 0.5 * (T[u] + T[m]);
+                    across[u * 4 + f] = m;
+                }
+                else
+                    ++banks;
+            }
+            diag[u] += c[u * 4 + f];
+        }
+    }
+
+    // Conjugate gradients, diagonal preconditioner
+    std::vector<double> phi(n, 0.5), r(n), z(n), p(n), q(n);
+    auto apply = [&](const std::vector<double>& x, std::vector<double>& y) {
+        for (std::size_t u = 0; u < n; ++u)
+        {
+            double s = diag[u] * x[u];
+            for (int f = 0; f < 4; ++f)
+                if (across[u * 4 + f] >= 0)
+                    s -= c[u * 4 + f] * x[across[u * 4 + f]];
+            y[u] = s;
+        }
+    };
+    apply(phi, q);
+    double rz = 0.0, norm0 = 0.0;
+    for (std::size_t u = 0; u < n; ++u)
+    {
+        r[u] = rhs[u] - q[u];
+        z[u] = r[u] / diag[u];
+        p[u] = z[u];
+        rz += r[u] * z[u];
+        norm0 += rhs[u] * rhs[u];
+    }
+    norm0 = std::sqrt(std::max(norm0, 1e-300));
+    double norm = norm0;
+    int it = 0;
+    for (; it < kFlowIterations; ++it)
+    {
+        norm = 0.0;
+        for (std::size_t u = 0; u < n; ++u)
+            norm += r[u] * r[u];
+        norm = std::sqrt(norm);
+        if (norm <= kFlowTolerance * norm0)
+            break;
+        apply(p, q);
+        double pq = 0.0;
+        for (std::size_t u = 0; u < n; ++u)
+            pq += p[u] * q[u];
+        if (pq <= 0.0)
+            break;
+        const double alpha = rz / pq;
+        double rzNew = 0.0;
+        for (std::size_t u = 0; u < n; ++u)
+        {
+            phi[u] += alpha * p[u];
+            r[u] -= alpha * q[u];
+            z[u] = r[u] / diag[u];
+            rzNew += r[u] * z[u];
+        }
+        const double beta = rzNew / rz;
+        rz = rzNew;
+        for (std::size_t u = 0; u < n; ++u)
+            p[u] = z[u] + beta * p[u];
+    }
+    b.flowIterations = it;
+    b.flowResidual = norm / norm0;
+
+    // The velocities: each axis's two faces' fluxes averaged (positive along +x, +z), over the depth
+    std::vector<double> vx(n), vz(n);
+    double mean = 0.0;
+    for (std::size_t u = 0; u < n; ++u)
+    {
+        double flux[4];
+        for (int f = 0; f < 4; ++f)
+        {
+            const double other = across[u * 4 + f] >= 0 ? phi[across[u * 4 + f]] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
+            flux[f] = c[u * 4 + f] * (other - phi[u]);   // into this texel through face f
+        }
+        const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
+        vx[u] = 0.5 * (flux[0] - flux[1]) / h;
+        vz[u] = 0.5 * (flux[2] - flux[3]) / h;
+        mean += std::sqrt(vx[u] * vx[u] + vz[u] * vz[u]);
+    }
+    mean /= static_cast<double>(n);
+    b.flowArea = static_cast<double>(n) * cell * cell;
+    const double shoreline = 0.25 * kPi * static_cast<double>(banks) * cell;
+    b.flowWidth = shoreline > 0.0 ? 2.0 * b.flowArea / shoreline : 0.0;
+    b.flowSpeed = kFlowRefSpeed * std::pow(std::max(b.flowWidth, cell) / kFlowRefWidth, kFlowWidthPower);
+    if (mean <= 0.0)
+        return;
+    for (std::size_t u = 0; u < n; ++u)
+    {
+        b.flow[cells[u] * 4 + 0] = static_cast<float>(vx[u] / mean);
+        b.flow[cells[u] * 4 + 1] = static_cast<float>(vz[u] / mean);
+    }
+}
+
 void runBake(Bake& b)
 {
     LARGE_INTEGER t0;
@@ -698,6 +940,7 @@ void runBake(Bake& b)
         }
     b.meanLog2Fetch = wet ? logSum / wet : 0.0;
     shoreBake(b, water, cell);
+    flowBake(b, water, open, cell);
     b.ms = msSince(t0);
 }
 
@@ -757,6 +1000,8 @@ void rendererWaterOpenRelease()
     std::vector<float>().swap(s.map);
     std::vector<float>().swap(s.shore);
     std::vector<float>().swap(s.bake.shore);
+    std::vector<float>().swap(s.flow);
+    std::vector<float>().swap(s.bake.flow);
     if (s.texture)
         s.texture->Release();
     s.texture = 0;
@@ -806,9 +1051,11 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         joinBake(s);
         s.map.swap(s.bake.texels);
         s.shore.swap(s.bake.shore);
+        s.flow.swap(s.bake.flow);
         std::vector<float>().swap(s.bake.heights);
         std::vector<float>().swap(s.bake.texels);
         std::vector<float>().swap(s.bake.shore);
+        std::vector<float>().swap(s.bake.flow);
         s.info = s.bake;
         s.haveDir = true;
         s.mapNew = true;
@@ -818,6 +1065,11 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                      s.info.dirX, s.info.dirZ, s.info.automatic ? " (from the open sea)" : "",
                      s.info.fetch / 1000.0, 100.0 * s.info.waterShare, s.info.openEdges,
                      std::exp2(s.info.meanLog2Fetch), 100.0 * s.info.deepShare, s.info.ms);
+        if (s.info.flowTo >= 0.0)
+            std::fprintf(stderr, "[WATER] flow toward %.0f degrees: %d entries, %d exits, %.0f m^2 flowing, %.1f m wide, "
+                         "%.2f m/s from the width; %d iterations, residual %.1e\n", s.info.flowTo * 180.0 / kPi,
+                         s.info.flowInlets, s.info.flowOutlets, s.info.flowArea, s.info.flowWidth, s.info.flowSpeed,
+                         s.info.flowIterations, s.info.flowResidual);
     }
 
     // A new level, a new sea (the spreading and the level's fetch come with each spectrum) or the
@@ -828,7 +1080,8 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
     {
         const float half = 0.5f * static_cast<float>(t->m_patchCount * t->m_patchSize) * t->m_primaryWorldScale.x;
         const float sea = cluster->getSeaWaterLevel();
-        const bool changed = !s.haveKey || sea != s.keySea || half != s.keyHalf || automatic != s.keyAutomatic
+        const double flowTo = g_flowTo < 0.0f ? -1.0 : g_flowTo * kPi / 180.0;
+        const bool changed = !s.haveKey || sea != s.keySea || flowTo != s.keyFlowTo || half != s.keyHalf || automatic != s.keyAutomatic
                           || (!automatic && (windX != s.keyDirX || windZ != s.keyDirZ)) || s.fetch != s.keyFetch || s.wavelength != s.keyWavelength
                           || std::memcmp(s.spreading, s.keySpreading, sizeof(s.spreading)) != 0;
         if (changed && half > 0.0f)
@@ -842,6 +1095,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
             s.keyDirZ = windZ;
             s.keyFetch = s.fetch;
             s.keyWavelength = s.wavelength;
+            s.keyFlowTo = flowTo;
             std::memcpy(s.keySpreading, s.spreading, sizeof(s.spreading));
             Bake& b = s.bake;
             b.sea = sea;
@@ -852,6 +1106,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
             b.fetch = s.fetch;
             b.wavelength = s.wavelength;
             b.omega = s.omega;
+            b.flowTo = flowTo;
             std::memcpy(b.spreading, s.spreading, sizeof(s.spreading));
             b.heights.resize(static_cast<std::size_t>(kSide) * kSide);
             const float cell = 2.0f * half / kSide, inside = half - 0.01f;
@@ -872,21 +1127,27 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         }
     }
 
+    // The mean speed rides with the table's constants
+    const float speed = s.info.flowTo < 0.0 ? 0.0f : g_flowSpeed > 0.0f ? g_flowSpeed : static_cast<float>(s.info.flowSpeed);
+    if (speed != s.flowSpeed)
+        s.tableNew = s.haveTable;
     if ((s.mapNew || s.tableNew) && !s.map.empty() && ensureTexture(s))
     {
         bool ok = true;
         if (s.mapNew)
         {
-            ok = uploadRows(s, 0, kSide, kSide, s.map.data()) && uploadRows(s, 0, kSide, kSide, s.shore.data(), kSide);
+            ok = uploadRows(s, 0, kSide, kSide, s.map.data()) && uploadRows(s, 0, kSide, kSide, s.shore.data(), kSide)
+              && uploadRows(s, 0, kSide, kSide, s.flow.data(), 2 * kSide);
             s.mapNew = !ok;
             s.scale = ok ? 0.5f / s.info.half : 0.0f;
         }
         if (s.tableNew && s.haveTable && ok)
         {
             // The shore train's constants beside the table: its angular frequency and its groups'
-            // (whole cycles of the waves' loop), the level's significant height
+            // (whole cycles of the waves' loop), the level's significant height, the flow's mean speed
             const float constants[4] = { static_cast<float>(s.omega), static_cast<float>(s.omegaGroup),
-                                         static_cast<float>(s.hs), 0.0f };
+                                         static_cast<float>(s.hs), speed };
+            s.flowSpeed = speed;
             s.tableNew = !(uploadRows(s, kSide, kWaterOpenTableRows, kWaterOpenTable, &s.table[0][0][0])
                            && uploadRows(s, kSide, 1, 1, constants, kShoreConstants));
         }
@@ -895,6 +1156,8 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
 
 bool g_waterOpen = true;
 bool& rendererWaterOpen() { return g_waterOpen; }
+float& rendererWaterFlowTo() { return g_flowTo; }
+float& rendererWaterFlowSpeed() { return g_flowSpeed; }
 
 float rendererWaterOpenBind()
 {
@@ -935,8 +1198,9 @@ void rendererWaterOpenUnbind()
 }
 
 // [TOOLS] tools.water (render milestone 23): the open-water map's state and table to base.txt, its
-// signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black) and its fetch
-// to base-fetch.png (log2, 16 m black to 64 km white).
+// signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black), its fetch
+// to base-fetch.png (log2, 16 m black to 64 km white), the shore map's crests to base-shore.png and
+// the rivers' speed to base-flow.png (white twice the mean).
 bool toolsWriteWater(const char* base, const char*& message)
 {
     OpenState& s = st();
@@ -985,6 +1249,15 @@ bool toolsWriteWater(const char* base, const char*& message)
                         "pattern's contrast e^(-b d) %.2f at 2 m, %.2f at 5 m\n", m[7], m[3], m[15],
                      std::exp(-2.0 * m[3]), std::exp(-5.0 * m[3]));
     }
+    if (s.info.flowTo >= 0.0)
+        std::fprintf(f, "[flow] toward %.0f degrees: %d entries, %d exits (and %d open-sea runs), %.0f m^2 flowing, "
+                        "%.1f m wide, mean speed %.2f m/s (%s); %d iterations, residual %.1e\n",
+                     s.info.flowTo * 180.0 / kPi, s.info.flowInlets, s.info.flowOutlets, s.info.openEdges,
+                     s.info.flowArea, s.info.flowWidth, s.flowSpeed,
+                     rendererWaterFlowSpeed() > 0.0f ? "renderer.waterFlowSpeed" : "from the width",
+                     s.info.flowIterations, s.info.flowResidual);
+    else
+        std::fprintf(f, "[flow] still water (renderer.waterFlowTo -1)\n");
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     double bins[6] = { 0, 0, 0, 0, 0, 0 };
     static const double kBinTop[6] = { 100.0, 1000.0, 5000.0, 20000.0, 100000.0, 1e30 };
@@ -1014,7 +1287,7 @@ bool toolsWriteWater(const char* base, const char*& message)
 
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
-    for (int image = 0; image < 3 && ok && !(image == 2 && s.shore.empty()); ++image)
+    for (int image = 0; image < 4 && ok && !(image == 2 && s.shore.empty()) && !(image == 3 && s.flow.empty()); ++image)
     {
         IDirect3DSurface9* surface = 0;
         ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
@@ -1026,10 +1299,12 @@ bool toolsWriteWater(const char* base, const char*& message)
                 {
                     const std::size_t c = (static_cast<std::size_t>(j) * kSide + i) * 4;
                     const float* const p = &s.map[c];
-                    const float* const q = image == 2 ? &s.shore[c] : p;
+                    const float* const q = image == 2 ? &s.shore[c] : image == 3 ? &s.flow[c] : p;
                     // The shore map: the crests (cos of the phase) where the train runs, dimmer the
                     // deeper (to half the peak wavelength), land black
-                    const float t = image == 0 ? 0.5f + p[0] / 512.0f
+                    // The flow map: the speed over twice the mean, white
+                    const float t = image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
+                                  : image == 0 ? 0.5f + p[0] / 512.0f
                                   : image == 1 ? (p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f)
                                   : (q[0] > 0.0f && (q[2] != 0.0f || q[3] != 0.0f))
                                     ? (0.5f + 0.5f * std::cos(q[1])) * (1.0f - 0.75f * std::min(q[0] / static_cast<float>(0.5 * s.info.wavelength), 1.0f))
@@ -1040,7 +1315,7 @@ bool toolsWriteWater(const char* base, const char*& message)
                         + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
                 }
             surface->UnlockRect();
-            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : "-shore.png")).c_str(),
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : "-flow.png")).c_str(),
                                         D3DXIFF_PNG, surface, 0, 0) >= 0;
         }
         else

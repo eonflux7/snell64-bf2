@@ -13,7 +13,8 @@
 //   cloudCoverage 0.7
 //
 // The water's type (render milestone 23, task 4) is here too: waterType, or its constituents
-// waterChlorophyll, waterCdom and waterSediment after it.
+// waterChlorophyll, waterCdom and waterSediment after it; and the rivers' current (task 7):
+// waterFlowTo, the bearing they run toward, and waterFlowSpeed.
 //
 // The values go through the console as typed lines, so they take the variables' own ranges, and
 // the console changes them live afterwards (until the next load).
@@ -54,6 +55,7 @@ const WeatherDefault kDefaults[] = {
     { "weatherVisibility", "25000" }, { "weatherAerosol", "0" }, { "weatherMixing", "1500" },
     { "weatherAltitude", "-100000" }, { "cloudPreset", "0" },     { "cloudCoverage", "0.4" },
     { "waterType", "5" },   // coastal 1, clear coastal water (render milestone 23, task 4)
+    { "waterFlowTo", "-1" }, { "waterFlowSpeed", "0" },   // still water (render milestone 23, task 7)
 };
 const int kDefaultCount = sizeof(kDefaults) / sizeof(kDefaults[0]);
 
