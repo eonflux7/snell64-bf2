@@ -145,6 +145,7 @@ struct Bake
     std::vector<float> flow;         // kSide^2 x 4, the flow map's r g b a
     std::vector<unsigned char> obstacle;   // kSide^2: of a water texel's 2 kFlowObstacleRays rays, those an object (rock, pier) stood in
     int flowObstacles;               // water texels with any
+    std::vector<float> potential;    // kSide^2: the flow's potential, -1 where none flows (tools.water)
     int flowInlets, flowOutlets, flowIterations;
     double flowArea, flowWidth, flowSpeed, flowResidual;   // m^2, m, m/s from the width; the solve's
     double flowFroude[5];            // of the flowing water, Froude number under 0.3, 0.6, 0.8, 1, past it
@@ -171,6 +172,7 @@ struct OpenState
     std::vector<float> shore;        // and its shore map
     std::vector<float> flow;         // and its flow map
     std::vector<unsigned char> obstacle;   // and its obstacles (empty without a current)
+    std::vector<float> potential;    // and its flow's potential
     float flowSpeed;                 // the mean speed uploaded with the constants, m/s
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
@@ -877,6 +879,9 @@ void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<
     }
     b.flowIterations = it;
     b.flowResidual = norm / norm0;
+    b.potential.assign(count, -1.0f);
+    for (std::size_t u = 0; u < n; ++u)
+        b.potential[cells[u]] = static_cast<float>(phi[u]);
 
     // The velocities: each face's flux over the face's section per metre (the two texels' mean depth
     // times their open share), each axis's two faces averaged (positive along +x, +z). Over the
@@ -1197,6 +1202,8 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         std::vector<float>().swap(s.bake.shore);
         std::vector<float>().swap(s.bake.flow);
         s.obstacle.swap(s.bake.obstacle);
+        s.potential.swap(s.bake.potential);
+        std::vector<float>().swap(s.bake.potential);
         std::vector<unsigned char>().swap(s.bake.obstacle);
         s.info = s.bake;
         s.haveDir = true;
@@ -1381,7 +1388,8 @@ void rendererWaterOpenUnbind()
 // signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black), its fetch
 // to base-fetch.png (log2, 16 m black to 64 km white), the shore map's crests to base-shore.png and
 // the rivers' speed to base-flow.png (white twice the mean) and the foam they carry to
-// base-flowfoam.png (white full cover), the obstacles standing out of them to base-obstacles.png.
+// base-flowfoam.png (white full cover), the obstacles standing out of them to base-obstacles.png
+// and the flow's potential to base-potential.png (bands 1/64 apart).
 bool toolsWriteWater(const char* base, const char*& message)
 {
     OpenState& s = st();
@@ -1478,9 +1486,10 @@ bool toolsWriteWater(const char* base, const char*& message)
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
     auto skip = [&s](int image) {
-        return (image == 2 && s.shore.empty()) || ((image == 3 || image == 4) && s.flow.empty()) || (image == 5 && s.obstacle.empty());
+        return (image == 2 && s.shore.empty()) || ((image == 3 || image == 4) && s.flow.empty()) || (image == 5 && s.obstacle.empty())
+            || (image == 6 && s.potential.empty());
     };
-    for (int image = 0; image < 6 && ok; ++image)
+    for (int image = 0; image < 7 && ok; ++image)
     {
         if (skip(image))
             continue;
@@ -1499,7 +1508,10 @@ bool toolsWriteWater(const char* base, const char*& message)
                     // deeper (to half the peak wavelength), land black
                     // The flow map: the speed over twice the mean, white; the foam it carries
                     // The share of the section the obstacles close, grey 0.3 open water to white closed
-                    const float t = image == 5 ? (p[0] > 0.0f || s.obstacle[c / 4] ? 0.3f + 0.7f * s.obstacle[c / 4] / (2.0f * kFlowObstacleRays) : 0.0f)
+                    // The flow's potential, 1 at the entries, banded every 1/64 (black where none flows)
+                    const float t = image == 6 ? (s.potential[c / 4] < 0.0f ? 0.0f
+                                                  : 0.25f + 0.75f * (0.5f + 0.5f * std::cos(6.2832f * 64.0f * s.potential[c / 4])))
+                                  : image == 5 ? (p[0] > 0.0f || s.obstacle[c / 4] ? 0.3f + 0.7f * s.obstacle[c / 4] / (2.0f * kFlowObstacleRays) : 0.0f)
                                   : image == 4 ? q[2]
                                   : image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
                                   : image == 0 ? 0.5f + p[0] / 512.0f
@@ -1513,7 +1525,7 @@ bool toolsWriteWater(const char* base, const char*& message)
                         + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
                 }
             surface->UnlockRect();
-            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : image == 3 ? "-flow.png" : image == 4 ? "-flowfoam.png" : "-obstacles.png")).c_str(),
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : image == 3 ? "-flow.png" : image == 4 ? "-flowfoam.png" : image == 5 ? "-obstacles.png" : "-potential.png")).c_str(),
                                         D3DXIFF_PNG, surface, 0, 0) >= 0;
         }
         else
