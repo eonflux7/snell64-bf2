@@ -72,6 +72,7 @@
 #include "Texture.h"
 #include "../Geom/Terrain.h"
 #include "../Physics/HeightmapCluster.h"
+#include "../Scene/Object/ObjectManager.h"
 
 #include <algorithm>
 #include <atomic>
@@ -86,6 +87,7 @@
 
 namespace dice {
 namespace hfe {
+extern IBase* objectManager;   // PluginEntry.cpp's cached host singleton: the obstacles' raycasts
 namespace dx9rend {
 
 extern void* g_rendererBase;
@@ -121,6 +123,7 @@ const double kFlowStokes = 0.44;     // the steepest wave, a k (Stokes: H / lamb
 const double kFlowBreakDepth = 0.39; // and the highest, a / h (the breaking index 0.78, the shore's)
 const double kFlowFoamRise = 1.0;    // s: breaking whitens its water in about this [chosen: a wave's period]
 const double kFlowFoamLife = 8.0;    // s: the foam's life on the water [chosen: fresh water's, seconds]
+const float kFlowObstacleRise = 0.05f;   // m above the sea the obstacles' rays run (what stands out of the water)
 
 struct Bake
 {
@@ -137,6 +140,8 @@ struct Bake
     double flowTo;                   // the rivers' bearing (radians, 0 toward +z, pi/2 toward +x); negative none
     double flowSpeedSet;             // renderer.waterFlowSpeed, m/s; 0 from the width
     std::vector<float> flow;         // kSide^2 x 4, the flow map's r g b a
+    std::vector<unsigned char> obstacle;   // kSide^2: water texels an object stands out of (rocks, piers)
+    int flowObstacles;
     int flowInlets, flowOutlets, flowIterations;
     double flowArea, flowWidth, flowSpeed, flowResidual;   // m^2, m, m/s from the width; the solve's
     double flowFroude[5];            // of the flowing water, Froude number under 0.3, 0.6, 0.8, 1, past it
@@ -675,6 +680,9 @@ double standingWaves(double U, double h, double& k, double& a)
 // The width is the flowing water's area over half its banks' length (Cauchy-Crofton: pi / 4 of the
 // texel faces between water and land). The map stores the velocity over that mean speed.
 //
+// Objects standing out of the water (rocks, piers: rays through their collision meshes, sampled
+// with the heights) are banks to the flow.
+//
 // Contract 46: the standing waves (standingWaves) and the foam the rivers carry. Where the waves
 // break the foam is made at a rate (1 - 1 / B) / kFlowFoamRise toward full cover (B the forced
 // amplitude over the most the waves hold); it rides the surface's velocity and fades over
@@ -683,8 +691,12 @@ double standingWaves(double U, double h, double& k, double& a)
 // where the surface's flow converges (slack water by the banks) the foam gathers, up to full cover.
 // The distance downstream s solves u . grad(s) = |u| the same way (zero at the entries): its level
 // sets cross the flow, the standing waves' crests.
-void flowBake(Bake& b, const std::vector<unsigned char>& water, const std::vector<unsigned char> open[4], double cell)
+void flowBake(Bake& b, const std::vector<unsigned char>& sea, const std::vector<unsigned char> open[4], double cell)
 {
+    // The objects standing out of the water (rocks, piers) are banks to the flow
+    std::vector<unsigned char> water(sea);
+    for (std::size_t k = 0; k < water.size() && k < b.obstacle.size(); ++k)
+        water[k] = water[k] && !b.obstacle[k];
     const std::size_t count = static_cast<std::size_t>(kSide) * kSide;
     b.flow.assign(count * 4, 0.0f);
     b.flowInlets = b.flowOutlets = b.flowIterations = 0;
@@ -1167,6 +1179,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         std::vector<float>().swap(s.bake.texels);
         std::vector<float>().swap(s.bake.shore);
         std::vector<float>().swap(s.bake.flow);
+        std::vector<unsigned char>().swap(s.bake.obstacle);
         s.info = s.bake;
         s.haveDir = true;
         s.mapNew = true;
@@ -1178,10 +1191,11 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                      std::exp2(s.info.meanLog2Fetch), 100.0 * s.info.deepShare, s.info.ms);
         if (s.info.flowTo >= 0.0)
             std::fprintf(stderr, "[WATER] flow toward %.0f degrees: %d entries, %d exits, %.0f m^2 flowing, %.1f m wide, "
-                         "%.2f m/s from the width; %d iterations, residual %.1e; standing waves break over %.2f %%, "
-                         "foam carried %.2f %%\n", s.info.flowTo * 180.0 / kPi,
+                         "%.2f m/s from the width; %d iterations, residual %.1e; %d texels of obstacles; standing waves "
+                         "break over %.2f %%, foam carried %.2f %%\n", s.info.flowTo * 180.0 / kPi,
                          s.info.flowInlets, s.info.flowOutlets, s.info.flowArea, s.info.flowWidth, s.info.flowSpeed,
-                         s.info.flowIterations, s.info.flowResidual, 100.0 * s.info.flowBreaking, 100.0 * s.info.flowFoam);
+                         s.info.flowIterations, s.info.flowResidual, s.info.flowObstacles, 100.0 * s.info.flowBreaking,
+                         100.0 * s.info.flowFoam);
     }
 
     // A new level, a new sea (the spreading and the level's fetch come with each spectrum) or the
@@ -1233,6 +1247,32 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
                     const float z = std::min(-half + (j + 0.5f) * cell, inside);
                     b.heights[static_cast<std::size_t>(j) * kSide + i] = cluster->getHeightInWorldCoords(x, z);
                 }
+            // Task 7 (contract 46): what stands out of the rivers' water, for the flow. Two rays across
+            // each water texel just above the surface, along x and z, through the objects' collision
+            // meshes: a rock or a pier is hit, a bridge's deck above the water is not
+            b.obstacle.clear();
+            b.flowObstacles = 0;
+            if (flowTo >= 0.0 && objectManager)
+            {
+                world::ObjectManager* const objects = reinterpret_cast<world::ObjectManager*>(objectManager);
+                b.obstacle.assign(b.heights.size(), 0);
+                const float y = sea + kFlowObstacleRise;
+                for (int j = 0; j < kSide; ++j)
+                    for (int i = 0; i < kSide; ++i)
+                    {
+                        const std::size_t k = static_cast<std::size_t>(j) * kSide + i;
+                        if (!(b.heights[k] < sea))
+                            continue;
+                        const float x = -half + (i + 0.5f) * cell, z = -half + (j + 0.5f) * cell;
+                        const Vec3 fromX = { x - 0.5f * cell, y, z }, alongX = { cell, 0.0f, 0.0f };
+                        const Vec3 fromZ = { x, y, z - 0.5f * cell }, alongZ = { 0.0f, 0.0f, cell };
+                        if (objects->raycast(fromX, alongX, 0, 0, 0) || objects->raycast(fromZ, alongZ, 0, 0, 0))
+                        {
+                            b.obstacle[k] = 1;
+                            ++b.flowObstacles;
+                        }
+                    }
+            }
             s.done = false;
             s.building = true;
             s.thread = std::thread([]() {
@@ -1374,6 +1414,9 @@ bool toolsWriteWater(const char* base, const char*& message)
                      s.info.flowArea, s.info.flowWidth, s.flowSpeed,
                      rendererWaterFlowSpeed() > 0.0f ? "renderer.waterFlowSpeed" : "from the width",
                      s.info.flowIterations, s.info.flowResidual);
+    if (s.info.flowTo >= 0.0)
+        std::fprintf(f, "[obstacles] %d water texels an object stands out of (rocks, piers): banks to the flow\n",
+                     s.info.flowObstacles);
     if (s.info.flowTo >= 0.0)
         std::fprintf(f, "[standing] of the flowing water, Froude number under 0.3 %.1f %%, 0.3-0.6 %.1f %%, 0.6-0.8 %.1f %%, "
                         "0.8-1 %.1f %%, past 1 %.1f %%; the standing waves break over %.2f %%, the foam carried covers "
