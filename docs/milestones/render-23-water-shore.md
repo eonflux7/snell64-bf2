@@ -164,6 +164,30 @@ Tasks:
    flat plane per level, so the flow's line comes from the channel's axis in the open-water map
    and its sense (downstream) is map data in the mod's `settings/`, like the water type; its
    speed from the channel's width.
+   The current: built (contract 45, 2026-11-24). Baked with the open-water map (`flowBake`,
+   `WaterOpen.cpp`) into a third block of its texture: a steady friction-dominated flow (Manning:
+   unit discharge q = h^(5/3) S^(1/2) / n down the surface's slope), so with continuity
+   div(h^(5/3) grad φ) = 0 over the water, φ 1 where a river enters the map (an edge run of water
+   under 1 km whose outward normal is against the bearing) and 0 where it leaves or meets open sea,
+   no flux through the banks; preconditioned conjugate gradients over the water connected to an
+   entry or exit; velocity q / h, so the thalweg runs faster than the shallows, the banks still and
+   a narrow reach faster than a wide one. The sense is `renderer.waterFlowTo` (the bearing the
+   rivers run toward; −1 still water, the default; a level's weather file sets it: Kunar 225, the
+   Kunar running south-west). The mean speed from the channel's width (its area over half its
+   banks' length) by downstream hydraulic geometry (Leopold and Maddock 1953: velocity ∝
+   width^0.2), anchored at 1 m/s for 30 m [chosen: the surface's slope, which would set it, is not
+   in a flat plane]; `renderer.waterFlowSpeed` overrides it (m/s). The shader advects the slope
+   maps and the foam by a flow map (Vlachos 2010: two phases 1 s apart over a 2 s period,
+   cross-faded, the phase offset by noise over 16 m), the two phases' LEAN moments mixed (the
+   mixture's variance keeps what the cross-fade averages away); the waves carried with the water
+   are seen at their frequency Doppler-shifted by k · U. The slopes loop over the phases (one in
+   still water); the foam reads both always (its reads need the implicit gradients: explicit ones
+   overflow ps_3_0's 32 registers); the caustics take the dominant phase, their contrast fading
+   where the phases hand over (two phases do not fit the registers). Kunar: one entry, one exit,
+   20.9 m wide, 0.93 m/s, the solve 1685 iterations. `tools.water` writes `[flow]` and
+   `NAME-flow.png`. Seen by an agent: the flow map (fast in narrow reaches, still at the banks),
+   Kunar `river` draws; the motion is the owner's to judge. Next: standing waves and foam behind rocks and banks (where the flow is
+   shallow and fast, Froude number near 1), and foam the river carries.
 8. **Whitecaps.** Wind gusts varying over hundreds of metres, and breaking weighted by the 503 m
    cascade's crests too, so no scale reads as a tile.
 9. **Checks.** Muttrah City `ssr-shore`, `seahigh`; The Falklands; Kunar's rivers; GPU cost.

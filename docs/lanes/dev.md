@@ -15,7 +15,10 @@ run time. Retired, their behaviour now unconditional: `BF2_REVERSED_Z`, `BF2_HDR
 
 ## `perf`: the old path while a change is developed
 
-None at present. Retired, their behaviour now unconditional: `BF2_PERF_FXKEY`,
+- `BF2_PERF_FXASYNC=0`: source effects with a stale cache compile on the main thread, the game
+  standing still, as before ([perf-load.md](perf-load.md#state)).
+
+Retired, their behaviour now unconditional: `BF2_PERF_FXKEY`,
 `BF2_PERF_FXPREFETCH`, `BF2_PERF_CONPARSE`, `BF2_PERF_CLASSINDEX`, `BF2_PERF_MEMEINDEX`,
 `BF2_PERF_FXEVENT`, `BF2_PERF_TSCCAL`, `BF2_PERF_VIDEODETECT`, `BF2_PERF_FILEPREFETCH`,
 `BF2_PERF_CONDISPATCH`, `BF2_PERF_SWIFFIMG`, `BF2_PERF_PROBECACHE`, `BF2_PERF_FXSTAT`,

@@ -81,7 +81,7 @@ main thread asked for the effects.
 muttrah_city_2 skirmish, autohost, warm caches: boot to the first menu frame 1.4 s (10.4 s at the
 baseline); the menu click to the end of the loading bar 14.2 s (about 190 s at the baseline, 22.5 s
 with the caches and prefetch off). Every change below was accepted in game and its flag retired
-(2026-11-17); the commit messages carry the full measurements.
+(2026-11-17) unless its row names a flag; the commit messages carry the full measurements.
 
 | Change | Lane | Measured |
 |---|---|---|
@@ -93,6 +93,7 @@ with the caches and prefetch off). Every change below was accepted in game and i
 | `effects.lst` appended to, not replaced (it held one name); a new cache directory seeds it from the newest sibling's | `perf` | Not yet measured |
 | Each include file's info looked up once per frame (`FXSTAT`) | `perf` | −4.2 s (menu switch and Geometries) |
 | Bytecode cache for `compileEffectFile`, `@HOME@/<mod>/cache/fxsrc/` (`FXSRC`) | `perf` | Boot to menu 10.6 s to 8.75 s |
+| Source effects with a stale cache compile on up to 4 workers (`Effect.cpp`, `fxsReloadAsync`): the main thread expands includes and defines (`D3DPreprocess`), the worker compiles; meanwhile the effect keeps its bound bytecode or binds its last (`<name>.last.fxs`), swapped at a frame's start. An effect never compiled still compiles on the main thread. `BF2_PERF_FXASYNC=0` the serial path; awaiting the owner | `perf` | Not yet measured (the water's effects: minutes each, the game frozen) |
 | Console lines tokenized without `std::istringstream` (`CONPARSE`) | `perf` | About −4.5 s of part:Objects |
 | Console dispatch: dotted first token skips keyword compares; binding range cached (`CONDISPATCH`) | `perf` | part:Objects 9.0 s to 7.9 s |
 | Id and name index for ClassManager's class list (`CLASSINDEX`) | `perf` | About −50 ms |
