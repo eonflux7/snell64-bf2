@@ -167,6 +167,7 @@ struct OpenState
     std::vector<float> map;          // the last bake's texels (kept for tools.water)
     std::vector<float> shore;        // and its shore map
     std::vector<float> flow;         // and its flow map
+    std::vector<unsigned char> obstacle;   // and its obstacles (empty without a current)
     float flowSpeed;                 // the mean speed uploaded with the constants, m/s
     Bake info;                       // its inputs and statistics (no arrays)
     bool mapNew;                     // not uploaded yet
@@ -1179,6 +1180,7 @@ void rendererWaterOpenFrame(bool automatic, double windX, double windZ)
         std::vector<float>().swap(s.bake.texels);
         std::vector<float>().swap(s.bake.shore);
         std::vector<float>().swap(s.bake.flow);
+        s.obstacle.swap(s.bake.obstacle);
         std::vector<unsigned char>().swap(s.bake.obstacle);
         s.info = s.bake;
         s.haveDir = true;
@@ -1358,7 +1360,7 @@ void rendererWaterOpenUnbind()
 // signed distance to base-distance.png (grey 0.5 the shore, +-256 m white and black), its fetch
 // to base-fetch.png (log2, 16 m black to 64 km white), the shore map's crests to base-shore.png and
 // the rivers' speed to base-flow.png (white twice the mean) and the foam they carry to
-// base-flowfoam.png (white full cover).
+// base-flowfoam.png (white full cover), the obstacles standing out of them to base-obstacles.png.
 bool toolsWriteWater(const char* base, const char*& message)
 {
     OpenState& s = st();
@@ -1454,7 +1456,10 @@ bool toolsWriteWater(const char* base, const char*& message)
 
     IDirect3DDevice9* const d = device();
     bool ok = d != 0;
-    for (int image = 0; image < 5 && ok && !(image == 2 && s.shore.empty()) && !(image >= 3 && s.flow.empty()); ++image)
+    for (int image = 0; image < 6 && ok; ++image)
+    {
+        if ((image == 2 && s.shore.empty()) || ((image == 3 || image == 4) && s.flow.empty()) || (image == 5 && s.obstacle.empty()))
+            continue;
     {
         IDirect3DSurface9* surface = 0;
         ok = d->CreateOffscreenPlainSurface(kSide, kSide, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &surface, 0) >= 0;
@@ -1470,7 +1475,9 @@ bool toolsWriteWater(const char* base, const char*& message)
                     // The shore map: the crests (cos of the phase) where the train runs, dimmer the
                     // deeper (to half the peak wavelength), land black
                     // The flow map: the speed over twice the mean, white; the foam it carries
-                    const float t = image == 4 ? q[2]
+                    // The obstacles white, the other water grey
+                    const float t = image == 5 ? (s.obstacle[c / 4] ? 1.0f : p[0] > 0.0f ? 0.3f : 0.0f)
+                                  : image == 4 ? q[2]
                                   : image == 3 ? 0.5f * std::sqrt(q[0] * q[0] + q[1] * q[1])
                                   : image == 0 ? 0.5f + p[0] / 512.0f
                                   : image == 1 ? (p[0] > 0.0f ? (p[3] - 4.0f) / 12.0f : 0.0f)
@@ -1483,13 +1490,14 @@ bool toolsWriteWater(const char* base, const char*& message)
                         + static_cast<std::size_t>(kSide - 1 - j) * locked.Pitch)[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
                 }
             surface->UnlockRect();
-            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : image == 3 ? "-flow.png" : "-flowfoam.png")).c_str(),
+            ok = D3DXSaveSurfaceToFileA((root + (image == 0 ? "-distance.png" : image == 1 ? "-fetch.png" : image == 2 ? "-shore.png" : image == 3 ? "-flow.png" : image == 4 ? "-flowfoam.png" : "-obstacles.png")).c_str(),
                                         D3DXIFF_PNG, surface, 0, 0) >= 0;
         }
         else
             ok = false;
         if (surface)
             surface->Release();
+        }
     }
     s.message = ok ? root + ".txt" : "could not write the images";
     message = s.message.c_str();
