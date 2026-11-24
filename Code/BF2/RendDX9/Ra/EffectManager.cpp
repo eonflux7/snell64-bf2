@@ -2863,6 +2863,14 @@ compiled:
             ->addListener(reinterpret_cast<IBase*>(this), name, 4);
 #endif
     }
+    else if (errors && errors->GetBufferSize() > 1)
+    {
+        // [DEV] No profile compiled: the last attempt's messages to the renderer's log, where
+        // compileEffectFromFile's go (a ps_3_0 shader over its registers failed silently, every
+        // profile retried on the main thread)
+        ::renddx9abi::logf("Ra::EffectManager::compileEffect(\"%s\"): no profile compiled; compiler says: %.*s", name.c_str(),
+                           static_cast<int>(errors->GetBufferSize()), static_cast<const char*>(errors->GetBufferPointer()));
+    }
 
     raRelease(errors);
 
