@@ -145,9 +145,20 @@ Tasks:
    (rocks and quays). Open: Omaha's flat is shallow for hundreds of metres, so the whole of it
    is surf zone and the plumes hardly show; a rectangular shadow edge on the turbid water at
    `surf-plume` (the shadows' cover, not this task's).
-6. **Caustics.** The sun focused by the waves onto the bed in shallow water, from the slopes the
-   FFT already makes (the refracted sun's convergence), fading with depth as the focus blurs and
-   with the water type's extinction; on the terrain and objects under the water.
+6. **Caustics:** built (contract 44, 2026-11-24). The sun focused by the waves on the bed: the
+   ratio of the bed's irradiance to flat water's, 1 / |det(I + d G H)| (`Ra_WaterCaustics`,
+   `rashaderwaterbase.fx`), H the surface's slope derivatives where the sun's ray to the bed
+   crossed it, from the two finer cascades (the 503 m one and the shore's train focus only past
+   100 m), G the refracted ray's travel per unit slope (any sun height). H is filtered to a blur:
+   the sun's disk, the slopes of waves under a quarter of it (each mip's LEAN variance, iterated
+   to the fixed point), and at least 4 pixels' footprint on the bed (finer, the foci sparkle at a
+   glancing view). Peak 10; past a fold at least the flat light (the overlapping sheets), so the
+   bed's mean brightness holds (+4 % at `caustics`; it was −20 %). Contrast falls as e^(−b d / μ)
+   with the water type's scattering and the surf's sediment (`RaWaterMedium[0..3].w`), times
+   `renderer.waterCaustics` (0–4, 1; 0 none). Only on the bed's sunlit share (its sun against the
+   sky's light), within 40 m of depth, on the terrain and objects under the water alike. Omaha
+   Beach `caustics` (sun 0.3/−0.9/0.3, type 0, no surf sediment): a network of light on the sand
+   and the hedgehogs' feet; `surf-along` as without at a distance.
 7. **Rivers.** A current: the waves' ripples and foam advected downstream, the current shifting
    the spectrum's frequencies, standing waves and foam behind rocks and banks. The water is one
    flat plane per level, so the flow's line comes from the channel's axis in the open-water map
