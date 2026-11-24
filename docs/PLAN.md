@@ -5,7 +5,26 @@ and tasks are in its own document under [milestones/](milestones/) (`render`) or
 document under [lanes/](lanes/) (`tools`, `ui`); what is active now is in [STATUS.md](STATUS.md).
 When the owner accepts a milestone, its row here says so, with its commits.
 
+## `platform`
+
+Design and rules: [lanes/platform.md](lanes/platform.md#milestones); work on branch `platform`
+(owner, 2026-11-24).
+
+| Milestone | State |
+|---|---|
+| 1. Framework and 2D | In progress: [platform-1-framework.md](milestones/platform-1-framework.md) |
+| 2. World | Planned |
+| 3. Light | Planned |
+| 4. Vegetation and surfaces | Planned |
+| 5. Water | Planned |
+| 6. Effects | Planned |
+| 7. Sky and post | Planned |
+| 8. Switch (merge into `main`) | Planned |
+
 ## `render`
+
+Paused while the `platform` lane runs (owner, 2026-11-24); its open milestones resume on the new
+renderer after platform milestone 8.
 
 Open milestones: [milestones/](milestones/); accepted ones are folded into the renderer as built,
 [render/](render/README.md).
@@ -28,13 +47,13 @@ Open milestones: [milestones/](milestones/); accepted ones are folded into the r
 | 16. Water | Accepted | `git log --grep 'milestone 16'`, and the deletion ("milestone 16 accepted") |
 | 13. HDR bloom + auto-exposure | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 13'` |
 | 14. Run-time sun term (lightmaps' sun channel dropped) | Accepted (owner, 2026-11-23) | `dc1a7223`–`c1060597` |
-| 17. Far terrain | In progress: tasks 1–5 built, seen by the owner (fine for now); bakes for more levels next | `git log --grep 'milestone 17'` |
+| 17. Far terrain | Paused: tasks 1–5 built, seen by the owner (fine for now); bakes for more levels next | `git log --grep 'milestone 17'` |
 | 18. Atmosphere rework (one atmosphere, weather per level) | Accepted (owner, 2026-11-23) | `git log --grep 'milestone 18'` |
 | 19. Hex-tiled detail textures | Accepted | `git log --grep 'milestone 19'` |
 | 20. GTAO (split out of 14: small-scale occlusion; owner, 2026-11-23) | Not planned | — |
-| 21. Tonemap and grade | In progress: tasks 1, 2, 4, 6 built; 3 deferred | `git log --grep 'milestone 21'` |
-| 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | In progress: task 1 built (the whole map, one cell per patch) | `git log --grep 'milestone 22'` |
-| 23. Water at the shore, water types, caustics, rivers, whitecaps | In progress: tasks 1–7 built | `git log --grep 'milestone 23'` |
+| 21. Tonemap and grade | Paused: tasks 1, 2, 4, 6 built; 3 deferred | `git log --grep 'milestone 21'` |
+| 22. Far overgrowth (the whole map's trees past the level's overgrowth range) | Paused: task 1 built (the whole map, one cell per patch) | `git log --grep 'milestone 22'` |
+| 23. Water at the shore, water types, caustics, rivers, whitecaps | Paused: tasks 1–7 built | `git log --grep 'milestone 23'` |
 
 The owner accepts each milestone in game, by eye, against the `tools` lane's reference views
 ([tools.md](lanes/tools.md)). GPU cost waits for one pass once the planned milestones are in (owner,
@@ -76,6 +95,7 @@ Design: [lanes/ui.md](lanes/ui.md#milestones).
 | 2. Sun shadow tuning as console variables (lane `render`) | `render(csm)` | Accepted (`2e605f93`) |
 | 3. Debug menu and performance overlay | `ui(debug)` | Accepted (`ae0ee355`, `d9086de0`, `4b10dea9`; tabs and console polish `134889d5`) |
 | 4. Console frontend | `ui(console)` | Accepted (`cfc56237`); retail drawing deleted |
+| 5. Swiff replaced (RmlUi): PR's server browser, Esc menu, end-of-round screen | `ui(menu)` | Planned, after the `platform` lane |
 
 ## `perf`, `compat`, `fix`
 
