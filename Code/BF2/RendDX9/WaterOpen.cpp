@@ -855,20 +855,24 @@ void flowBake(Bake& b, const std::vector<unsigned char>& water, const std::vecto
     b.flowIterations = it;
     b.flowResidual = norm / norm0;
 
-    // The velocities: each axis's two faces' fluxes averaged (positive along +x, +z), over the depth
+    // The velocities: each face's flux over the face's depth (the two texels' mean), each axis's two
+    // faces averaged (positive along +x, +z). Over the texel's own depth instead, a bank texel beside
+    // deep water would take the deep face's discharge through its few centimetres
     std::vector<double> vx(n), vz(n);
     double mean = 0.0;
     for (std::size_t u = 0; u < n; ++u)
     {
-        double flux[4];
+        const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
+        double v[4];
         for (int f = 0; f < 4; ++f)
         {
-            const double other = across[u * 4 + f] >= 0 ? phi[across[u * 4 + f]] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
-            flux[f] = c[u * 4 + f] * (other - phi[u]);   // into this texel through face f
+            const int m = across[u * 4 + f];
+            const double other = m >= 0 ? phi[m] : ghost[u * 4 + f] >= 0.0 ? ghost[u * 4 + f] : phi[u];
+            const double hf = m >= 0 ? 0.5 * (h + std::max(static_cast<double>(b.sea - b.heights[cells[m]]), kFlowMinDepth)) : h;
+            v[f] = c[u * 4 + f] * (other - phi[u]) / hf;   // into this texel through face f
         }
-        const double h = std::max(static_cast<double>(b.sea - b.heights[cells[u]]), kFlowMinDepth);
-        vx[u] = 0.5 * (flux[0] - flux[1]) / h;
-        vz[u] = 0.5 * (flux[2] - flux[3]) / h;
+        vx[u] = 0.5 * (v[0] - v[1]);
+        vz[u] = 0.5 * (v[2] - v[3]);
         mean += std::sqrt(vx[u] * vx[u] + vz[u] * vz[u]);
     }
     mean /= static_cast<double>(n);
