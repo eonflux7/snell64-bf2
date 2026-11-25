@@ -3,7 +3,7 @@
 
   docs.py check          every check; exit 1 on an error (warnings do not fail)
   docs.py gen            rewrite the generated parts (STATUS, PLAN states, docs/console.md)
-  docs.py find ID        where an ID (render-23, render-23.7, ui-5, fix-A, D-3, Q-2) is
+  docs.py find ID        where an ID (render-23, render-23.7, ui-5, fix-3, D-3, Q-2) is
                          defined and every document that names it
   docs.py log ID         the commits of a milestone or task, old wording included
   docs.py cost           what a session reads before it starts work
@@ -22,13 +22,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs")
 LANES = ("render", "ui", "tools", "perf", "fix", "compat", "dev", "build")
 
-# An ID: a milestone `render-23`, a task `render-23.7`, a fix `fix-A`, a decision `D-3`, an
+# An ID: a milestone `render-23`, a task `render-23.7`, a fix `fix-3`, a decision `D-3`, an
 # open question `Q-2`. Not followed by `-word` (file names such as render-23-water-shore.md).
-ID_RE = re.compile(r"(?<![\w/.-])((?:%s)-\d+(?:\.\d+)?|fix-[A-Z]|[DQ]-\d+)(?![\w-]|\.\d)"
+ID_RE = re.compile(r"(?<![\w/.-])((?:%s)-\d+(?:\.\d+)?|[DQ]-\d+)(?![\w-]|\.\d)"
                    % "|".join(LANES))
 MILESTONE_HEAD_RE = re.compile(r"^#{2,5} `?((?:%s)-\d+)`? (.+)$" % "|".join(LANES))
 TASK_HEAD_RE = re.compile(r"^#{2,5} `?((?:%s)-\d+\.\d+)`? (.+)$" % "|".join(LANES))
-FIX_HEAD_RE = re.compile(r"^#{2,5} `?(fix-[A-Z])`? (.+)$")
+FIX_HEAD_RE = re.compile(r"^#{2,5} `?(fix-\d+)`? (.+)$")
 PLAN_ROW_RE = re.compile(r"^\| `((?:%s)-\d+)` ([^|]+)\|" % "|".join(LANES))
 DECISION_ROW_RE = re.compile(r"^\| (D-\d+) \|")
 QUESTION_RE = re.compile(r"^#{2,5} (Q-\d+) (.+)$")
@@ -167,8 +167,9 @@ def collect():
                 in_code = not in_code
             if in_code:
                 continue
-            for rx, table in ((TASK_HEAD_RE, tasks), (MILESTONE_HEAD_RE, milestones),
-                              (FIX_HEAD_RE, others), (QUESTION_RE, others)):
+            # A fix (`fix-3`) has a milestone's shape but no State line: matched first.
+            for rx, table in ((FIX_HEAD_RE, others), (TASK_HEAD_RE, tasks),
+                              (MILESTONE_HEAD_RE, milestones), (QUESTION_RE, others)):
                 m = rx.match(ln)
                 if m:
                     it = Item(m.group(1), m.group(2), path, i + 1, state_after(lines, i))

@@ -13,7 +13,7 @@ live only in its document; the open milestones table is generated from them
 | `perf` (load) | paused | Trace, caches, prefetch, worker compiles; flags retired | [perf-load.md](lanes/perf-load.md#state) |
 | `perf` (frame) | parked | `/O2` plugins, `tailField` table; per-draw cost done by `render-9` | [perf-frame.md](lanes/perf-frame.md#state) |
 | `compat` | parked (D-3) | rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |
-| `fix` | paused | `fix-G` to `fix-O`, `fix-Q`, `fix-R` fixed; `fix-A`, `fix-C` to `fix-F` open (packaging, build) | [fix.md](lanes/fix.md) |
+| `fix` | paused | `fix-7` to `fix-15`, `fix-17`, `fix-18` fixed; `fix-1`, `fix-3` to `fix-6` open (packaging, build) | [fix.md](lanes/fix.md) |
 
 ## Open milestones
 

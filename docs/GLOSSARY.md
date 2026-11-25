@@ -9,7 +9,7 @@ a state not listed here is an error.
 |---|---|---|
 | `render-23` | A milestone: lane, then its number in that lane | Its document's front matter (an open `render` milestone), a heading with a `State:` line (lane documents, `ui-menu.md`), or its row in [PLAN.md](PLAN.md) once accepted |
 | `render-23.7` | A task of that milestone | A heading in the milestone's document, followed by its `State:` line |
-| `fix-A` | A fix, by letter | Its heading in [fix.md](lanes/fix.md) |
+| `fix-1` | A fix, by number (`fix-A` to `fix-R` before 2026-11-25: the letter's place in the alphabet) | Its heading in [fix.md](lanes/fix.md) |
 | `D-3` | An owner's decision | Its row in [DECISIONS.md](DECISIONS.md) |
 | `Q-2` | A question waiting for the owner | Its heading in [STATUS.md](STATUS.md#open-questions-for-the-owner) |
 

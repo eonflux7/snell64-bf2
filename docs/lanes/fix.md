@@ -10,7 +10,7 @@ Status: **open** = reported here, no fix on this branch; **fixed** = commit on `
 
 ## Runtime and packaging (found on release v0.2.0-rc2)
 
-### fix-A x64 under Wine/Proton: only terrain renders, then assert `BundledMeshTemplate.cpp:1115` (open, packaging)
+### fix-1 x64 under Wine/Proton: only terrain renders, then assert `BundledMeshTemplate.cpp:1115` (open, packaging)
 `MetaFx::generate` builds the Ra permutation tables with `createEffectCompiler`, which loads
 `d3dx9_24.dll`. Under Wine this resolves to Wine's builtin, whose `ID3DXEffectCompiler` reflection is
 stubbed: the load succeeds, every lookup returns nothing, and all three meta-effects yield zero
@@ -22,34 +22,34 @@ permutations. Static meshes are invisible and bundled meshes assert.
   `requireD3dxRuntime()` probe `d3dx9_24` with one reflection call. The line-1115 assert also loses
   its message text.
 
-### fix-C x64 under Wine needs the native x64 `d3dx9_25.dll` (open, packaging)
+### fix-3 x64 under Wine needs the native x64 `d3dx9_25.dll` (open, packaging)
 Wine's builtin returns `E_NOTIMPL` from `D3DXCreateEffect` and the process ends silently. Same fix
 as A (`Apr2005_d3dx9_25_x64.cab`). `requireD3dxRuntime()` only checks `LoadLibrary`, so it passes on
 Wine's stub.
 
-### fix-D The x86 package has no rebuilt `aidll.dll` (open, packaging)
+### fix-4 The x86 package has no rebuilt `aidll.dll` (open, packaging)
 The retail `AIDLL.dll` is loaded instead and single player crashes during map load
 (`aidll.dll+0x24B27`, read at 0x10), then exits with code 42.
 
-### fix-E Fatal errors are invisible to GUI launches (open)
+### fix-5 Fatal errors are invisible to GUI launches (open)
 `BF2Log::displayErrorWindow` writes only to stderr and calls `exit(1)`; under Proton or any Windows
 GUI launch the game just disappears. Suggest a message box or an always-on crash log.
 
-### fix-F `vsdevcmd.cmd` breaks under `Program Files (x86)` (open, build)
+### fix-6 `vsdevcmd.cmd` breaks under `Program Files (x86)` (open, build)
 `%VSDEVCMD_BAT%` expanded inside a parenthesised `if` block: the `)` in `(x86)` closes it early
 (`\Microsoft was unexpected at this time.`). Fix: move the echo out of the block or use delayed
 expansion.
 
 ## Engine fixes on this branch
 
-### fix-G gameswf `as_value::string_concat` reads a freed object (fixed, `c0da0465`)
+### fix-7 gameswf `as_value::string_concat` reads a freed object (fixed, `c0da0465`)
 `drop_refs()` runs before `to_tu_string()`, the retail order. Retail's collector keeps the object
 alive until the next sweep; with native reference counting the temporary `String` is freed first, so
 `new String("abc") + ""` yields `"<object 0x…>"`. Fix: convert, then release. Not checked further
 in the binary. Possibly related: a `Number` concatenated into a string gives `0.000000` where retail
 gives `0`.
 
-### fix-H x64 bots: pure virtual call / AV from stale AI `WeaponInfo` records (fixed, `dd8b056c`, `bb755a11`)
+### fix-8 x64 bots: pure virtual call / AV from stale AI `WeaponInfo` records (fixed, `dd8b056c`, `bb755a11`)
 `GenericFireArm::enableCachedObject` gives a recycled firearm a new AI `WeaponObject` (retail does
 the same; checked in `bf2_w32ded.exe` 0x583DA0) and the old one's records still hold its `IWeapon*`.
 - `~WeaponObject` now calls a new courier slot, `IAIInformationCourier::weaponDestroyed` (appended
@@ -58,31 +58,31 @@ the same; checked in `bf2_w32ded.exe` 0x583DA0) and the old one's records still 
   weapon; both `getWeapon` overrides guard index -1.
 - Open: why retail does not crash here.
 
-### fix-I x64: `MapContainer::isValidPosition` indexes island 0xFFFFFFFF (fixed, `255e6e25`)
+### fix-9 x64: `MapContainer::isValidPosition` indexes island 0xFFFFFFFF (fixed, `255e6e25`)
 `getIsland(-1)` is unchecked in retail too; on x86 it reads 8 bytes before the vector, on x64 about
 64 GB past it. An out-of-range island now falls back to the any-island overload. Other unchecked
 `getIsland` call sites in `AIPathfinding.cpp` share the hazard.
 
-### fix-J Pure virtual calls leave no stack in the crash log (fixed, `40ad62cb`)
+### fix-10 Pure virtual calls leave no stack in the crash log (fixed, `40ad62cb`)
 `_purecall` aborts without an SEH exception. A `_set_purecall_handler` now logs registers and frames,
 then returns so the abort still happens.
 
-### fix-K Console `if`/`elseIf` compares quoted literals with their quotes (fixed, `2427c2f7`)
+### fix-11 Console `if`/`elseIf` compares quoted literals with their quotes (fixed, `2427c2f7`)
 `if v_arg2 == "meinsurgent"` was always false.
 
-### fix-L The Ra shader cache is shared across mods (fixed, `ea06cc6c`)
+### fix-12 The Ra shader cache is shared across mods (fixed, `ea06cc6c`)
 Retail keys the `.cfx` cache to `mods/bf2` for every mod, so stale vanilla blobs beat a mod's older
 `.fx` timestamps. Each mod now has its own cache.
 
-### fix-M SquadManager console bindings never registered (fixed, `456e3c5f`)
+### fix-13 SquadManager console bindings never registered (fixed, `456e3c5f`)
 Compiled in, but not registered in `ModuleGame::init`: scripts got "Unknown object or method".
 
-### fix-N Generated Ra permutation `.cfx` files never go stale (fixed, `82e04f61`, `c2ccd4bc`)
+### fix-14 Generated Ra permutation `.cfx` files never go stale (fixed, `82e04f61`, `c2ccd4bc`)
 Edits to `.fx`/`.fxh` did not invalidate the generated permutations, so shared-header changes mixed
 old and new shader code. The cache is now keyed on a hash of the preprocessed source and defines.
 `c2ccd4bc` fixes a null compiler entry the first commit introduced.
 
-### fix-O Console scripts: no `var`, `const` or assignment (fixed, `06696832`, `0fbe662b`)
+### fix-15 Console scripts: no `var`, `const` or assignment (fixed, `06696832`, `0fbe662b`)
 `OldConsole::handleCommand` had no handling for `var`, `const` or `v_x = value`; they fell through
 to the binding lookup as unknown commands, so declared variables never existed and conditions
 compared the literal name. Now as `bf2_w32ded.exe` 1.50 does (line handler 0x651EFE..0x652188 and
@@ -101,7 +101,7 @@ kits created once, soldier geometry and 1P arms present).
 Also found: retail runs a level's `Init.con` with every argument empty (`bf2_w32ded.exe` 0x465D50;
 `BF2.exe` 0x4ED7xx passes `BF2Editor` only in editor mode), as this engine does.
 
-### fix-Q StateManager indexes its mirrors with vertex-texture stages (fixed, `6eb1a727`)
+### fix-17 StateManager indexes its mirrors with vertex-texture stages (fixed, `6eb1a727`)
 The D3DX effect state manager's `SetTexture` and `SetSamplerState` (`StateManager.cpp`) index the
 texture mirror (16 stages) and the sampler mirror (8 stages) with the stage D3DX passes, unchecked.
 An effect that samples a texture in a vertex shader gets `D3DVERTEXTEXTURESAMPLER0..3` (257..260)
@@ -111,7 +111,7 @@ Now stages outside the mirror go straight to the device, as `SetTextureStageStat
 the states it does not mirror. Not checked against the retail binary; no retail or PR effect samples
 in a vertex shader, so retail never reached it.
 
-### fix-R RaShader reads a pixel shader's bytecode into 16 KB of stack (fixed)
+### fix-18 RaShader reads a pixel shader's bytecode into 16 KB of stack (fixed)
 To learn the bound pixel shader's model, `RaShader.cpp` (the shader's setup, step 3) asks
 `GetFunction` for the size and then copies the whole bytecode into a 16 KB stack array, unchecked.
 A pixel shader past 16 KB overran it, and the stack cookie failed (`__report_gsfailure`, exception
@@ -121,7 +121,7 @@ code's 16384-byte array; retail's and PR's shaders stay well under it, so retail
 
 ## Build
 
-### fix-P Plugin DLLs as incremental Ninja targets (`dd686d2c`, `64e160f2`, `d310968a`)
+### fix-16 Plugin DLLs as incremental Ninja targets (`dd686d2c`, `64e160f2`, `d310968a`)
 RendDX9, TextureAtlasBuilder, SwiffPlayer and BF2Audio build as CMake targets from shared source
 manifests, with a post-link ABI check. A one-file RendDX9 change goes from 2.5–3 min to about 8 s.
 x86 not built or tested.
