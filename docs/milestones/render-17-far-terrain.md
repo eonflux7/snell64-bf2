@@ -152,7 +152,7 @@ in-game map overlaid, the fit only refining. Placed: Kunar Province, Kashan Dese
 (all heading 0, scale 1). The least-squares height ratio means nothing where the shapes do not
 correlate (Kunar 0.19): the scaled variant takes the ratio of the reliefs; on sea levels the
 offset is pinned so the level's sea lands on 0 m.
-The bake file and its reader as built (2026-11-23): `<mod>/settings/eon64-farground/<level>.bin`
+The bake file and its reader as built (2026-11-23): `<mod>/settings/snell64-farground/<level>.bin`
 (layout at `FarGround.cpp` `loadBake`), int16 heights in the level's datum on a 60 m grid out
 to 36 km past the map's half side (about 1270 nodes a side, 3.2 MB), the GLO-90 ground at the
 placement resampled at 45 m. Datum: on a coastal level the real sea lands on the level's sea,

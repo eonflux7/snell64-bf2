@@ -86,7 +86,7 @@ The lattice is the shaders' `RaHex.fxh`, shared by the terrain and static meshes
 
 - **Which textures.** A shift breaks a pattern laid on a grid and a lookup in a strip atlas, and
   which textures those are is PR's content, so a list outside the tree says
-  (`<mod>/settings/eon64-hextiling.txt`, `Geom/HexTilingList.h`, read at each level load):
+  (`<mod>/settings/snell64-hextiling.txt`, `Geom/HexTilingList.h`, read at each level load):
   `[terrain grid]` names terrain layers kept on the square grid (Muttrah City's octagon slabs,
   tiles, cobbles, crop rows; every other layer is hex-tiled); `[static hex]` names the static mesh
   detail textures hex-tiled (every other stays on the grid). There a name alone is a whole sheet;

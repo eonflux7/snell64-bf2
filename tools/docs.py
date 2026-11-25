@@ -602,14 +602,14 @@ def docmap():
 
 def private_patterns():
     """Patterns that must never reach this public tree. Built in: personal absolute paths. More
-    from the file `git config eon64.privatePatterns` names (kept outside this tree), one regex a line."""
+    from the file `git config snell64.privatePatterns` names (kept outside this tree), one regex a line."""
     # Split so this file does not match its own patterns.
     pats = [r"/home/[a-z_][\w-]*/", r"/run/media" + "/", r"[A-Za-z]:\\" + r"Users\\"]
     hashes = set()
     email = git("config", "--get", "user.email").strip()
     if "@" in email and "noreply" not in email:
         pats.append(re.escape(email))      # read from git, never written down
-    path = git("config", "--get", "eon64.privatePatterns").strip()
+    path = git("config", "--get", "snell64.privatePatterns").strip()
     if path and os.path.exists(os.path.expanduser(path)):
         for ln in read(os.path.expanduser(path)).splitlines():
             if ln.startswith("sha256:"):
@@ -633,7 +633,7 @@ def hook_pre_commit():
     # Privacy: added lines only, so inherited text does not block a commit.
     pats, hashes, configured = private_patterns()
     if not configured:
-        rep.warn("privacy", "`git config eon64.privatePatterns <file>` is unset: built-in patterns only")
+        rep.warn("privacy", "`git config snell64.privatePatterns <file>` is unset: built-in patterns only")
     rx = re.compile("|".join("(?:%s)" % p for p in pats), re.I)
     cur = None
     for ln in git("diff", "--cached", "-U0", "--no-color").splitlines():

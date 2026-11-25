@@ -925,7 +925,7 @@ const float kAltitudeAuto = -100000.0f;
 AtmosphereWeather& rendererAtmosphereWeather();
 const char* rendererAtmosphereAerosolName(int type);
 // The level's weather file (Weather.cpp): the weather variables back to their defaults, then
-// <mod>/settings/eon64-weather/<level>.txt's lines for the loaded layer. Run at each level load.
+// <mod>/settings/snell64-weather/<level>.txt's lines for the loaded layer. Run at each level load.
 void rendererWeatherLoad();
 // What the last load applied: the file and its lines, or why the defaults stand (tools.atmosphere).
 const char* rendererWeatherSource();

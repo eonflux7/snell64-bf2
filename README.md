@@ -1,8 +1,12 @@
-# openbf2-eon64
+# Snell64
 
-An x64 Battlefield 2 client that runs the Project Reality mod (PR) offline and replaces BF2's
-renderer with a modern pipeline. It started as a fork of [OpenBF2](https://github.com/kr4uzi/OpenBF2)
-and is now developed on its own.
+Snell64 is an x64 Battlefield 2 client that runs the Project Reality mod (PR) offline and replaces
+BF2's renderer with a modern pipeline. It started as a fork of
+[OpenBF2](https://github.com/kr4uzi/OpenBF2) and is now developed on its own. The name plays on
+Refractor 2, BF2's engine: Snell's law is the law of refraction.
+
+Snell64 is unofficial and not affiliated with or endorsed by Electronic Arts or DICE. It ships no
+game data and needs an installed copy of Battlefield 2.
 
 This is a work in progress. A successful build is not a playable game; where each area stands is in
 [docs/STATUS.md](docs/STATUS.md).
@@ -73,7 +77,7 @@ slots, shader constants).
 ## Origin
 
 ```
-B2BF/OpenBF2 ─► kr4uzi/OpenBF2 ─► + realitymod/OpenBF2 PR #1 ─► openbf2-eon64
+B2BF/OpenBF2 ─► kr4uzi/OpenBF2 ─► + realitymod/OpenBF2 PR #1 ─► snell64-bf2
                                     (PR game-logic port)
 ```
 

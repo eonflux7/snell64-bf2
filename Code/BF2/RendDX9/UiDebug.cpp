@@ -15,9 +15,9 @@
 // calls, process memory, display mode, map, camera and sun. Nothing here runs while it is hidden.
 //
 // Files, in the mod's settings directory (<GSModDirectory>/settings/), never in this repository:
-//   eon64-ui.con        console lines run when the game hands the UI its host; rewritten when a UI
+//   snell64-ui.con        console lines run when the game hands the UI its host; rewritten when a UI
 //                       setting changes (overlay, console height, menu key).
-//   eon64-commands.txt  "[Section]" lines group; "label = console line | help" makes a button;
+//   snell64-commands.txt  "[Section]" lines group; "label = console line | help" makes a button;
 //                       "{name}" or "{name=default}" in the line adds a field; '#' starts a
 //                       comment. A button runs its line as if typed into the console (rcon too).
 #ifdef BF2_IMAGE_RENDDX9
@@ -72,8 +72,8 @@ extern void* g_rendererBase;
 
 namespace {
 
-const char kSettingsFile[] = "eon64-ui.con";
-const char kCommandsFile[] = "eon64-commands.txt";
+const char kSettingsFile[] = "snell64-ui.con";
+const char kCommandsFile[] = "snell64-commands.txt";
 const float kPi = 3.14159265f;
 
 RendDX9Base* base()
@@ -134,7 +134,7 @@ void uiSaveSettings()
     std::FILE* out = path.empty() ? 0 : std::fopen(path.c_str(), "w");
     if (!out)
         return;
-    std::fprintf(out, "rem Written by the openbf2-eon64 debug menu.\n");
+    std::fprintf(out, "rem Written by the Snell64 debug menu.\n");
     std::fprintf(out, "renderer.uiOverlay %d\n", g_overlay ? 1 : 0);
     std::fprintf(out, "renderer.uiConsoleHeight %g\n", uiLayerGetConsoleHeight());
     std::fprintf(out, "renderer.uiMenuKey %d\n", uiLayerGetMenuKey());
@@ -1412,7 +1412,7 @@ void uiDebugDrawMenu()
     ImGui::SetNextWindowSize(ImVec2(640.0f * uiScale(), viewport->WorkSize.y * 0.72f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f * uiScale(), 300.0f * uiScale()),
                                         ImVec2(FLT_MAX, FLT_MAX));
-    if (!ImGui::Begin("openbf2-eon64", 0, ImGuiWindowFlags_NoCollapse))
+    if (!ImGui::Begin("Snell64", 0, ImGuiWindowFlags_NoCollapse))
     {
         ImGui::End();
         return;

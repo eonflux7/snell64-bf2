@@ -1,4 +1,4 @@
-# Agent instructions: openbf2-eon64
+# Agent instructions: Snell64 (snell64-bf2)
 
 The policy for every coding agent working on this repository; `CLAUDE.md` imports it.
 If guidance conflicts, the owner's current request wins, then this file, then `docs/`.
@@ -47,7 +47,7 @@ before 2026-11-19 "step"; `tools/docs.py log <id>` finds both.
 
 ## Repositories and what is public
 
-- This repository (`eonflux7/openbf2-eon64`, branch `main`) is **public**. Only engine code and
+- This repository (`eonflux7/snell64-bf2`, branch `main`) is **public**. Only engine code and
   engine-side documentation go here.
 - PR's shaders, decompiled PR scripts, PR's private Python shims and anything else derived from PR's
   closed content live in **private** repositories and directories outside this tree. Never copy them

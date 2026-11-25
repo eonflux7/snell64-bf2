@@ -2,7 +2,7 @@
 // Not part of retail BF2.
 //
 // At each level load the weather variables go back to their defaults (fair weather), then the
-// level's file sets what it names: <GSModDirectory>/settings/eon64-weather/<level>.txt, outside
+// level's file sets what it names: <GSModDirectory>/settings/snell64-weather/<level>.txt, outside
 // this repository. A line is a variable without its "renderer." prefix and a value; '#' starts a
 // comment. Lines before any section apply to every layer; "[<mode>]" applies to that game mode's
 // layers and "[<mode> <size>]" to one layer, each in file order where the loaded layer matches:
@@ -129,7 +129,7 @@ void rendererWeatherLoad()
     }
     if (!mod.empty() && mod[mod.size() - 1] != '/' && mod[mod.size() - 1] != '\\')
         mod += '/';
-    const std::string path = mod + "settings/eon64-weather/" + level + ".txt";
+    const std::string path = mod + "settings/snell64-weather/" + level + ".txt";
     std::ostringstream layer;
     layer << mode << " " << size;
 

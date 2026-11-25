@@ -15,7 +15,7 @@
 // - Heights, two R32F textures: a fine one over the ring's square (three map spans a side, at the
 //   ring's cell) and a coarse one out past the mesh's reach. Known ground is kept; past it, the
 //   known heights pulled out (pull-push) blend over 3 km to the level's bake: real terrain in the
-//   level's datum, from <mod>/settings/eon64-farground/<level>.bin (written by a tool outside this
+//   level's datum, from <mod>/settings/snell64-farground/<level>.bin (written by a tool outside this
 //   tree; layout at loadBake). renderer.farGroundScaled picks its variant, real heights or scaled
 //   about a pivot to the map's relief, and the heights are rebuilt on the CPU when it changes.
 //   Without a bake, a placeholder: the pulled-out heights falling off to the level's base height.

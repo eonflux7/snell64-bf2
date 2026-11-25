@@ -1,4 +1,4 @@
-// [TOOLS] A map's view file (docs/lanes/tools.md#1-views): <mod>/settings/eon64-views/<map>.txt.
+// [TOOLS] A map's view file (docs/lanes/tools.md#1-views): <mod>/settings/snell64-views/<map>.txt.
 // Not part of retail BF2; client image only.
 //
 // The file is edited by hand and by the tool, so the tool never rewrites it whole: it keeps the

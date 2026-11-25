@@ -70,7 +70,7 @@ State: accepted.
 
 **Menu** (the menu key): a header with the frame rate, the map and an overlay switch, then tabs.
 
-- **Commands:** a button per command of `<mod>/settings/eon64-commands.txt`, read when the game
+- **Commands:** a button per command of `<mod>/settings/snell64-commands.txt`, read when the game
   hands the UI its host and again with Reload. `[Section]` lines group them under a heading;
   `label = console line | help` makes a button with that tooltip; `{name}` or `{name=default}`
   in the line adds a text field for an argument (Enter in a field also runs it); `#` starts a
@@ -92,7 +92,7 @@ the registry, as the console does. Reset appears while a value differs from the 
 first showed. The tooltip gives the help line (`rendererVariableHelp`), the console name, the
 type, the range and the value.
 
-**Saved:** `<mod>/settings/eon64-ui.con`, console lines run when the game hands the UI its host,
+**Saved:** `<mod>/settings/snell64-ui.con`, console lines run when the game hands the UI its host,
 rewritten when `renderer.uiOverlay`, `renderer.uiConsoleHeight` or `renderer.uiMenuKey` changes.
 Nothing else is written.
 

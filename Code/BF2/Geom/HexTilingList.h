@@ -3,7 +3,7 @@
 // Hex-tiling shifts the texture in each hexagon, which breaks a pattern laid on a grid (paving
 // slabs, cobbles, tiles, crop rows) and an atlas of strips (a lookup crossing into the next strip).
 // Which textures those are is the mod's content, so it is read from outside this tree:
-// <mod>/settings/eon64-hextiling.txt, one texture per line under a section header:
+// <mod>/settings/snell64-hextiling.txt, one texture per line under a section header:
 //
 //   [terrain grid]    terrain detail textures tiled on the square grid; the others are hex-tiled
 //   [static hex]      static mesh detail textures hex-tiled; the others are tiled on the grid. A

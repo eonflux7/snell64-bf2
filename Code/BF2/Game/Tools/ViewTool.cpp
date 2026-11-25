@@ -15,7 +15,7 @@
 // debug menu nor the console window is shown; meanwhile the cursor shows. The HUD and spawn
 // menu are hidden through renderer.drawHud while the tool is active.
 //
-// Views (task 3): each map's view file, <GSModDirectory>/settings/eon64-views/<map>.txt (ViewFile),
+// Views (task 3): each map's view file, <GSModDirectory>/settings/snell64-views/<map>.txt (ViewFile),
 // is reread whenever it changed on disk, so hand edits apply at the next view command. view.go
 // holds the camera at a view and runs its `run` lines; a line that sets a console variable records
 // the variable's value first, and leaving the view restores it. Lines that call commands are not
@@ -316,7 +316,7 @@ int getFly() { return g_state.fly ? 1 : 0; }
 
 void viewLeave() { leave(); }
 
-// <GSModDirectory>/settings/eon64-views/<map>.txt for the loaded map, or empty with a reason.
+// <GSModDirectory>/settings/snell64-views/<map>.txt for the loaded map, or empty with a reason.
 std::string viewFilePath(std::string& error)
 {
     std::string map = game ? game->getCurrentMapName() : std::string();
@@ -332,7 +332,7 @@ std::string viewFilePath(std::string& error)
         : std::string("mods/bf2");
     if (!dir.empty() && dir[dir.size() - 1] != '/' && dir[dir.size() - 1] != '\\')
         dir += '/';
-    return dir + "settings/eon64-views/" + map + ".txt";
+    return dir + "settings/snell64-views/" + map + ".txt";
 }
 
 // Rereads the view file when it changed on disk or the map changed. False with a reason when no
@@ -760,7 +760,7 @@ struct Shot
 
 Shot g_shot = { false, false, false, false, 0, std::string(), std::string(), std::string() };
 
-std::string g_outputDir("eon64-runs");   // under the game's working directory
+std::string g_outputDir("snell64-runs");   // under the game's working directory
 int g_shotHud = 0;
 int g_shotWidth = 960;      // the JPEG's width
 

@@ -13,7 +13,7 @@ saved views, view sets, camera paths and unattended runs that write a report. Ru
 - **Idle costs nothing.** While no view, path or run is active, frames draw and cost the same as
   without the tool.
 - **Map data is the owner's.** View files live in the mod's `settings/` directory, outside this
-  tree, like `eon64-commands.txt`. Debug shading modes live with the shaders, outside this tree; the
+  tree, like `snell64-commands.txt`. Debug shading modes live with the shaders, outside this tree; the
   engine only provides the variable that selects them. Run output (`tools.outputDir`) also lies
   outside this tree: it holds screenshots of the mod's content and the shader set's commit.
 
@@ -90,7 +90,7 @@ is a name, position, yaw, pitch, FOV, and options:
 #### A set
 
 is an ordered list of views with a dwell time each. Each map has one view file,
-`<mod>/settings/eon64-views/<map>.txt`, where `<map>` is the level's folder name. A view applies to
+`<mod>/settings/snell64-views/<map>.txt`, where `<map>` is the level's folder name. A view applies to
 every game mode and layer of the map; the mode and layer a shot was taken on are in its stamp.
 Lines starting with `#` are comments. `muttrah_city_2.txt`:
 
@@ -163,7 +163,7 @@ As built (`ViewTool.cpp`; renderer side `RendDX9/ToolsCapture.cpp`, reached thro
 `IRendererTools` in `RendMisc/IRendererTools.h`, queried from the renderer like `IRendererUi`):
 `view.shot [NAME]` writes `<tools.outputDir>/<map>/shots/NAME.png` and `NAME.jpg`; without NAME
 the name is the held view's (or `camera`) and the local time, and an existing NAME is overwritten.
-`tools.outputDir` defaults to `eon64-runs` under the game's working directory (`@HOME@` may start
+`tools.outputDir` defaults to `snell64-runs` under the game's working directory (`@HOME@` may start
 it); the directory is created. The next frame's hook passes the request to the renderer, which
 copies the back buffer with StretchRect into a single-sample target (resolving MSAA), reads it
 back and writes the PNG (RGB, no alpha) and a box-filtered JPEG `tools.shotWidth` wide (960). It
@@ -257,7 +257,7 @@ it off), and both environment flags are deleted in the same change.
 is recorded in the report as an error for that view; the run continues with the next view. The run
 fails if any view has an error.
 
-**Report.** In `<output>/<map>/<label>/` (`tools.outputDir`, default `eon64-runs` under the
+**Report.** In `<output>/<map>/<label>/` (`tools.outputDir`, default `snell64-runs` under the
 game's working directory; single shots go to `<output>/<map>/shots/`): the PNGs and JPEGs, `report.json` (the stamp, per view: pass timings,
 frame time, draw counts, settle results, the load gate, errors) and `report.md` (the same, short).
 

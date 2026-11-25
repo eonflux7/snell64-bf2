@@ -180,7 +180,7 @@ struct State
     bool               seaNear;   // the level's sea lies near the map's heights
     int                variant;   // the bake's variant the heights were composed with (-1 none)
 
-    // The level's bake (<mod>/settings/eon64-farground/<level>.bin): heights in the level's datum
+    // The level's bake (<mod>/settings/snell64-farground/<level>.bin): heights in the level's datum
     // on a square grid, and the scaled variant's ratio and pivot.
     Grid               bakeGrid;
     std::vector<float> bake;
@@ -546,7 +546,7 @@ bool loadBake()
         level[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(level[i])));
     if (!mod.empty() && mod[mod.size() - 1] != '/' && mod[mod.size() - 1] != '\\')
         mod += '/';
-    const std::string path = mod + "settings/eon64-farground/" + level + ".bin";
+    const std::string path = mod + "settings/snell64-farground/" + level + ".bin";
     std::FILE* in = std::fopen(path.c_str(), "rb");
     if (!in)
     {

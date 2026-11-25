@@ -158,7 +158,7 @@ the far ground and the clouds all go through it.
 - *Weather per level* (`Weather.cpp`). At each level load (terrain load) the six weather
   variables (`weatherVisibility`, `weatherAerosol`, `weatherMixing`, `weatherAltitude`,
   `cloudPreset`, `cloudCoverage`) go back to their defaults (25 km, continental, 1.5 km, auto,
-  milestone 12's preset and coverage), then `<mod>/settings/eon64-weather/<level>.txt` runs, outside
+  milestone 12's preset and coverage), then `<mod>/settings/snell64-weather/<level>.txt` runs, outside
   this tree: a line is a variable without `renderer.` and a value, `#` comments; lines before any
   section apply to every layer, `[<mode>]` and `[<mode> <size>]` apply in file order where they
   match the loaded layer. Values go through the console, keeping the variables' ranges; other

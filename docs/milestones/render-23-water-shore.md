@@ -142,7 +142,7 @@ sheet takes the same K. `renderer.waterType` picks a preset: 0–4 oceanic I, IA
 5–9 coastal 1, 3, 5, 7, 9, each set near Jerlov's diffuse attenuation at 450, 550 and 600 nm,
 10 a glacial river (30 g/m³ of rock flour); `renderer.waterChlorophyll`, `waterCdom`,
 `waterSediment` set one constituent (the type reads −1). A level's type is in its weather file
-(`settings/eon64-weather/<level>.txt`, `waterType`); without one, coastal 1. Muttrah City
+(`settings/snell64-weather/<level>.txt`, `waterType`); without one, coastal 1. Muttrah City
 coastal 1 (green), Omaha Beach coastal 5, The Falklands coastal 3, Kunar the glacial river
 (milky grey). `tools.water` writes the medium. `renderer.waterColor` (`WaterColor`) is no
 longer read by the water body; only the path without the scene copy (under water) keeps it.

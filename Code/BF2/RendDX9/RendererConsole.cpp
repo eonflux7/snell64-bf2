@@ -1328,7 +1328,7 @@ BF2_CONSOLE_PROPERTY_FN(uiMenuKey, int, true, uiLayerGetMenuKey(), uiLayerSetMen
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(uiConsoleHeight, float, true, uiLayerGetConsoleHeight(),
                                  uiLayerSetConsoleHeight, 0.2f, 0.9f, kRendererConsoleTag)
 // [UI] The performance overlay, top right (docs/lanes/ui.md); kept between sessions in the mod's
-// settings/eon64-ui.con.
+// settings/snell64-ui.con.
 BF2_CONSOLE_PROPERTY_FN(uiOverlay, bool, true, uiLayerGetOverlay(), uiLayerSetOverlay,
                         kRendererConsoleTag)
 

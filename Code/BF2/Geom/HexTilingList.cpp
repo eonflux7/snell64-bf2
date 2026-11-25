@@ -66,7 +66,7 @@ void hexTilingListLoad()
     dx9rend::readStringSettingDefault("GSModDirectory", "mods/bf2", mod);
     if (!mod.empty() && mod[mod.size() - 1] != '/' && mod[mod.size() - 1] != '\\')
         mod += '/';
-    const std::string path = mod + "settings/eon64-hextiling.txt";
+    const std::string path = mod + "settings/snell64-hextiling.txt";
     std::FILE* in = std::fopen(path.c_str(), "r");
     if (!in)
     {

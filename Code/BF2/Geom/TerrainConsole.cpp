@@ -49,10 +49,10 @@ void consoleSurveyTerrain()
     terrain()->survey();
 }
 
-// [DEV] atlasDump: the one-pass terrain's atlases to eon64-runs/terrain-atlas (TerrainAtlas.h).
+// [DEV] atlasDump: the one-pass terrain's atlases to snell64-runs/terrain-atlas (TerrainAtlas.h).
 void consoleDumpTerrainAtlas()
 {
-    terrainAtlasDump("eon64-runs/terrain-atlas");
+    terrainAtlasDump("snell64-runs/terrain-atlas");
 }
 
 // forceRenderStyle - ctor 0x100B502C, executor get slot +0x24, set slot +0x20.
