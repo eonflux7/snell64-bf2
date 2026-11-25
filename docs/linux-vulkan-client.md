@@ -222,6 +222,29 @@ cmake --build out/build/linux-client --target bf2_client -j 6
 cmake --build out/build/linux-client --target bf2_linux_client_checks -j 6
 ```
 
+### DXVK terrain-depth patch
+
+`[CHOSEN, not recovered]` Unpatched DXVK 3.x renders black terrain patches that move with the
+camera inside the geomorph distance band. DXVK compiles D3D9 shaders through dxbc-spirv,
+which fuses a multiply with a following add depending on the surrounding code. The terrain
+depth-fill pass computes the morphed height as `v1.x * scale - yDelta`. The detail passes
+compute `v1.x * scale + vScaleTransY.zw - yDelta`, where the extra term is always 0. dxbc-spirv
+therefore fuses a different multiply in each shader, and some vertices differ by one rounding
+step. The detail passes then fail their `LESSEQUAL` test against the stored depth, and the
+cleared colour remains visible. A RenderDoc capture showed one vertex with clip y `bd4f6000`
+in the fill pass and `bd4f4000` in the detail pass. Its vkd3d bytecode had separate `mul`/`add`
+instructions in both passes. D3D9 drivers evaluate the position chain as written. No DXVK option
+disables this fusion; `d3d9.floatEmulation = Strict` has no effect.
+
+`tools/linux/release/build-sdk.py` patches dxbc-spirv's `ArithmeticPass::propagateInvariance`
+to also mark float operations that feed an invariant output, the vertex position, as precise.
+This prevents fusion by dxbc-spirv and by the Vulkan driver. The patch is guarded against
+upstream drift and recorded in the SDK provenance. A prebuilt `dxvk-native-3.1.1` tarball
+lacks it. For development builds, build DXVK Native from the same source with the patch
+applied, and point both `BF2_DXVK_ROOT` and the launcher's `--runtime` at that prefix.
+The patch was verified on an RTX 2060 with NVIDIA 620.73.4, on Dalian Plant; AMD/RADV has
+not been rechecked.
+
 `tools/linux/Containerfile` provides the build packages. Engine and portable helper TUs remain
 C++14; the existing isolated effect compiler/runtime targets use C++17. The executable,
 `libdice_py.so` and `libaidll.so` are written to the build's `bin_linux` directory.

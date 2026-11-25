@@ -271,6 +271,39 @@ def main():
     next(item for item in dependencies if item["name"] == "DXVK")["patches"] = [
         {"description": "Remove compiler -msse3 option to preserve x86-64/SSE2 baseline",
          "file": "meson.build", "removed": "  '-msse3',"}]
+
+    # [CHOSEN, not recovered] dxbc-spirv fuses multiply+add depending on the shape of the
+    # surrounding code. BF2's terrain passes compute the same morphed vertex position through
+    # slightly different expressions (an extra "+ vScaleTransY.zw", always 0), so the depth-fill
+    # and detail passes fuse different multiplies, disagree by one rounding step inside the
+    # geomorph band and fail their LESSEQUAL depth test: black, camera-dependent terrain spots.
+    # D3D9 drivers evaluate the position chain as written; make ops feeding an invariant output
+    # precise so neither dxbc-spirv nor the Vulkan driver fuses them.
+    arithmetic = SOURCES / "dxvk/subprojects/dxbc-spirv/ir/passes/ir_pass_arithmetic.cpp"
+    invariance_old = (
+        "  for (auto iter = a; iter != b; iter++) {\n"
+        "    if ((iter->getFlags() & OpFlag::eInvariant) && !(iter->getType().isBasicType() && "
+        "iter->getType().getBaseType(0u).isFloatType()))\n"
+        "      m_builder.setOpFlags(iter->getDef(), iter->getFlags() - OpFlag::eInvariant);\n"
+        "  }\n")
+    invariance_new = (
+        "  for (auto iter = a; iter != b; iter++) {\n"
+        "    if (!(iter->getFlags() & OpFlag::eInvariant))\n"
+        "      continue;\n"
+        "\n"
+        "    if (!(iter->getType().isBasicType() && iter->getType().getBaseType(0u).isFloatType()))\n"
+        "      m_builder.setOpFlags(iter->getDef(), iter->getFlags() - OpFlag::eInvariant);\n"
+        "    else\n"
+        "      m_builder.setOpFlags(iter->getDef(), iter->getFlags() | OpFlag::ePrecise);\n"
+        "  }\n")
+    text = arithmetic.read_text()
+    if text.count(invariance_old) != 1:
+        raise ValueError("dxbc-spirv invariance propagation moved; reassess the precise patch")
+    arithmetic.write_text(text.replace(invariance_old, invariance_new))
+    next(item for item in dependencies if item["name"] == "dxbc-spirv")["patches"] = [
+        {"description": "Treat float ops feeding invariant outputs as precise so multi-pass "
+                        "D3D9 vertex positions stay bit-identical (no shape-dependent FMA fusion)",
+         "file": "ir/passes/ir_pass_arithmetic.cpp", "function": "ArithmeticPass::propagateInvariance"}]
     before = snapshot()
     run("meson", "setup", BUILD / "dxvk", SOURCES / "dxvk", "--buildtype=release",
         f"--prefix={PREFIX}", "--libdir=lib", "--wrap-mode=nodownload",
