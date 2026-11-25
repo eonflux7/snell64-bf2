@@ -6,7 +6,7 @@
 # Why: a client-hosted SP game binds 127.0.0.1:16890 only ~10 s after launch (when PLAY is clicked).
 # loopback.py checks the ports once at its start, so without this lock another agent's dedicated
 # server could take 16890 in that gap; NetServer::init then fails with EADDRINUSE, startServer
-# returns false and the menu reloads onto the SP page (docs/archive/macos-c-input-script.md).
+# returns false and the menu reloads onto the SP page (references/macos-c-input-script.md).
 #
 # usage: RUNNER=<client runner> sp-run.sh <worktree> <build-tag>   (env as for the runner: BF2_RUN_SECONDS, BF2_INPUT_SCRIPT, ...)
 # Waits at most 30 min for the lock and 10 min for the ports.

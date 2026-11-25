@@ -80,7 +80,7 @@ behavior.
 
 ## Source map
 
-All engine paths below are relative to [Code/BF2](../../Code/BF2).
+All engine paths below are relative to [Code/BF2](../Code/BF2).
 
 | Area | Responsibilities and starting points |
 | --- | --- |
@@ -97,9 +97,9 @@ All engine paths below are relative to [Code/BF2](../../Code/BF2).
 | `Menu/`, `Sound/` | Client interface and audio integration. |
 | `External/` | Upstream dependencies and their local integration notes. |
 
-[Code/Tools/BF2Editor](../../Code/Tools/BF2Editor) contains the editor application.
-[Code/Tests](../../Code/Tests) contains focused fixtures and compile checks;
-[Code/Build](../../Code/Build) contains build helpers and diagnostic harnesses.
+[Code/Tools/BF2Editor](../Code/Tools/BF2Editor) contains the editor application.
+[Code/Tests](../Code/Tests) contains focused fixtures and compile checks;
+[Code/Build](../Code/Build) contains build helpers and diagnostic harnesses.
 These harnesses are scaffolding, not alternate production engine implementations.
 
 ## From startup to a running server

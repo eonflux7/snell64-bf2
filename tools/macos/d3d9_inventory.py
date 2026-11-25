@@ -373,7 +373,7 @@ def group(r):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--out', type=Path, default=ROOT / 'out/inventory')
-    ap.add_argument('--report', type=Path, default=ROOT / 'docs/archive/macos-d3d9-inventory.md')
+    ap.add_argument('--report', type=Path, default=ROOT / 'references/macos-d3d9-inventory.md')
     opts = ap.parse_args()
     start = time.monotonic()
     sources = []
@@ -631,7 +631,7 @@ def main():
                'Twenty rows are selected without replacement with Python `random.Random(1509)` '
                'from the sorted requested-tree rows. `spot_checks.csv` holds them and '
                '`spot_checks.txt` holds numbered source excerpts. The review result is recorded in '
-               '`docs/archive/macos-r0-d3d9-inventory.md`; sampling checks precision, not exhaustive recall. '
+               '`references/macos-r0-d3d9-inventory.md`; sampling checks precision, not exhaustive recall. '
                'Manual review of the source snapshot at `df2262e`: all 20 rows matched their location, '
                'receiver interface/method and arguments. That review applies to this baseline only; '
                're-run it when inputs change.', '',

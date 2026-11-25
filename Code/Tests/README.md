@@ -1,6 +1,6 @@
 # Tests and fixtures
 
-Start with the validation commands in the [development guide](../../docs/archive/development.md).
+Start with the validation commands in the [development guide](../../references/development.md).
 `syntaxcheck.cmd` checks engine translation units; the CMake `bf2_run_checks` and
 `bf2_editor_run_checks` targets build and run focused suites. Individual `.cmd` files
 build the matching component fixtures. `aidll/` exercises the AI image; `tier2/`

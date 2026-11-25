@@ -11,7 +11,7 @@ class IHapticEffect; // NovintHFX.h (global namespace); the haptic force effects
 // Falcon is ever present, so neither the SDK header nor FalconDevice exists there; the device
 // manager reports IDFFalcon as not opened (MacInputDeviceManager). Only the menu's mouse-mode
 // global, which the menu and HUD code write on every platform, is declared. See
-// docs/archive/macos-port.md, "Bink, Novint and VoIP capture (S2.8)".
+// references/macos-port.md, "Bink, Novint and VoIP capture (S2.8)".
 namespace dice { namespace hfe { namespace io {
 extern int g_falconMouseMode; // [INFERRED] name, PE978FC4 initialized1; HUD/updateCurrentState writers
 } } }

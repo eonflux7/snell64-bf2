@@ -2,9 +2,9 @@
 """Build OpenAL Soft as the Windows clients' BF2OpenAL.dll from a pinned release.
 
 [CHOSEN, not recovered] Retail BF2 ships Creative's 32-bit OpenAL wrapper renamed BF2OpenAL.dll,
-which an x64 process cannot load (docs/archive/building.md, "Native x64 client"). Both Windows client
+which an x64 process cannot load (references/building.md, "Native x64 client"). Both Windows client
 packages (x86 and x64) carry an unmodified OpenAL Soft build under that name instead, so both use
-the same provider (docs/archive/ci-releases.md). Run inside the MSVC developer environment of the target
+the same provider (references/ci-releases.md). Run inside the MSVC developer environment of the target
 architecture (Code/Build/vsdevcmd.cmd x86|x64) with CMake and Ninja on PATH, and pass --arch.
 
 Outputs in --stage-dir: BF2OpenAL.dll, COPYING, BUILD.txt (version, source, options) and the exact

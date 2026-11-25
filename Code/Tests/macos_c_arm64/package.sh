@@ -1,6 +1,6 @@
 #!/bin/bash
 # [TEMP] [CHOSEN, not recovered] Stage the owner's M2 bundle for the arm64 renderer-ON client and
-# the loopback play harness (docs/archive/macos-c-arm64-client.md, "M2 bundle").
+# the loopback play harness (references/macos-c-arm64-client.md, "M2 bundle").
 # Usage: package.sh ARM64_BUILD_DIR METAL_HARNESS_BUILD_DIR [BUNDLE_DIR]
 #   ARM64_BUILD_DIR          an arm64 engine build (bf2_client bf2 bf2_aidll bf2_vtable_audit and the
 #                            checks dice_py_check bf2_aidll_loader_check bf2_native_vtable_check
@@ -56,7 +56,7 @@ for name in dice_py_check bf2_aidll_loader_check bf2_native_vtable_check bf2_mem
 done
 cp "$harness/macos_metal_device" "$dest/bin/"
 # The harness's menu JPEG checks open BF2_MENU_FIXTURES. Built with the relative path "fixtures"
-# (docs/archive/macos-c-arm64-client.md), it reads them from bin/fixtures, where run.sh starts it.
+# (references/macos-c-arm64-client.md), it reads them from bin/fixtures, where run.sh starts it.
 if LC_ALL=C grep -a -q 'macos_d3dx_helpers/fixtures' "$harness/macos_metal_device"; then
     echo "package.sh: macos_metal_device names this checkout's fixtures. Configure the harness with" >&2
     echo "  -DCMAKE_CXX_FLAGS='-UBF2_MENU_FIXTURES -DBF2_MENU_FIXTURES=\\\"fixtures\\\"' (and CMAKE_OBJCXX_FLAGS)" >&2

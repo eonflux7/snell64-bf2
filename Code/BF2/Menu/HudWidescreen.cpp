@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] Native adaptation of the HUD layout policy in
 // https://github.com/marekzajac97/BF2-HUD-fix (GPL-3.0), by marekzajac97.
 // That project credits BadSanta12345's Alpha Project HUD fix as inspiration.
-// No ASI hooks, retail addresses or ABI wrappers are used. Issue #33; docs/archive/widescreen-hud.md.
+// No ASI hooks, retail addresses or ABI wrappers are used. Issue #33; references/widescreen-hud.md.
 #include "HudWidescreen.h"
 #if !DEDICATED
 #include "../External/BFMeme/Node.h"

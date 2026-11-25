@@ -2,7 +2,7 @@
 
 **Developer oracle, not used by the client.** These optional Wine/D3DX reference
 tools are outside the client build. The client compiles effects natively; see
-[building](../../../docs/archive/building.md#macos).
+[building](../../../references/building.md#macos).
 `patches/` holds shared native-source patch data; `patch-mojo.py` delegates to the
 native utility without invoking Wine or D3DX. Exporter/runtime checks in the root CMake project
 require `-DBF2_FX_DEVELOPER_ORACLE=ON` and explicit build targets.
@@ -165,4 +165,4 @@ The engine's complete request set is derived statically by `enumerate_requests.p
 the Metal device caps) and built by `prebuild.py`, which compiles only the attempts the
 engine actually reaches and runs the Metal gate. `validate_requests.py` checks the
 grammar against s1b/s1c manifests and s2 loader requests. Grammar, coverage, size,
-build time and policy: [c-fx-permutations](../../../docs/archive/macos-c-fx-permutations.md).
+build time and policy: [c-fx-permutations](../../../references/macos-c-fx-permutations.md).

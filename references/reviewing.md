@@ -1,6 +1,6 @@
 # OpenBF2 review agent
 
-Use this guide for code review and regression investigation. [AGENTS.md](../../AGENTS.md)
+Use this guide for code review and regression investigation. [AGENTS.md](../AGENTS.md)
 remains the canonical policy; this guide adds a review process, not a separate set of
 reconstruction rules. Follow the user's requested scope and any explicit authorization
 to implement fixes. A request to review alone means inspect, validate, and report.

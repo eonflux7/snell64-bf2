@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] MSVC 7.1 CRT functions that client code calls, rebuilt for the native
 // POSIX ports with the MSVC observable semantics (return values, truncation, wide-format
-// conversions). See docs/archive/macos-port.md, "Win32 and CRT items (S2.5/S2.8)".
+// conversions). See references/macos-port.md, "Win32 and CRT items (S2.5/S2.8)".
 //
 // Include it only where one of these names is used. On MSVC it is empty: the real CRT is used.
 #ifndef CORE_MSVCCRTCOMPAT_H

@@ -1,6 +1,6 @@
 // Medic/support assist pattern: BBMedicAssist hands it the chosen target, the weapon index to use
 // and the target's player per bot (init); createPlan builds the plan from them. Recovered from
-// libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see docs/archive/macos-ai-behaviour-plan.md.
+// libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see references/macos-ai-behaviour-plan.md.
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOURPATTERN_BBPMEDICASSIST_H
 #define AI_AIDLL_AI_AIBOTBEHAVIOURPATTERN_BBPMEDICASSIST_H

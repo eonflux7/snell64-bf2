@@ -42,3 +42,4 @@ Rows D-1 to D-35 were gathered on 2026-11-25 from the documents' inline "(owner,
 | D-33 | 2026-11-23 | `render-23` | Water at the shore is physically based throughout. No fade at the shoreline (the flat plane meeting the terrain is the right edge); the shore follows Dagor's approach, its source read first |
 | D-34 | 2026-11-24 | `render-23` | The wind blows from the map's most open sea (physical), not the level's authored direction |
 | D-35 | — | `render-5` | Retail's per-caster dynamic shadows are gone; the cascades replace them |
+| D-36 | 2026-11-25 | docs | `docs/` holds only this project's current documents; OpenBF2's inherited documentation moves to `references/` at the repository root |

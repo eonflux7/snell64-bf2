@@ -1,12 +1,12 @@
 # CI and release packages
 
-[CI](../../.github/workflows/ci.yml) runs on pushes to `main`, pull request updates
+[CI](../.github/workflows/ci.yml) runs on pushes to `main`, pull request updates
 and manual dispatch. Superseded runs of the same event/ref are cancelled. Fork pull
 requests use read-only permissions and require no secrets. Repository settings may
 require a maintainer to approve a first-time contributor's workflow run.
 
-CI and [Release packages](../../.github/workflows/release.yml) call the same
-[build workflow](../../.github/workflows/build.yml). It builds the event's exact commit
+CI and [Release packages](../.github/workflows/release.yml) call the same
+[build workflow](../.github/workflows/build.yml). It builds the event's exact commit
 with the existing CMake image manifests and presets. This is build maintenance;
 it does not recover or change engine behavior, ABI, protocols, or file formats.
 
@@ -145,7 +145,7 @@ were built, its README names the missing ones, and `build-info.json` lists them 
 
 ### Per-role packages (CI artifacts)
 
-The [packaging helper](../../Code/Build/package_release.py) requires every listed runtime
+The [packaging helper](../Code/Build/package_release.py) requires every listed runtime
 file to exist and be nonempty. It uses explicit manifests rather than copying output
 directories, so test executables, import libraries, maps, PDBs, and any locally staged
 retail companions are excluded. `--omit ROLE` (repeatable) skips one package of the
@@ -427,7 +427,7 @@ and [immutable releases](https://docs.github.com/en/code-security/concepts/suppl
 Release runs sign the macOS binaries with a Developer ID and notarize the disk image;
 every other run keeps the ad-hoc signature and uses no secrets. A run is a release run when the
 event is a published release or the ref is a `v*` tag (`BF2_RELEASE_SIGNING` in
-[build.yml](../../.github/workflows/build.yml)). Only then do the `macos` and `macos-app`
+[build.yml](../.github/workflows/build.yml)). Only then do the `macos` and `macos-app`
 jobs use the protected environment `release`; pull requests, branch pushes and forks
 run without an environment and never see its secrets. A release run with missing
 secrets fails instead of shipping ad-hoc binaries.
@@ -451,7 +451,7 @@ Restrict the environment's deployment branches and tags to the tag pattern `v*`.
 Required reviewers are optional; with them, each release run waits for an approval
 of the two `macos` legs and again for `macos-app`.
 
-[tools/macos/ci/release-signing.sh](../../tools/macos/ci/release-signing.sh) does the work.
+[tools/macos/ci/release-signing.sh](../tools/macos/ci/release-signing.sh) does the work.
 It imports the .p12 into a temporary keychain (random password, added to the search
 list) and writes the API key to a file under `RUNNER_TEMP`; a final `if: always()`
 step deletes both. Secret values are passed to the steps that need them only.
@@ -459,7 +459,7 @@ step deletes both. Secret values are passed to the steps that need them only.
 - **Standalone packages** (`macos` job): after the build, `libdice_py.dylib`,
   `libaidll.dylib`, `bf2` and `bf2_client` are signed with the hardened runtime and a
   secure timestamp, `bf2_client` with
-  [bf2_client.entitlements](../../Code/Build/macos/bf2_client.entitlements). The ZIPs are
+  [bf2_client.entitlements](../Code/Build/macos/bf2_client.entitlements). The ZIPs are
   packaged with `--macos-signing developer-id` (README and `build-info.json` say so).
   They are CI artifacts, not release assets, so they are not notarized: the job imports
   only the certificate, no notary key, and makes no Apple submission. The signed client

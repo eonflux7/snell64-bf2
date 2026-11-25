@@ -85,7 +85,7 @@ Paths below are relative to the repository root.
 | `Code/BF2/Geom/TerrainDraw.cpp`, `Terrain.h` | Water-buffer capacity guard and cursor contract |
 | `CMakeLists.txt`, `Code/Tests/syntaxcheck.cmd` | Client source manifest, explicit syntax gate and policy test target |
 | `Code/Tests/hud_widescreen_policy.cpp` | Geometry/lifecycle fixture |
-| `docs/archive/building.md`, `docs/archive/widescreen-hud.md` | Usage, attribution, contracts and acceptance scope |
+| `references/building.md`, `references/widescreen-hud.md` | Usage, attribution, contracts and acceptance scope |
 
 ## Validation
 

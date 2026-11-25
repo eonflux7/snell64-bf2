@@ -4,7 +4,7 @@
 // BF2Window.cpp does, with the Win32 call replaced by the host's counterpart. Cocoa events are
 // turned into the Win32 messages the engine's handlers inspect and run through Window::wndProc,
 // which keeps the Win32 wndProc's state rules and dispatches every message to the handler list.
-// Choices that differ from Win32 are listed in docs/archive/macos-s2-4.md.
+// Choices that differ from Win32 are listed in references/macos-s2-4.md.
 
 #if !DEDICATED && defined(__APPLE__)
 

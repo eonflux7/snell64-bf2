@@ -7,7 +7,7 @@
 #include <windows.h>
 #else
 // [CHOSEN, not recovered] Native POSIX: BSD sockets for the Winsock 1.1 calls (no WSAStartup);
-// on macOS the Cocoa host for the cursor handles. docs/archive/macos-port.md, "Win32 and CRT items".
+// on macOS the Cocoa host for the cursor handles. references/macos-port.md, "Win32 and CRT items".
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>

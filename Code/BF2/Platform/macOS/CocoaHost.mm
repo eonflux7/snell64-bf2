@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] macOS port: Cocoa implementation of CocoaHost. Compile with ARC
-// (-fobjc-arc). See CocoaHost.h for the contract and docs/archive/macos-s2-4.md for the design.
+// (-fobjc-arc). See CocoaHost.h for the contract and references/macos-s2-4.md for the design.
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 
 #include "CocoaHost.h"
 #include "MacRawMouse.h"
-#include "MacInputScript.h"          // [TEMP] BF2_INPUT_SCRIPT (docs/archive/macos-c-input-script.md)
+#include "MacInputScript.h"          // [TEMP] BF2_INPUT_SCRIPT (references/macos-c-input-script.md)
 #include "MacCursorFile.h"
 
 #import <AppKit/AppKit.h>
@@ -1494,7 +1494,7 @@ void CocoaHost::setCursorHiddenInView(bool hidden)
 
 void CocoaHost::setCursorShape(HostCursorShape shape)
 {
-    // AppKit has no public busy cursor; both shapes show the arrow (docs/archive/macos-s2-4.md).
+    // AppKit has no public busy cursor; both shapes show the arrow (references/macos-s2-4.md).
     setCursor(cursorHandle(shape));
 }
 

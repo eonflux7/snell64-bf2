@@ -591,7 +591,7 @@ public:
     bool applyMaterialEdit(int id, const std::string& state, std::string& error);
     bool loadMaterials(std::string& error);
     MaterialDocuments& materials() { return m_materials; }
-    // Dispatches animation editing and query commands; see docs/archive/editor-console.md for syntax.
+    // Dispatches animation editing and query commands; see references/editor-console.md for syntax.
     // Edits update the document through undo history; level save writes the files.
     bool animationCommand(const std::string& action, const std::vector<std::string>& args, std::string& result);
     bool applyAnimationEdit(int id, const std::string& state, std::string& error);
@@ -941,7 +941,7 @@ public:
     bool traceObjectLightmaps(int quality, bool selectedOnly, std::string& result);
     // Roads and splines (App/EditSessionRoads.cpp, App/RoadNetwork.h): opened once the level loaded; the retail rows
     // (`object` SplineManager, Road, RoadTemplate or RoadTemplateTexture) and the editor's own (`object` EditorRoad:
-    // docs/archive/editor-console.md), whose edits are undoable; saved with the level when they changed. The batch part
+    // references/editor-console.md), whose edits are undoable; saved with the level when they changed. The batch part
     // (+saveRoadAndClose) compiles every editable road even unchanged; a level without any saves nothing.
     bool openRoads(const std::string& levelName, std::string& report);
     RoadNetwork& roads() { return m_roads; }

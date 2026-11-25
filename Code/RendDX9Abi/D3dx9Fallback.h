@@ -4,7 +4,7 @@
 // Included through D3dxFallbackInclude/d3dx9.h, which renddx9.cmd and textureatlasbuilder.cmd put
 // on the include path when Code/Build/dxsdk.cmd selects the fallback (BF2_D3DX=auto without an
 // April 2005 SDK, or BF2_D3DX=def). The installed SDK stays the preferred path; see
-// docs/archive/building.md, "D3DX without the DirectX SDK".
+// references/building.md, "D3DX without the DirectX SDK".
 //
 // The declarations are the renderer's existing D3DX subset (Platform/Gfx/D3DX9Subset.h), placed on
 // top of the Windows SDK's <d3d9.h> instead of the subset's own D3D9 declarations. The rebuilt DLL

@@ -2,7 +2,7 @@
 // bodies, the getNextInput thresholds and the axis/POV/button scaling follow
 // GameControllerDevice.cpp; DirectInput's joystick is replaced by a polled extended gamepad
 // (Platform/macOS/MacGamepad) presented with the axis, button and POV layout an Xbox controller
-// has under DirectInput. See MacInputDeviceManager.h and docs/archive/macos-s2-4.md.
+// has under DirectInput. See MacInputDeviceManager.h and references/macos-s2-4.md.
 
 #include "MacInputDeviceManager.h"
 #if !DEDICATED && defined(__APPLE__)

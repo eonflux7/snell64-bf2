@@ -33,7 +33,7 @@ it up later; the AI subproject's matching-build plan (kept outside the repositor
    owning track session (and copy the main session), and record it in your `HANDOFF.md`. Shared headers that
    several tracks touch: the main session decides. `Game/Common/GhostManager.cpp` stays game-owned; srv changes to
    its weak `io::NetworkManager` members go through game-track (decided 2026-11-03).
-5. **Ledger and progress (recoverability).** Each track keeps `docs/archive/tracks/<track>/ledger.csv` (one row per
+5. **Ledger and progress (recoverability).** Each track keeps `references/tracks/<track>/ledger.csv` (one row per
    binary function it owns: `image,address,size,symbol,file,status,commit`, status
    `todo|done|stop|skip|chosen`), generated with a script under `tools/tracks/` (model:
    `tools/ai-reconstruct/build_ledger.py`), and a progress log (a dated line per merge, running agents, next
@@ -43,7 +43,7 @@ it up later; the AI subproject's matching-build plan (kept outside the repositor
 6. **Gates before you report a state green:**
    - Build in your worktree: `cmake --build out/build/<track> --target bf2_client bf2 bf2_aidll bf2_vtable_audit`
      (configure like the integration build, incl. `-DBF2_FX_NATIVE_DEPS=<nativefx build>` (see
-     `docs/archive/building.md`) and `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`). **Required:** `-DBF2_MACOS_LINK_RENDDX9=ON -DCMAKE_OSX_ARCHITECTURES=x86_64`;
+     `references/building.md`) and `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`). **Required:** `-DBF2_MACOS_LINK_RENDDX9=ON -DCMAKE_OSX_ARCHITECTURES=x86_64`;
      without the renderer the client crashes at login in `HudInformationAdapter::setMapStatic` (this=0), seen 2026-11-04. The vtable audit stays at 0 failures.
      Optional for new build dirs: ccache (`-DCMAKE_C_COMPILER_LAUNCHER=ccache
      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`). Adding it to an existing dir rebuilds it once. Cached
@@ -76,7 +76,7 @@ it up later; the AI subproject's matching-build plan (kept outside the repositor
    APFS clones and free little. Remove only your own track's merged, clean worktrees.
 11. **Keep slice notes out of the repository (owner, 2026-11-14).** Slice reports, progress logs, hand-off
    notes, agent task prompts and progress files, audit tables and run logs are working material: keep them
-   outside the repository, never under `docs/`. `docs/` holds only the guides listed in `docs/archive/README.md` and the
+   outside the repository, never under `docs/`. `docs/` holds only the guides listed in `references/README.md` and the
    data tables that committed tools and tests read or write. Anything a developer needs later goes into a
    source comment beside the code (with its retail evidence) or into one of those guides; never cite a note
    from code. Before you report, check that `git status` shows no new files under `docs/`.

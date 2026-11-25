@@ -1284,7 +1284,7 @@ Independent syntax cross-check: 0 unmatched capitalized member-call sites; 0 raw
 | Code/BF2/RendDX9/BufferManager.cpp:548 | self->buffer | Unlock |  |
 | Code/BF2/RendDX9/BufferManager.cpp:574 | self->buffer | Release |  |
 
-Twenty rows are selected without replacement with Python `random.Random(1509)` from the sorted requested-tree rows. `spot_checks.csv` holds them and `spot_checks.txt` holds numbered source excerpts. The review result is recorded in `docs/archive/macos-r0-d3d9-inventory.md`; sampling checks precision, not exhaustive recall. Manual review of the source snapshot at `df2262e`: all 20 rows matched their location, receiver interface/method and arguments. That review applies to this baseline only; re-run it when inputs change.
+Twenty rows are selected without replacement with Python `random.Random(1509)` from the sorted requested-tree rows. `spot_checks.csv` holds them and `spot_checks.txt` holds numbered source excerpts. The review result is recorded in `references/macos-r0-d3d9-inventory.md`; sampling checks precision, not exhaustive recall. Manual review of the source snapshot at `df2262e`: all 20 rows matched their location, receiver interface/method and arguments. That review applies to this baseline only; re-run it when inputs change.
 
 | Location | Interface::method | Resolved |
 | --- | --- | --- |

@@ -116,7 +116,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 #else // !_WIN32
 
 // [CHOSEN, not recovered] Native POSIX arm of the image's platform services (macOS port, package
-// S2.5; docs/archive/macos-port.md, "Audio (S2.5)"). The image is linked statically into the client, so
+// S2.5; references/macos-port.md, "Audio (S2.5)"). The image is linked statically into the client, so
 // there is no DllMain and g_dllInstance stays null (it has no reader). Each wrapper keeps the
 // contract its Win32 body documents in Win32System.h.
 

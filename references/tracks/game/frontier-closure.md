@@ -117,7 +117,7 @@ Progress:
   audit found no reinterpret/C-style casts between the two sides of a sprite_definition, no void*
   round trips through a different base, and no pointer-identity containers of definitions. The C-style
   casts are movie_definition -> movie_definition_sub (primary base). Retail checks for a movie clip as a
-  prototype (C2): docs/archive/tracks/game/swf-proto-retail-probe.md and tools/swf/proto_probe.py. 1 site
+  prototype (C2): references/tracks/game/swf-proto-retail-probe.md and tools/swf/proto_probe.py. 1 site
   closed (75 of 82).
 - Batch 16 (mac/game-frontier-16), N1 + P1, in progress. N1: FalconDevice::updateCurrentState is
   recovered against the retail NovintHFX ABI. The x86 image keeps retail's static import of

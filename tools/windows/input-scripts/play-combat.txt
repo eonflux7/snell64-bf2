@@ -1,4 +1,4 @@
-# [TEMP] play-combat for the Win32 client (BF2_INPUT_SCRIPT=<this file>, docs/archive/macos-c-input-script.md):
+# [TEMP] play-combat for the Win32 client (BF2_INPUT_SCRIPT=<this file>, references/macos-c-input-script.md):
 # tools/macos/loopback/scripts/play-combat.txt with join-and-spawn expanded. Only difference: the
 # level-load marker and its settle time. The macOS Meme texture trace ("ingameMap.tga") is not in
 # the Win32 client log; the animation sweep's "postLoad #1" line ends the level load there.
@@ -6,7 +6,7 @@
 # (spawn screen SUICIDE button) and respawn.
 # Needs BF2_PLAY_TRACE (loopback.py sets it) for the [PLAY] lines that show who is alive.
 # >>> include join-and-spawn
-# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/archive/macos-c-input-script.md).
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (references/macos-c-input-script.md).
 # Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
 # space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
 timeout 300

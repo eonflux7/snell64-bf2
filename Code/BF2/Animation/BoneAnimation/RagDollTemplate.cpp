@@ -519,7 +519,7 @@ void RagDollTemplate::removeConstraint(int a, int b)
 void RagDollTemplate::writeConstraints()
 {
     // Retail writes the relative name, which lands in the game folder; the macOS client does the
-    // same (docs/archive/macos-write-paths.md).
+    // same (references/macos-write-paths.md).
     const char* const path = "ragDollConstraints.inc";
     hfe::io::File file;
     file.open(path, static_cast<hfe::io::IFileSystem::FileMode>(0), hfe::io::IFileSystem::FILEACCESS_2, 0);

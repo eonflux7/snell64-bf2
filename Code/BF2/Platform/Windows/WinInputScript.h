@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Win32 client test tool: the host of the scripted input engine
-// (Platform/InputScript.h, docs/archive/macos-c-input-script.md). Off unless BF2_INPUT_SCRIPT=<file> is
+// (Platform/InputScript.h, references/macos-c-input-script.md). Off unless BF2_INPUT_SCRIPT=<file> is
 // set; without it none of these functions changes what the game sees.
 //
 // While a script is active:

@@ -81,7 +81,6 @@ def write(path, text):
 def doc_files():
     out = []
     for base, dirs, files in os.walk(DOCS):
-        dirs[:] = [d for d in dirs if d != "archive"]
         out += [os.path.join(base, f) for f in files if f.endswith(".md")]
     out += [os.path.join(ROOT, f) for f in ("AGENTS.md", "README.md")]
     return sorted(p for p in out if os.path.exists(p))
@@ -639,7 +638,7 @@ def hook_pre_commit():
     for ln in git("diff", "--cached", "-U0", "--no-color").splitlines():
         if ln.startswith("+++ "):
             cur = ln[6:]
-        elif ln.startswith("+") and cur and not cur.startswith("docs/archive/") and \
+        elif ln.startswith("+") and cur and not cur.startswith("references/") and \
                 (rx.search(ln) or hashed_hit(ln, hashes)):
             rep.error(cur, "a private pattern in an added line: %s" % ln[1:80])
     # Docs in the same commit as the code they describe.

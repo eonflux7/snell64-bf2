@@ -2,7 +2,7 @@
 // (WeaponInfo type 3) looks for man-down friendly soldiers within 40 m and picks the one it can
 // reach soonest relative to the man-down time left; ordered targets and human players weigh more.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/archive/macos-ai-behaviour-plan.md.
+// references/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x21C8A0 (__tcf_0 0x21C900, _GLOBAL__I 0x21C930): <iostream>'s Init object only.
 #include <iostream>

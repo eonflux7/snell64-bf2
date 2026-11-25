@@ -87,7 +87,7 @@ p.add_argument('--tutorial-messages', choices=('on', 'off'),
 p.add_argument('--default-profile', choices=('none', 'default'),
                help='[TEMP] model the Profiles/Default state of a real install instead of copying the '
                     'content Profiles/Local/Default: none = first start, the client creates it; default = '
-                    'an install whose earlier build wrote it lowercase (docs/archive/macos-profile-prefix.md)')
+                    'an install whose earlier build wrote it lowercase (references/macos-profile-prefix.md)')
 p.add_argument('--profiles-from', type=pathlib.Path, metavar='RUN_DIR',
                help='[TEMP] start with the Profiles directory an earlier run left in its client home '
                     '(a second start of the same install); replaces the generated profile fixture')
@@ -122,16 +122,16 @@ p.add_argument('--no-join', action='store_true',
                     'multiplayer screen captures); the server still runs')
 p.add_argument('--auto-record', action='store_true',
                help='server sv.autoRecord 1: the round is recorded to mods/bf2/demos/auto_*.bf2demo; after the '
-                    'run every recorded .bf2demo is copied to <run>/demos/ (docs/archive/tracks/game/demo.md)')
+                    'run every recorded .bf2demo is copied to <run>/demos/ (references/tracks/game/demo.md)')
 p.add_argument('--play-demo', type=pathlib.Path, metavar='BF2DEMO',
                help='client only (implies --no-server --no-join): the demo is copied into the client root and '
                     'played from the command line with +demo demo-play.con (a playback config next to it)')
 p.add_argument('--demo-config-line', action='append', default=[], metavar='LINE',
                help='with --play-demo: an extra line for demo-play.con after demo.demofile (repeatable), '
-                    'e.g. "demo.timedemo 1" (docs/archive/tracks/game/frontier-closure.md)')
+                    'e.g. "demo.timedemo 1" (references/tracks/game/frontier-closure.md)')
 p.add_argument('--input-script',
                help='[TEMP] scripted client input (BF2_INPUT_SCRIPT): a file, or a name in scripts/ '
-                    '(e.g. join-and-spawn); see docs/archive/macos-c-input-script.md')
+                    '(e.g. join-and-spawn); see references/macos-c-input-script.md')
 p.add_argument('--present-png', action='store_true',
                help='BF2_PRESENT_PNG captures into <run>/present (on by default with --input-script)')
 p.add_argument('--present-every', type=int, default=0, help='BF2_PRESENT_PNG_EVERY (default 600 with a script, else 60)')
@@ -180,7 +180,7 @@ p.add_argument('--no-spawn-aid', action='store_true',
 p.add_argument('--scenario',
                help='[TEMP] standard play-test scenario: scenarios/<name>/ (pose.cfg installed as the server '
                     'scenario file, script.txt as the input script, loopback.args as default options); see '
-                    'the "Standard scenarios" section of docs/archive/macos-c-input-script.md')
+                    'the "Standard scenarios" section of references/macos-c-input-script.md')
 p.add_argument('--mark-session', action='store_true',
                help='[TEMP] interactive position picking: no input script, --client-seconds 1800 unless given, '
                     'pose module installed (spawn log only, unless --pose/--scenario); type "mark NAME" in chat '
@@ -510,7 +510,7 @@ elif args.antialiasing and not args.video_high:
     (prof / 'Video.con').write_text('VideoSettings.setAntialiasing %s\n' % args.antialiasing)
 # The shipped default control maps, as a profile the game saved holds them: with an empty
 # Controls.con the profile load leaves the maps without mouse/keyboard mappings (the HUD pointer
-# and mouse look never move). Scripted input needs them (docs/archive/macos-c-input-script.md).
+# and mouse look never move). Scripted input needs them (references/macos-c-input-script.md).
 # mods/bf2/Settings/Controls.con is what ControlSettings::setDefaults runs (all seven maps:
 # infantry, land, air, helicopter, sea, default game input); Settings/Default/Controls.con holds
 # only the default game-input map, so with it the soldier ignored fire, movement and mouse look.

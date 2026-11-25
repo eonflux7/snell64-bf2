@@ -327,7 +327,7 @@ void BFTerrain::getAllTerrainPolygonsWithinBoundary(std::pair<Vec2, Vec2> bounds
     const unsigned int count = static_cast<unsigned int>(countX * countZ);
 
     // [CHOSEN, not recovered] The shared CRT heap policy has no per-allocation cap:
-    // https://github.com/B2BF/OpenBF2/issues/7 (docs/archive/architecture.md, Images and boundaries).
+    // https://github.com/B2BF/OpenBF2/issues/7 (references/architecture.md, Images and boundaries).
     // Retail Memory.cpp set_max_alloc_size/reset_max_alloc_size calls are omitted here and
     // in checkUnconnectedMeshData; no ineffectual replacement setters are published.
     vertices.reserve(count);

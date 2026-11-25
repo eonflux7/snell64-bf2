@@ -2,7 +2,7 @@
 
 **Developer oracle, not used by the client.** This optional historical experiment
 is outside the client build. The production compiler is the
-native effect route ([building](../../../docs/archive/building.md#macos)). The native dependency
+native effect route ([building](../../../references/building.md#macos)). The native dependency
 builder never invokes this directory's tools.
 
 [CHOSEN, not recovered] Standalone tooling for the owner-requested experiment

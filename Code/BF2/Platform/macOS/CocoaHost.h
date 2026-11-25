@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] macOS port: the Cocoa application and window host. It stands where
 // WinMain's message pump, the Win32 window class and the DirectInput event source stood on
 // Windows. The header is plain C++ (no Objective-C types) so engine translation units can use it;
-// the implementation is CocoaHost.mm. Design and integration notes: docs/archive/macos-s2-4.md.
+// the implementation is CocoaHost.mm. Design and integration notes: references/macos-s2-4.md.
 //
 // Threading: every member must be called on the main thread, which is the thread that runs
 // BF2::handleInGameWinMessages. Event callbacks are delivered synchronously from pumpEvents().

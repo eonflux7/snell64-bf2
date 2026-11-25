@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-authored retail probe: a movie clip as an object's prototype.
 
-The spec is docs/archive/tracks/game/swf-proto-retail-probe.md. Everything here is generated from Python;
+The spec is references/tracks/game/swf-proto-retail-probe.md. Everything here is generated from Python;
 no game data goes into the SWF. Output is deterministic: the same arguments give the same bytes.
 
   python3 -I tools/swf/proto_probe.py swf --out OUT_DIR

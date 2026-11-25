@@ -2,7 +2,7 @@
 
 ## Before changing code
 
-Read [AGENTS.md](../../AGENTS.md), inspect `git status --short`, and identify the image and
+Read [AGENTS.md](../AGENTS.md), inspect `git status --short`, and identify the image and
 subsystem you are changing. The worktree may contain work from other contributors; preserve
 it and agree on file ownership before editing overlapping code.
 
@@ -107,7 +107,7 @@ A known-signature frontier normally logs its qualified method name to stderr, fl
 and aborts. Keep an unknown-signature boundary declaration-only or stop at a proven caller.
 Never invent a successful return, empty production implementation, or fake interface to
 make progress appear complete. The narrowly scoped exceptions are documented in
-[AGENTS.md](../../AGENTS.md); do not generalize them to other seams.
+[AGENTS.md](../AGENTS.md); do not generalize them to other seams.
 
 ## Validation
 

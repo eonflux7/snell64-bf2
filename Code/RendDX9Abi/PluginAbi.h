@@ -13,7 +13,7 @@
 #include <vector>
 #include "../BF2/Core/ClassManager.h"
 
-// [CHOSEN, not recovered] BF2_STATIC_PLUGINS (the macOS client, docs/archive/macos-port.md) links the
+// [CHOSEN, not recovered] BF2_STATIC_PLUGINS (the macOS client, references/macos-port.md) links the
 // plugin images into the host executable, so host and plugins share one CRT and STL by construction.
 #if !defined(BF2_STATIC_PLUGINS) && (!defined(_MSC_VER) || !defined(_MT) || !defined(_DLL))
 #error The rebuilt plugin ABI requires the supported MSVC dynamic-CRT (/MD) build

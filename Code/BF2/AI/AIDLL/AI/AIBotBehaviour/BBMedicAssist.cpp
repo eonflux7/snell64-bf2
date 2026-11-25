@@ -3,7 +3,7 @@
 // strength / (curve(1 - health) * distance) score; a support soldier (kit 3) hands out ammunition
 // (calculateGiveAmmoUrgency). The chosen target goes to the pattern through BBPMedicAssist::init.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/archive/macos-ai-behaviour-plan.md.
+// references/macos-ai-behaviour-plan.md.
 //
 // Float constants (rodata): 0x49CB34 0.0f, 0x49CB2C 1.0f, 0x49F818 75.0f, 0x49CB54 0.75f,
 // 0x49F81C 0.99f, 0x49F580 0.7071f, 0x49CB5C 100.0f, 0x49CCA8 50.0f, 0x49CC88 10.0f,

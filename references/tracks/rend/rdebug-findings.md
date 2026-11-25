@@ -72,7 +72,7 @@ with 1855 sites. It has 26 assert expressions that `_r` lacks, each with its fil
 It is not matched function-by-function. Use `debug_sites.py` with ctor `0x10160140` and dtor
 `0x10160780` to list its sites.
 
-## Function match (`docs/archive/tracks/rend/rdebug-map.csv`)
+## Function match (`references/tracks/rend/rdebug-map.csv`)
 
 Columns: `addr_150,addr_r,confidence,method,file,line_range,file_basis`. `file` is the `_r` file
 (relative to `Code/BF2/`); `file_basis` is `site` (the `_r` function has its own `__FILE__`

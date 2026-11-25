@@ -100,7 +100,7 @@ std::list<ConsoleObject*>& toolObjectConsoleObjects();      // Scene/Object/Tool
 #include "../Menu/ServerBrowserManager.h" // client factory410205, the lists' owner
 #include "../IO/Input/DX8InputDeviceManager.h" // client InputDX8Module factory rows
 #if defined(__APPLE__)
-// [CHOSEN, not recovered] macOS port: MacInputDeviceManager answers the DX8 row (docs/archive/macos-s2-4.md).
+// [CHOSEN, not recovered] macOS port: MacInputDeviceManager answers the DX8 row (references/macos-s2-4.md).
 #include "../IO/Input/MacInputDeviceManager.h"
 #endif
 #include "../IO/Input/InputManager.h"
@@ -113,7 +113,7 @@ std::list<ConsoleObject*>& toolObjectConsoleObjects();      // Scene/Object/Tool
 #include <windows.h>                      // LoadLibraryA / GetProcAddress / FreeLibrary - BfSoundModule
 #else
 // [CHOSEN, not recovered] The macOS client resolves BF2Audio through the POSIX loader wrappers,
-// which answer statically linked images first (docs/archive/macos-port.md).
+// which answer statically linked images first (references/macos-port.md).
 #include "PluginDll.h"
 #endif
 #include "../Game/Utility/Vars.h"         // Vars::getInt("opt-nosound") - BfSoundModule::init
@@ -603,7 +603,7 @@ void InputDX8Module::getClassList(std::vector<ClassRegInfo>& out) // PE6AC3E6, c
 #if defined(__APPLE__)
     // [CHOSEN, not recovered] macOS port: the Cocoa-backed manager under the DX8 CID and name, so
     // BF2EngineSetup's setSingletonClass("InputDeviceManager", CID_DX8InputDeviceManager) and every
-    // caller stay unchanged (docs/archive/macos-s2-4.md).
+    // caller stay unchanged (references/macos-s2-4.md).
     out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8", &MacInputDeviceManager::create});
 #else
     out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8", &DX8InputDeviceManager::create});

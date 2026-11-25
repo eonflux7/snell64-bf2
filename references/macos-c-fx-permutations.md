@@ -355,7 +355,7 @@ entry; storing a reference to the source entry would cut the run-time cache to a
 
 ## Policy
 
-The owner decided (2026-10-31, `docs/archive/macos-port.md`, "Effect compilation policy") that the
+The owner decided (2026-10-31, `references/macos-port.md`, "Effect compilation policy") that the
 final client runs **without Wine**: shaders are compiled natively in the client
 (vkd3d-shader as a library, our own effect parser, MojoShader to MSL), and no prebuilt
 cache ships. This package's Wine cache is therefore the **development route and the

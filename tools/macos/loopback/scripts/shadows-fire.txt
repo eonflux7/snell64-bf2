@@ -1,4 +1,4 @@
-# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/archive/macos-c-input-script.md).
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (references/macos-c-input-script.md).
 # NOTE: the two 'key enter' after JOIN GAME below are the obsolete R-game-2 workaround (Bf2MenuMapNode
 # +0x68D is zeroed now); they are harmless but no longer needed.
 # Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout

@@ -1,7 +1,7 @@
 // C4 behaviour (infantry "c4" slot of aibehaviours.ai): a bot carrying a C4 kit with charges left
 // either blows its placed charge (urgency 100) or places one at an owned control point (500).
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/archive/macos-ai-behaviour-plan.md.
+// references/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x1FF760 (__tcf_0 0x1FF7C0, _GLOBAL__I 0x1FF7F0): <iostream>'s Init object only.
 #include <iostream>

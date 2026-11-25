@@ -15,7 +15,7 @@
 // The editor links the tree's client object set: a Windows image, x86 or the native x64 client
 // (https://github.com/B2BF/OpenBF2/issues/7).
 #if !defined(_WIN32)
-#  error "BF2Editor builds for Windows x86 or x64 only (docs/archive/building.md)."
+#  error "BF2Editor builds for Windows x86 or x64 only (references/building.md)."
 #endif
 
 #endif // BF2EDITOR_FRAMEWORK_EDITORCONFIG_H

@@ -6,7 +6,7 @@ Do not edit by hand; re-run the script.
 `done` means a source body was matched by address or qualified name; it is not a fidelity
 review. `[UNRESOLVED]` notes inside a done body are not counted. Rows whose file lies outside
 the srv paths (Game/Common/GhostManager.cpp, other Core files) are srv-owned by original TU;
-edits there go through the owning track (docs/archive/tracks/README.md rule 4).
+edits there go through the owning track (references/tracks/README.md rule 4).
 
 ## Status by group
 

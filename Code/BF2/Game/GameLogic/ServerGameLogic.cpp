@@ -2545,7 +2545,7 @@ PyObject* sgl_setParam(PyObject*, PyObject* args)
     //    differently. See the note above.
     if (key.compare("tickets") == 0)
 #if defined(__APPLE__)
-        // [CHOSEN, not recovered] Keep the x86 wrap of a negative value (arm64 saturates): docs/archive/macos-c-arm64-client.md.
+        // [CHOSEN, not recovered] Keep the x86 wrap of a negative value (arm64 saturates): references/macos-c-arm64-client.md.
         sgl->setNumberOfTickets(team, bf2x87::lowUInt32(value));
 #else
         sgl->setNumberOfTickets(team, static_cast<unsigned int>(value));

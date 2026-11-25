@@ -4,7 +4,7 @@
 # [TEMP] perf-stand: spawn, stand still 30 s, then turn slowly for 30 s (frame-time measurement with
 # BF2_FRAME_TRACE=1).
 # >>> include join-and-spawn
-# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/archive/macos-c-input-script.md).
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (references/macos-c-input-script.md).
 # Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
 # space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
 timeout 300

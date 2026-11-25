@@ -155,7 +155,6 @@ templates: `docs/WRITING.md`. IDs, states and terms: `docs/GLOSSARY.md`.
 | `docs/lanes/<lane>.md` | One per other lane (`tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
 | `docs/console.md` | Every console name the renderer and the tools have, generated from the code |
 | `docs/docmap.txt` | Which documents describe which code (the pre-commit hook warns when code changes without them) |
-| `docs/archive/` | OpenBF2's documentation, inherited |
 
 - Read `docs/STATUS.md` first, then only the document it links to for the task (`grep -n '^#'
   FILE` gives the outline; `tools/docs.py find <id>` finds an ID). Do not read whole documents by
@@ -169,9 +168,10 @@ templates: `docs/WRITING.md`. IDs, states and terms: `docs/GLOSSARY.md`.
   states, the contract version, the flags, console names, A/B markers and sizes. The hooks run
   both checks and a privacy scan of added lines: `git config core.hooksPath .githooks` once per
   clone.
-- `docs/archive/` holds reconstruction notes and evidence that source comments cite. It is
-  reference, not policy and not current state. Do not read or search it unless a task needs that
-  evidence; `.ignore` keeps it out of ripgrep searches.
+- `docs/` holds only this project's current documents. OpenBF2's inherited documentation is in
+  `references/` at the repository root (`D-36`): reconstruction notes and evidence that source
+  comments cite, not policy and not current state. Do not read or search it unless a task needs
+  that evidence; `.ignore` keeps it out of ripgrep searches.
 
 ## Upstreaming
 

@@ -61,8 +61,8 @@ operations that write immediately or use dedicated replay methods.
 ## Command catalogue
 
 This catalogue groups commands by workflow. The service interface is declared in
-[EditorConsole.h](../../Code/Tools/BF2Editor/Framework/EditorConsole.h); the bindings in
-[EditorConsole.cpp](../../Code/Tools/BF2Editor/Framework/EditorConsole.cpp) are the
+[EditorConsole.h](../Code/Tools/BF2Editor/Framework/EditorConsole.h); the bindings in
+[EditorConsole.cpp](../Code/Tools/BF2Editor/Framework/EditorConsole.cpp) are the
 current source for exact signatures and additional commands.
 
 These blocks describe syntax, rather than complete scripts. Angle brackets name

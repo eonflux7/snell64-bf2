@@ -1,7 +1,7 @@
 // Path:     attested - "C:\dice\Projects\BF2Branches\Patch_1_50\Code\BF2\Geom\ObjectDrawer.cpp",
 //           read as a literal at RendDX9 0x1021AF98.
 // Contents: recovered from RendDX9.dll (PE, symbols stripped).
-// Occlusion evidence and validation: docs/archive/recovery-notes/Geom/object-occlusion.md.
+// Occlusion evidence and validation: references/recovery-notes/Geom/object-occlusion.md.
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../RendDX9/RendDX9Math.h"   // rendmath::zeroVector

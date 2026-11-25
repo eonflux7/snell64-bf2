@@ -567,7 +567,7 @@ bool Video::initSound()
 #if !defined(_WIN32) && !defined(__APPLE__)
     // [FRONTIER] [TEMP] [CHOSEN, not recovered] Native POSIX ports have no Bink runtime (binkw32.dll
     // is Windows-only), so a movie cannot be played. [RETIRE-WHEN: posix-bink-decoder] Replace with
-    // a licensed Bink runtime or a replacement decoder chosen by the owner (docs/archive/macos-port.md, S2.8).
+    // a licensed Bink runtime or a replacement decoder chosen by the owner (references/macos-port.md, S2.8).
     std::fprintf(stderr, "[FRONTIER] dice::hfe::geom::Video::initSound reached: no Bink runtime on "
                          "this platform\n");
     std::fflush(stderr);

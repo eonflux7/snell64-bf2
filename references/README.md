@@ -1,9 +1,9 @@
 # Engine documentation
 
-> **Inherited from OpenBF2.** Everything in `docs/archive/` is OpenBF2's
+> **Inherited from OpenBF2.** Everything in `references/` is OpenBF2's
 > documentation: reconstruction notes and evidence that source comments cite. It is kept as
 > reference; it is not this project's policy or current state. This project's documents are in
-> [docs/](../), its rules in [AGENTS.md](../../AGENTS.md).
+> [docs/](../docs/), its rules in [AGENTS.md](../AGENTS.md).
 
 Start with [Getting started](getting-started.md), then read [Engine architecture](architecture.md)
 and [Development guide](development.md). These guides cover the build, engine structure,
@@ -41,7 +41,7 @@ contribution workflow and validation requirements.
 | Rules for the work tracks (agents) | [Work tracks](tracks/README.md) |
 
 Bink movies on macOS and Windows x64 are documented with the decoders in
-[`Code/BF2/External/ffmpeg-bink/README.md`](../../Code/BF2/External/ffmpeg-bink/README.md).
+[`Code/BF2/External/ffmpeg-bink/README.md`](../Code/BF2/External/ffmpeg-bink/README.md).
 
 ## Data tables read by tools
 
@@ -60,7 +60,7 @@ those tools:
   `s1-*.csv`/`s1-inputs.json`/`s2-scope.csv` tables and the `*-ledger-overrides.csv` files
   (`tools/tracks/swf_align.py`, `tools/tracks/swf_ledger.py`).
 
-[AGENTS.md](../../AGENTS.md) is the working policy. Third-party documentation stays with its
+[AGENTS.md](../AGENTS.md) is the working policy. Third-party documentation stays with its
 dependency under `Code/BF2/External/`. The validation commands are in the development guide,
 with harnesses in `Code/Tests/` and `Code/Build/`. Compilation, a successful link and a
 runtime milestone are different results; check the paths a test exercised before drawing

@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] macOS port: keyboard device. The sampling bodies (getNextInput,
 // key queries, updateCurrentState, the -1/positive update protocol) follow KeyboardDevice.cpp;
 // the DirectInput device is replaced by host key events mapped to DIK_ codes
-// (Platform/macOS/MacKeyMap). See MacInputDeviceManager.h and docs/archive/macos-s2-4.md.
+// (Platform/macOS/MacKeyMap). See MacInputDeviceManager.h and references/macos-s2-4.md.
 
 #include "MacInputDeviceManager.h"
 #if !DEDICATED && defined(__APPLE__)

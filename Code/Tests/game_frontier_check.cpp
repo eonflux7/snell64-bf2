@@ -1,5 +1,5 @@
 // [TEMP] Cumulative fixture for game frontier-closure sites that no normal session reaches
-// (docs/archive/tracks/game/frontier-closure.md). Each case names the ledger row it covers.
+// (references/tracks/game/frontier-closure.md). Each case names the ledger row it covers.
 // macOS: CTest bf2_game_frontier_check (built on request); death cases run in a forked child.
 #include <cstdio>
 #include <cstdlib>

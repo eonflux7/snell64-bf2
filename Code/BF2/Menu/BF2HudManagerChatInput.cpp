@@ -50,7 +50,7 @@ int chatSecondsRemaining(double deadline, double now)
     return _mm_cvttsd_si32(_mm_set_sd(deadline - now));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/archive/macos-port.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (references/macos-port.md).
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 extended subtraction and truncation.

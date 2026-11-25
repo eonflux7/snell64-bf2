@@ -1,6 +1,6 @@
 // Defuse-mines pattern: per-bot plan parameters that BBDefuseMines::calculateUrgency stores through
 // init. Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/archive/macos-ai-behaviour-plan.md.
+// references/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x244060 (__tcf_0 0x2440C0, _GLOBAL__I 0x2440F0): <iostream>'s Init object only.
 #include <iostream>

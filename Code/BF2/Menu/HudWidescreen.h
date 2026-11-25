@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] Opt-in vanilla HUD layout, issue #33.
-// Inspired by marekzajac97/BF2-HUD-fix (GPL-3.0); see docs/archive/widescreen-hud.md for credit and scope.
+// Inspired by marekzajac97/BF2-HUD-fix (GPL-3.0); see references/widescreen-hud.md for credit and scope.
 #ifndef MENU_HUDWIDESCREEN_H
 #define MENU_HUDWIDESCREEN_H
 #include "../Core/BuildConfig.h"

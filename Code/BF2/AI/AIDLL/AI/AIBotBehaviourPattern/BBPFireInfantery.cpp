@@ -2,7 +2,7 @@
 // weapon from here or from a firing position) and builds the matching action plan.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32, with symbols); every body carries its ELF
 // address. x87 code was read with the AT&T fsub(r)p/fdiv(r)p operand swap in mind. Package E
-// (docs/archive/macos-ai-behaviour-plan.md).
+// (references/macos-ai-behaviour-plan.md).
 
 // static init: ELF 0x27BA40 (__tcf_0 0x27BAA0, _GLOBAL__I 0x27BAD0): <iostream>'s Init object only.
 #include <iostream>

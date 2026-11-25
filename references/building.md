@@ -1,7 +1,7 @@
 # Building the engine and tools
 
 Run commands from the repository root unless a step says otherwise. The checked-in
-[presets](../../CMakePresets.json) select Ninja (Unix Makefiles on macOS) and a build
+[presets](../CMakePresets.json) select Ninja (Unix Makefiles on macOS) and a build
 configuration; the Windows presets expect an initialized Visual Studio environment.
 They do not switch an x64
 compiler into x86 mode. In an IDE, select the matching Visual Studio architecture.
@@ -620,5 +620,5 @@ so the CMake check used by CI links the same implementations as the batch check.
 
 After configuring with `-B`, build that exact directory as shown above. Build presets
 use their preset's default directory (`out/build/<preset>`), not your custom `-B` path.
-The authoritative target definitions are in the [root CMake file](../../CMakeLists.txt)
-and [editor CMake file](../../Code/Tools/BF2Editor/CMakeLists.txt).
+The authoritative target definitions are in the [root CMake file](../CMakeLists.txt)
+and [editor CMake file](../Code/Tools/BF2Editor/CMakeLists.txt).

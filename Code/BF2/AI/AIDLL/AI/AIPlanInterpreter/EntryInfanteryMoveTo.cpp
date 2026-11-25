@@ -1,6 +1,6 @@
 // EntryInfanteryMoveTo (attested TU `EntryInfanteryMoveTo.cpp`, split out of BAPEntries.cpp by S0).
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32): the interpreter entry that executes a
-// BAPAMoveTo for a soldier at full LOD. Package B; see docs/archive/macos-ai-behaviour-plan.md.
+// BAPAMoveTo for a soldier at full LOD. Package B; see references/macos-ai-behaviour-plan.md.
 //
 // execute's two flags follow the BotScript convention: `ok` (the step ran) and `done` (the
 // statement is finished; with ok == false it failed).

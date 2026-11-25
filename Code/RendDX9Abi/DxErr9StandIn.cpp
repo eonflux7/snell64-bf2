@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] DxErr9 functions for RendDX9.dll and TextureAtlasBuilder.dll builds
-// without the April 2005 DirectX SDK (the D3DX fallback, docs/archive/building.md "D3DX without the
+// without the April 2005 DirectX SDK (the D3DX fallback, references/building.md "D3DX without the
 // DirectX SDK").
 //
 // The shipped images link the SDK's DxErr9.lib, whose functions return the HRESULT's symbolic name

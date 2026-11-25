@@ -11,7 +11,7 @@
 //   - Keys are also posted to the game window (the window given to SetCooperativeLevel) as
 //     WM_KEYDOWN / WM_KEYUP, so the window-message menus see them; TranslateMessage adds WM_CHAR.
 //   - "click X Y" posts WM_MOUSEMOVE / WM_LBUTTONDOWN / WM_LBUTTONUP at client coordinates (menus).
-// Script format: the BF2_INPUT_SCRIPT format (docs/archive/macos-c-input-script.md) without the commands
+// Script format: the BF2_INPUT_SCRIPT format (references/macos-c-input-script.md) without the commands
 // that need game knowledge (aim, face, walk-to). Commands: wait-ms, wait-frames, timeout, wait-log,
 // wait-log-else, label, key, key-down, key-up, type, console, move-rel, button-down, button-up,
 // wheel, pointer, hud-click, pointer-scale, move, click, capture, log, quit, end.

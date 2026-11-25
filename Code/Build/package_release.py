@@ -119,7 +119,7 @@ def windows_client_notes(platform, notice="OpenAL-Soft-NOTICE.txt", folder="this
                 "client cannot join servers that require PunkBuster. Use the x86\n"
                 "client for those.\n").format(notice=notice)
     return text + ("CD keys: the retail registry, or a per-user\n"
-                   "%LOCALAPPDATA%\\OpenBF2\\Registry.dat (docs/archive/registry-file.md).\n"
+                   "%LOCALAPPDATA%\\OpenBF2\\Registry.dat (references/registry-file.md).\n"
                    "Checked against the code; not runtime-tested here.\n")
 
 
@@ -494,7 +494,7 @@ def windows_readme(revision, source_url, included, omitted, licences):
         "  the game folder's 32-bit d3dx9_25.dll.\n"
         "- PunkBuster works only with the x86 client.\n"
         "- The clients read CD keys from the retail registry or from a per-user\n"
-        "  %LOCALAPPDATA%\\OpenBF2\\Registry.dat (docs/archive/registry-file.md).\n"
+        "  %LOCALAPPDATA%\\OpenBF2\\Registry.dat (references/registry-file.md).\n"
         "\n" + TEST_NOTE
     )
     commands = {

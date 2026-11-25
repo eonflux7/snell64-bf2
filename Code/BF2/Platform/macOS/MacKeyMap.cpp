@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] macOS port: kVK_ to DIK_ key table. See MacKeyMap.h and
-// docs/archive/macos-s2-4.md for the full table with key legends and the reasoning behind each
+// references/macos-s2-4.md for the full table with key legends and the reasoning behind each
 // non-obvious row.
 
 #include "MacKeyMap.h"

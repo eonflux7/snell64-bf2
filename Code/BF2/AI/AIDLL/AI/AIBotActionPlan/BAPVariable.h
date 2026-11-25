@@ -3,7 +3,7 @@
 // new 0x10 for <bool> and 0x18 for <Vec3>; each new variable is pushed onto the context's
 // std::list<BotScriptVariable*>. Instantiated for bool, int, unsigned int, float, Vec3 and
 // WeaponInfo* (vtables 0x4BBD38, 0x4BBC68, 0x4BBC28, 0x4BBC58, 0x4BBD28, 0x4BB908).
-// S0 skeleton (docs/archive/macos-ai-behaviour-plan.md). Owner: package A-core.
+// S0 skeleton (references/macos-ai-behaviour-plan.md). Owner: package A-core.
 
 #ifndef AI_AIDLL_AI_AIBOTACTIONPLAN_BAPVARIABLE_H
 #define AI_AIDLL_AI_AIBOTACTIONPLAN_BAPVARIABLE_H

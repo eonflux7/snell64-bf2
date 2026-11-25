@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [TEMP] Demo gate (game track; docs/archive/tracks/game/demo.md): record a short round with bots on the
+# [TEMP] Demo gate (game track; references/tracks/game/demo.md): record a short round with bots on the
 # loopback server (sv.autoRecord 1, the retail auto-recorder), then play the recorded .bf2demo on a
 # client from the command line (+demo). Both phases are ordinary loopback.py runs; this script only
 # chains them and judges the result. Options before '--' are passed to both runs (e.g. --build-dir).

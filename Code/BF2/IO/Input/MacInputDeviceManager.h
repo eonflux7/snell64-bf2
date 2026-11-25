@@ -3,7 +3,7 @@
 // no retail macOS image. The devices keep the DX8 devices' interfaces, sampling algorithms and
 // quirks (buffered events consumed by timestamp, axis scaling through the active control map,
 // DIK_ scan codes, button numbering), with the event source replaced by the Cocoa host
-// (Platform/macOS/CocoaHost.h). Every behavioural choice is listed in docs/archive/macos-s2-4.md.
+// (Platform/macOS/CocoaHost.h). Every behavioural choice is listed in references/macos-s2-4.md.
 //
 // The manager is registered under CID_DX8InputDeviceManager and the registry name
 // "dice.hfe.io.InputDeviceManager.DX8" on macOS, so BF2EngineSetup's singleton selection and

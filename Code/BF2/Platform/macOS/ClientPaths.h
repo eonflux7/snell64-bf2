@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] macOS client profile and instance-lock policy; docs/archive/macos-port.md.
+// [CHOSEN, not recovered] macOS client profile and instance-lock policy; references/macos-port.md.
 #ifndef PLATFORM_MACOS_CLIENTPATHS_H
 #define PLATFORM_MACOS_CLIENTPATHS_H
 

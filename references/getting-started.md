@@ -46,7 +46,7 @@ through `Code\Build\vsdevcmd.cmd`. Set the `BF2_VSDEVCMD` environment variable t
 ## Find your way around
 
 Read the [architecture](architecture.md) to trace startup, content loading, and image
-boundaries. Then read the [development guide](development.md) and [AGENTS.md](../../AGENTS.md)
+boundaries. Then read the [development guide](development.md) and [AGENTS.md](../AGENTS.md)
 before changing engine behavior. They explain evidence requirements, tool access for
 agents, validation, and the human review required before submitting changes.
 

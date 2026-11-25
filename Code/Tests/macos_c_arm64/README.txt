@@ -6,7 +6,7 @@ that runs a sandboxed local server and client against each other. Everything was
 an Intel Mac. No game content is included: the bundle reads your Battlefield 2 folder and never
 writes to it (each run clones it under out/loopback/run-*/).
 
-Full instructions, the hand-play checklist and what to look for: docs/archive/macos-c-arm64-client.md in
+Full instructions, the hand-play checklist and what to look for: references/macos-c-arm64-client.md in
 the repository ("Owner instructions (M2)"). Short form:
 
 1. Unpack into a writable folder on the same volume as the game, outside the game folder and

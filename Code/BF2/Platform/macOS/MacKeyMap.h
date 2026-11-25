@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] macOS port: translation between macOS virtual key codes (the kVK_
 // values of HIToolbox/Events.h, reported by NSEvent.keyCode) and the DirectInput scan codes
 // (DIK_ values) that io::InputDeviceKeys, control maps and .con bindings use. There was no
-// retail macOS image; the table and every choice in it are documented in docs/archive/macos-s2-4.md.
+// retail macOS image; the table and every choice in it are documented in references/macos-s2-4.md.
 //
 // kVK codes name physical key positions, not characters, so the table is layout-independent
 // except for the two keys Apple swaps on ISO keyboards (see dikFromMacKeyCode).

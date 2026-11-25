@@ -1,7 +1,7 @@
 // Base of the avoid-collision patterns (BBPAvoidCollisionInfantery, BBPAvoidCollision2d, 3d): the
 // per-bot arrays their init (slot +0x18) fills from BBAvoid's calculateUrgency.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/archive/macos-ai-behaviour-plan.md.
+// references/macos-ai-behaviour-plan.md.
 
 // static init: ELF 0x2297F0 (__tcf_0 0x229850, _GLOBAL__I 0x229880): <iostream>'s Init object only.
 #include <iostream>

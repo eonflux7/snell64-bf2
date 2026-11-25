@@ -46,8 +46,8 @@ Git-ignored; the coordinator can regenerate them without staging generated data.
 | File | Contents |
 | --- | --- |
 | `tools/macos/d3d9_inventory.py` | Deterministic scanner and report generator |
-| `docs/archive/macos-d3d9-inventory.md` | Generated inventory and seam proposal |
-| `docs/archive/macos-r0-d3d9-inventory.md` | This validation/handoff record |
+| `references/macos-d3d9-inventory.md` | Generated inventory and seam proposal |
+| `references/macos-r0-d3d9-inventory.md` | This validation/handoff record |
 | `out/inventory/d3d9_calls.csv` | One row per D3D9/COM call or unresolved candidate |
 | `out/inventory/d3dx_calls.csv` | One row per D3DX call, including slot dispatch |
 | `out/inventory/d3d9_constants.csv` | Code-token occurrences with source locations |

@@ -40,7 +40,7 @@ for arch, build in zip(("x86_64", "arm64"), sys.argv[1:3]):
 content = Path(sys.argv[3]).resolve()
 if not (out / "root").exists():
     subprocess.run(["cp", "-cR", str(content), str(out / "root")], check=True)
-# Same offline policy as docs/archive/macos-port.md; reference installation stays read-only.
+# Same offline policy as references/macos-port.md; reference installation stays read-only.
 (out / "offline.sb").write_text(f'''(version 1)
 (allow default)
 (deny network-outbound)

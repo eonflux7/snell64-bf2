@@ -1,6 +1,6 @@
 // The plan interpreter: per statement type and LOD level, either a registered BAPEntry (the
 // vehicle-specific control code) or the statement's own execute. Recovered by package A-core
-// (docs/archive/macos-ai-behaviour-plan.md) from libaidll.so; the virtual order is checked by
+// (references/macos-ai-behaviour-plan.md) from libaidll.so; the virtual order is checked by
 // tools/macos/ai_behaviour_vtables.py.
 
 #ifndef AI_AIDLL_AI_AIPLANINTERPRETER_BAPINTERPRETER_H

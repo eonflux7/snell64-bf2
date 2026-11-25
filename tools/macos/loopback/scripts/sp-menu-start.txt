@@ -1,6 +1,6 @@
 # [TEMP] sp-menu-start: (reused home with an offline account, BF2_REUSE_HOME) LOGIN -> SELECT ACCOUNT ->
 # SINGLEPLAYER -> Strike At Karkand, VETERAN -> START SINGLEPLAYER -> JOIN GAME -> kit, Gasstation -> DONE.
-# Client-hosted (docs/archive/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+# Client-hosted (references/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
 timeout 300
 # The runner passes +restart 1 (no intros): the login page is up once menu.bik plays.
 wait-log mods/bf2/Movies/menu.bik
