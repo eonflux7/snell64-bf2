@@ -72,7 +72,7 @@ path, measured with `GPU=1`.
 
 ## 19. Hex-tiled detail textures
 
-Planned by the owner, 2026-11-23, after a lattice seen on Muttrah City's far hills: tiled textures
+Planned by the owner (D-31), after a lattice seen on Muttrah City's far hills: tiled textures
 repeat on a square grid the eye picks out at range. Replaces the plain tiled lookup with hex-tiling
 (Mikkelsen, "Practical Real-Time Hex-Tiling", JCGT 2022): the plane is cut into hexagons about 0.6
 tiles across, each reading the texture shifted by its own hash; the three around a pixel blend with
@@ -103,14 +103,14 @@ The lattice is the shaders' `RaHex.fxh`, shared by the terrain and static meshes
 - **No turn.** The reference turns each hexagon too; on PR's rock and sand that points their
   streaks every way (Muttrah City `mountain`: hairy, blotchy), so hexagons are only shifted, top
   plane and sides alike. Strata stay level.
-- **Cost.** Up to three reads per plane where one was; not timed (owner, 2026-11-23: not needed).
+- **Cost.** Up to three reads per plane where one was; not timed (D-31).
 
 Tasks:
 1. Terrain and far ground (built 2026-11-23): every detail layer's planes in `RaTerrain`, and the
    far ground's detail fade (which carried the lattice: Muttrah City `valley`, the hills behind
    the mountain, A/B with `renderer.hexTiling 0`).
 2. Static meshes (built 2026-11-23; owner: rooftops) and the list: Muttrah City's city tiles on
-   the terrain kept on the grid (owner, 2026-11-23); `RaShaderSTM`'s detail by whole sheet, by
+   the terrain kept on the grid (D-31); `RaShaderSTM`'s detail by whole sheet, by
    strip, and in grid steps. Muttrah City `roofs` (city_paving_de and mecity_01_de's panels on the
    roofs, its plaster on the walls), `market`.
 3. Judged by eye: accepted on Muttrah City (owner, 2026-11-23); no GPU timing (owner).

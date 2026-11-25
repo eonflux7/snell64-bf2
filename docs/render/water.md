@@ -4,7 +4,7 @@ Part of [the renderer as built](README.md).
 
 ## 16. Water
 
-Decided by the owner, 2026-11-22, with milestone 12 paused: the water shader is rewritten, not
+Decided by the owner (D-14), with milestone 12 paused (D-9): the water shader is rewritten, not
 patched. What the owner sees on The Falklands: one pattern tiled uniformly (a single 3D normal
 volume repeating every ~30 m at one scale), flat and low in detail up close, a ring around the
 camera (task 1), and streaks in the reflections (task 1). Kept: the water's geometry and height
@@ -25,7 +25,7 @@ become inputs: the colour an absorption hint, the scroll the wind's direction an
   the sun.
 - **Foam.** At shores from the water's depth, on crests from the Jacobian; noise-broken, never a
   tiled texture.
-- **Geometry: normals only** (owner, 2026-11-22). Displacing a camera-centred grid by the spectrum
+- **Geometry: normals only** (D-15). Displacing a camera-centred grid by the spectrum
   would give real wave shapes, but boats, physics and the shore are on a flat plane; left for later.
 
 Tasks (in [STATUS.md](../STATUS.md)) closed with the owner's look at The Falklands and Saaremaa
@@ -50,7 +50,7 @@ As built:
   `WaterMapFrame0`/`1`) is no longer read, and before the first frame the water is a flat plane.
   `renderer.waterWind` (7 m/s), `renderer.waterFetch` (60 km); the wind's direction is
   `renderer.waterWindFrom` or the open-water map's choice (milestone 23, task 2). The Falklands at the defaults: significant height
-  1.17 m, mean square slope 0.026. Geometry stays flat (owner, 2026-11-22: normals only for now).
+  1.17 m, mean square slope 0.026. Geometry stays flat (D-15).
 - *Filtered normals and the sun path* (task 3). The slope maps hold the slopes along and across the
   wind (published to the water shader as `WaterScroll`, contract 39) and their squares: in that
   frame the spectrum is symmetric and the slopes' covariance zero, so four channels hold the
@@ -98,7 +98,7 @@ As built:
   maps' last mips (logged once, 30 s after a spectrum): 4.97 % at 15 m/s against Monahan's 3.93 %.
   The surface shader combines the two cascades and the shore as independent layers. The 17.3 m
   cascade's foam is weighted by the 87 m cascade's compression (1 + c/σ, clamped: short waves break
-  on the longer ones' crests), so its period does not show as a tile (owner, 2026-11-22); the 87 m
+  on the longer ones' crests), so its period does not show as a tile (D-16); the 87 m
   cascade's by a 40 m value-noise field of mean 1 drifting downwind. The shore's share is
   1 − depth / (Hs / 0.78), the depth waves break at, the depth to the bed along the unbent view
   ray (the refracted one jitters with the waves), deep where sky is a pixel away; the ramp is

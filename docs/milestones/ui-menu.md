@@ -1,9 +1,11 @@
 # `ui` milestones 5–11: the front-end menu on RmlUi
 
 Proposed 2026-11-25. The `ui` lane's rules apply ([ui.md](../lanes/ui.md)); this document holds
-the menu milestones' design, tasks and decisions, as a `render` milestone's document does.
+the menu milestones' design and tasks, as a `render` milestone's document does; each milestone is a
+heading with its `State:` line ([WRITING.md](../WRITING.md)). The owner's open questions on it are
+Q-3 to Q-6 in [STATUS.md](../STATUS.md#open-questions-for-the-owner).
 
-A draft awaiting the owner's decisions ([below](#open-decisions)); nothing is built. The goal: the
+The goal: the
 front end (main menu, in-game Escape menu, loading screen, end of round) drawn by
 [RmlUi](https://github.com/mikke89/RmlUi) (MIT; HTML/CSS-like documents, data bindings), and Flash
 gone: gameswf, `SwiffPlayer.dll`, `SwiffRender`, `mainmenu.swf` and `endofround.swf` no longer
@@ -137,53 +139,79 @@ flag: the menu cannot change backend while it runs; listed in [dev.md](../lanes/
 lane's other milestones, the retail path cannot go screen by screen (it is one movie), so it is
 deleted once, in milestone 11, after 7–10 are accepted.
 
-**5. Foundations.** (1) Inventory of the natives and screens the shipped movies use, private
-workspace (started 2026-11-25). (2) RmlUi, its Lua plugin, Lua and FreeType vendored in
-`External/`, pinned, as C++17 static libraries in CMake and the VM build. (3) `IUiDrawDevice` in
-RendDX9. (4) `Ui/Rml/` integration and `RmlMenuLogic` behind `BF2_UI_MENU=rml`, drawing one test
-document with text, images, the background video and a scripted button that quits. Check: the document draws at 1080p and after a device reset
-and a resize, input works, the frame time of the menu against the Flash menu's.
+### ui-5 Foundations
 
-**6. Service boundary.** `SwiffHost` → `MenuHost`, `ISwiffHost` → `IMenuHost`, Flash-only members
-moved to the Flash side; `Menu/Api/` for the domains milestones 7–9 need, with tests in `Tests/`,
-and its `menu` script module.
-The Flash menu keeps working on the renamed service (checked by playing through it). No visible
-change.
+State: in progress.
 
-**7. Main menu and options.** The shell (main screen, quit, mod switch), local profiles, and
-options: video, audio, controls (key binding), general. `menu.reload`, and `menu.show SCREEN` for
-the `tools` checks (agents drive the menu by console, not by clicks).
+Check: the test document draws at 1080p and after a device reset and a resize, input works, the
+frame time of the menu against the Flash menu's.
 
-**8. Multiplayer.** The server browser (all five lists, filters, sorting, details, password,
-connect to an address, auto-join, favourites and history), create a local or co-op game (map,
-mode, size), demos, the command-line file and `BF2_AUTOHOST` through the new menu.
+#### ui-5.1 Inventory of the natives and screens
 
-**9. Between rounds and in game.** Loading screen (map image, briefing, progress), end of round
-(scores, the round's summary), the in-game Escape menu (resume, options, disconnect), the
-messages the game posts (kicked, connection lost, version mismatch).
+State: built (2026-11-25). The natives and screens the shipped movies use, kept in the private
+workspace.
 
-**10. PR's menu on the new stack** (private workspace, not this tree). PR's screens, look and
-logic (the launcher handshake, login gates, its options pages, Mumble bindings) as documents and
-scripts in the overlay, on the default menu's models and `menu` module. What it needs from the
-engine and finds missing goes into milestones 6–9 as generic primitives, never as PR code here.
-Check: a launch through PR's launcher reaches the menu logged in and joins a local server.
+#### ui-5.2 Libraries vendored
 
-**11. Flash removed.** Deleted: gameswf, `base/`, Expat, `SwiffPlayer.dll` and its build target,
-`SwiffPlayerAbi/`, `SwiffRender`, `SwiffFont` (if unused), `swiffmenu.fx` use, the Swiff tests, the
-`BF2_UI_MENU` flag and the `IMenuLogic` Flash members. Packaging no longer ships or loads the
-`.swf` files.
+State: planned. RmlUi, its Lua plugin, Lua and FreeType in `External/`, pinned, as C++17 static
+libraries in CMake and the VM build.
 
-## Open decisions
+#### ui-5.3 The draw device
 
-1. The `ui` lane is defined as Dear ImGui (`AGENTS.md`, lanes table): widen it to "player-facing
-   UI on RmlUi, dev UI on Dear ImGui".
-2. Which screens go. The browser, demos, mods, co-op and controls stay (PR uses them). In
-   question: GameSpy account creation and online login (PR's launcher logs in), BF2 stats,
-   leaderboards, awards and unlocks (still pages in PR's movie: are they reachable?).
-3. The script language: Lua (RmlUi's own plugin: scripts live in the documents, reload with
-   them, isolated from the game) or the engine's embedded Python 2.7 (mods already write it; to
-   check whether a client runs it before a map is loaded, and menu code would share the game
-   scripts' interpreter). Lua is the proposal.
-4. The font, and the default menu's look (a plain engine default, a PR-like skin kept private, or
-   both).
-5. Whether the default menu documents ship in this repository.
+State: planned. `IUiDrawDevice` in RendDX9.
+
+#### ui-5.4 Integration and the menu driver
+
+State: planned. `Ui/Rml/` integration and `RmlMenuLogic` behind `BF2_UI_MENU=rml`, drawing one test
+document with text, images, the background video and a scripted button that quits.
+
+### ui-6 Service boundary
+
+State: proposed.
+
+`SwiffHost` → `MenuHost`, `ISwiffHost` → `IMenuHost`, Flash-only members moved to the Flash side;
+`Menu/Api/` for the domains `ui-7` to `ui-9` need, with tests in `Tests/`, and its `menu` script
+module. The Flash menu keeps working on the renamed service (checked by playing through it). No
+visible change.
+
+### ui-7 Main menu and options
+
+State: proposed.
+
+The shell (main screen, quit, mod switch), local profiles, and options: video, audio, controls
+(key binding), general. `menu.reload`, and `menu.show SCREEN` for the `tools` checks (agents drive
+the menu by console, not by clicks).
+
+### ui-8 Multiplayer
+
+State: proposed.
+
+The server browser (all five lists, filters, sorting, details, password, connect to an address,
+auto-join, favourites and history), create a local or co-op game (map, mode, size), demos, the
+command-line file and `BF2_AUTOHOST` through the new menu.
+
+### ui-9 Between rounds and in game
+
+State: proposed.
+
+Loading screen (map image, briefing, progress), end of round (scores, the round's summary), the
+in-game Escape menu (resume, options, disconnect), the messages the game posts (kicked, connection
+lost, version mismatch).
+
+### ui-10 PR's menu on the new stack
+
+State: proposed.
+
+In the private workspace, not this tree. PR's screens, look and logic (the launcher handshake,
+login gates, its options pages, Mumble bindings) as documents and scripts in the overlay, on the
+default menu's models and `menu` module. What it needs from the engine and finds missing goes into
+`ui-6` to `ui-9` as generic primitives, never as PR code here. Check: a launch through PR's
+launcher reaches the menu logged in and joins a local server.
+
+### ui-11 Flash removed
+
+State: proposed.
+
+Deleted: gameswf, `base/`, Expat, `SwiffPlayer.dll` and its build target, `SwiffPlayerAbi/`,
+`SwiffRender`, `SwiffFont` (if unused), `swiffmenu.fx` use, the Swiff tests, the `BF2_UI_MENU` flag
+and the `IMenuLogic` Flash members. Packaging no longer ships or loads the `.swf` files.

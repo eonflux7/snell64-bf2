@@ -90,7 +90,7 @@ prepass and the lit pass place a vertex alike.
 
 ### Contribution culling
 
-`renderer.contributionCull` (pixels, default 3, 0 off; owner, 2026-11-19) in place of the distance cull milestone 8
+`renderer.contributionCull` (pixels, default 3, 0 off; D-4) in place of the distance cull milestone 8
 removed: a static mesh whose bounding sphere (its geom's LOD radius) projects to fewer pixels across
 than the threshold, at the view's own projection and viewport height, returns from its draw before
 any work (`StaticMesh.cpp`, both draw paths). Zoom narrows the projection, so a scope brings small
@@ -102,7 +102,7 @@ at any size. `BF2_DRAW_STATS` counts `contribution culled` and `contribution fad
 
 ## 15. Shader pipeline
 
-Accepted by the owner, 2026-11-22. Taken ahead of milestone 12 (owner, 2026-11-22): every later milestone edits shaders, and a load
+Accepted by the owner, 2026-11-22. Taken ahead of milestone 12 (D-18): every later milestone edits shaders, and a load
 after a shader edit took about 10 minutes on test_bootcamp. Goal: as little shader compiling as
 possible, at load and after an edit.
 
@@ -150,7 +150,7 @@ Decided from these numbers (2026-11-22):
 - No permutation collapse for now. Merging the bm flags that only add a texture fetch needs
   per-draw material constants in the draw path for the same 5 s. Worth it if a shader family's
   compile grows again.
-- Plain vertex and pixel shaders in place of D3DX effects: deferred (owner, 2026-11-22). Compile
+- Plain vertex and pixel shaders in place of D3DX effects: deferred (D-19). Compile
   time is not a reason (the same compiler, the same shaders), and draws already bypass D3DX
   (`Submit.cpp`); it becomes the first task of a move off D3D9, where effects do not exist.
 

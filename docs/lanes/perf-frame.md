@@ -13,7 +13,7 @@ its commit messages (`git log --grep 'milestone 9'`).
 - **Who is the bottleneck.** Per-thread CPU use of the game (`top -H` on the BF2.exe process): a
   main thread at 100 % while the GPU spans leave idle time means the frame is CPU-bound. Check
   `game.lockFps` first; a frame cap looks the same.
-- **Benchmarks.** `bench.run` on the paths of [tools.md](tools.md#3-benchmark-path): Muttrah City
+- **Benchmarks.** `bench.run` on the paths of [tools.md](tools.md#tools-3-benchmark-path): Muttrah City
   `bench1`, Fallujah West `bench`, Saaremaa `bench1`. Compare same-session pairs (3 runs each,
   the change's switch flipped), not separate launches: the host drifts between launches. Fallujah
   West has the most draws, so per-draw work shows most there; Muttrah City spreads least (about
@@ -54,7 +54,7 @@ What each task gained on the benchmark paths, same-session pairs against its swi
 | Task | Change | Muttrah `bench1` | Fallujah `bench` | Saaremaa `bench1` |
 |---|---|---|---|---|
 | 5 | Effect programs for the depth passes; register-shaped uploads; dirty-register mask (`f3515fb4`) | 13.07 → 10.86 ms | 23.43 → 19.40 ms | — |
-| 4 | Caster culling against the swept shadow range (`renderer.casterCull`) | 10.6 % | 9.0 % | — |
+| 4 | Caster culling against the swept shadow range (`renderer.casterCull`, since removed) | 10.6 % | 9.0 % | — |
 | 6 | Queue walks through programs | 11.2 % | 9.2 % | 4.9 % |
 | 7 | Terrain and undergrowth through programs (1920x1080 from here) | 10.9 % | 14.4 % | 5.4 % |
 | 8 | Instancing of static meshes, then near trees, then grouping without a sort | 8.94 → 7.85 ms | 15.99 → 14.79 ms | 6.05 → 5.22 ms |

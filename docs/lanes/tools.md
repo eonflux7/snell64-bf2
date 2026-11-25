@@ -29,9 +29,14 @@ off by default and inert when unset, and is listed in [dev.md](dev.md) when it l
 
 Order and state: [PLAN.md](../PLAN.md#tools).
 
-### 1. Views
+### tools-1 Views
 
-**Camera override.** The tool takes the render camera after the game sets it and before culling,
+State: paused (D-2).
+
+
+#### Camera override
+
+The tool takes the render camera after the game sets it and before culling,
 so culling, LOD, streaming and shadow cascades follow the override. No soldier is spawned: it
 works from the spawn screen, with the spawn menu and HUD hidden while a view is active. Leaving the
 view hands the camera back to the game.
@@ -41,7 +46,9 @@ objects (vehicles, other soldiers) far from it may not be sent to the client and
 a view. Static geometry, terrain, overgrowth and effects are local and always draw. Views that need
 dynamic objects wait for soldier mode (milestone 6).
 
-**Free fly.** A key toggles a free camera: no collision, mouse look, adjustable speed, mouse wheel
+#### Free fly
+
+A key toggles a free camera: no collision, mouse look, adjustable speed, mouse wheel
 for FOV. This is how views are placed.
 
 As built (`Game/Tools/ViewTool.cpp`): `tools.flyKey` (Win32 virtual-key code, default 119, F8) or
@@ -69,23 +76,27 @@ Engine points the tool relies on:
   freeze passes 0 there while a view is active.
 - `renderer.dumpScreen` reads the back buffer at end of scene, after the HUD and before ImGui.
 
-**A view** is a name, position, yaw, pitch, FOV, and options:
+#### A view
+
+is a name, position, yaw, pitch, FOV, and options:
 - `run` lines, executed on entering the view (debug mode, a forced cascade, a time of day). Before
   a line sets a console variable, the tool records the variable's value and restores it on leaving
   the view. Lines that are commands rather than variable assignments (a reload, for example) are not
   undone; the menu marks them;
 - a note (for example "fence alpha flicker, check after render milestone 10"), shown in the menu and copied
   into reports;
-- settle frames (`tools.settleFrames`, default 8).
+- settle frames (`tools.settleFrames`, default 8; planned, `tools-1.6`).
 
-**A set** is an ordered list of views with a dwell time each. Each map has one view file,
+#### A set
+
+is an ordered list of views with a dwell time each. Each map has one view file,
 `<mod>/settings/eon64-views/<map>.txt`, where `<map>` is the level's folder name. A view applies to
 every game mode and layer of the map; the mode and layer a shot was taken on are in its stamp.
 Lines starting with `#` are comments. `muttrah_city_2.txt`:
 
 ```
 view market   pos=812.4,62.0,-311.9 yaw=134.5 pitch=-8 fov=75 | rooftop alpha fences
-  run renderer.sunShadowDebug 1
+  run renderer.drawHud 0
 view airfield pos=-1203.0,48.5,902.2 yaw=12.0 pitch=-3
 set default market airfield
 set quick   market
@@ -97,12 +108,16 @@ looking down). `fov` is the vertical field of view in degrees and defaults to th
 `run` lines belong to the view above them; `| text` is the note; `set NAME VIEW...` lists views in
 order; `#` starts a comment.
 
-**Editing.** The file is edited by hand (by the owner or an agent) and from the menu, so neither
+#### Editing
+
+The file is edited by hand (by the owner or an agent) and from the menu, so neither
 may overwrite the other. Before each write the menu rereads the file, and if it changed since the
 last read, reloads it first. It then rewrites only the lines of the views and sets that changed,
 keeping comments, order and blank lines. `view.reload` (Reload in the tab) rereads the file.
 
-**Commands:** `view.go NAME`, `view.save NAME [note]` (the current camera), `view.delete NAME`,
+#### Commands
+
+`view.go NAME`, `view.save NAME [note]` (the current camera), `view.delete NAME`,
 `view.move NAME up|down`, `view.note NAME [note]`, `view.set NAME ["VIEW..."]`, `view.leave`,
 `view.list`, `view.reload`, `view.fly 0|1`, `view.shot [NAME]`, `view.lastShot`.
 
@@ -119,7 +134,9 @@ word names a console property and a value follows; the first such line per varia
 old value, and `view.leave` or the next `view.go` restores them, last first. Commands are marked
 "not undone" in `view.list`. A view without `fov=` takes the game's FOV.
 
-**Views tab:** the list with Go, Update (to the current camera), Delete and reordering; set editing;
+#### Views tab
+
+the list with Go, Update (to the current camera), Delete and reordering; set editing;
 Save current view; the note and run lines of the selected view.
 
 As built (`RendDX9/UiDebug.cpp`, read through `IUiViewTool` in `RendMisc/IRendererUi.h`): the
@@ -137,7 +154,9 @@ with the name and optional time fields (selecting a path fills the name). The se
 keys are shown as their file lines, edited by hand. The camera line reads "Path NAME, T s" while
 one plays.
 
-**Screenshot in the engine.** The scene is read back before the HUD (or with it, by option) and
+#### Screenshot in the engine
+
+The scene is read back before the HUD (or with it, by option) and
 written as PNG, plus a 960-wide JPEG for quick review. It works when the window is covered.
 
 As built (`ViewTool.cpp`; renderer side `RendDX9/ToolsCapture.cpp`, reached through
@@ -158,17 +177,21 @@ cloud panoramas' redraw), so a shot right after a console change shows it. A req
 serves within 600 frames fails. The
 encode is synchronous, so the frame of the shot is longer. Works with no view held.
 
-**Settle and freeze.** Before a shot the tool waits until streaming has no pending loads and LOD
-crossfades have finished, then `tools.settleFrames` frames, which also covers any shadow cascade
+#### Settle and freeze
+
+Before a shot the tool waits until streaming has no pending loads and LOD
+crossfades have finished, then (planned, `tools-1.6`) `tools.settleFrames` frames, which also covers any shadow cascade
 that is updated less often than every frame, and until the auto-exposure's adapted value reaches
 the metered one (render milestone 13; as built, a shot right after `view.go` comes about 3 %
-off the settled exposure: Muttrah City `sun`, 2026-11-23). If the wait exceeds `tools.settleTimeout` (default
+off the settled exposure: Muttrah City `sun`, 2026-11-23). If the wait exceeds the planned `tools.settleTimeout` (default
 10 s), the shot is taken anyway and the report names the condition that was still pending. While a
 view is active, the renderer's time inputs are frozen: wind on overgrowth, water, particle updates,
 the sun. Whether the game simulation can also be paused on a local server is part of this
 milestone; if it cannot, the report says what was not frozen.
 
-**Stamping.** Every shot and report records the engine commit, the shader set's commit, map, game
+#### Stamping
+
+Every shot and report records the engine commit, the shader set's commit, map, game
 mode, layer, resolution, MSAA, vsync and frame cap, and the `renderer.*` variables that differ from
 their defaults.
 
@@ -179,7 +202,44 @@ of difference named in the report. Render milestone 8's anti-aliasing has no tem
 difference has a source that can be named. Bit-identical shots are milestone 5's goal, not a
 condition here.
 
-### 2. Unattended runs and regression
+#### Tasks
+
+##### tools-1.1 Camera override
+
+State: seen.
+
+##### tools-1.2 Free fly
+
+State: seen.
+
+##### tools-1.3 View files
+
+State: built. `view.go`, `view.save`, `view.delete`, `view.list`, `view.reload`; run lines.
+
+##### tools-1.4 Views tab
+
+State: built. In the debug menu; `view.move`, `view.note`, `view.set`.
+
+##### tools-1.5 Screenshot in the engine
+
+State: built. `view.shot`, under `tools.outputDir`.
+
+##### tools-1.6 Settle and freeze
+
+State: planned.
+
+##### tools-1.7 Stamping
+
+State: planned.
+
+##### tools-1.8 Determinism
+
+State: planned.
+
+### tools-2 Unattended runs and regression
+
+State: planned.
+
 
 **Run.** `view.run SET [label]` visits each view of a set, settles, writes the screenshot and the
 GPU pass timings, draw calls and primitives for that view, then a report. `BF2_VIEWRUN=<set>[:label]`
@@ -187,7 +247,7 @@ does the same right after autohost and quits when done, so one launch line runs 
 
 **Measurement**, the milestone's first task. The GPU pass timers and draw counters (`GpuTimers.cpp`,
 `DrawStats.cpp`, today the `dev` flags `BF2_GPU_TIMERS` and `BF2_DRAW_STATS`) become this lane's
-(owner, 2026-11-19). Both switch on at run time while a run, a benchmark or the overlay needs them,
+(D-5). Both switch on at run time while a run, a benchmark or the overlay needs them,
 and cost nothing while off; draw stats gain the live switch the GPU timers already have. A per-view
 snapshot feeds the reports, and milestone 4's draw breakdown builds on the same counters. The TSV
 files become `tools.gpuTimersFile` and `tools.drawStatsFile` (a path turns that file on, empty turns
@@ -228,7 +288,10 @@ Accepted when: an unattended run on Muttrah City and on Saaremaa produces a repo
 sheet, a second run diffs clean against the first, and a deliberate shader error fails the load
 gate.
 
-### 3. Benchmark path
+### tools-3 Benchmark path
+
+State: built; cut to what `render-9` needed: no history file or acceptance check (D-2).
+
 
 **A path** is a list of keyframes (view fields plus a time), played on a Catmull-Rom spline for
 position and smoothed for angles and FOV. It is stored in the map's view file as `path NAME` with
@@ -288,7 +351,10 @@ Accepted when: three runs of each of the Muttrah City and Saaremaa benchmark pat
 2 % on average frame time and 5 % on 1 % low (stated in the report, so render milestone 9's gains can
 be told from noise).
 
-### 4. Renderer inspection
+### tools-4 Renderer inspection
+
+State: planned; `tools.survey` and `tools.atmosphere` built ahead of it.
+
 
 Runs alongside render milestone 9; parts may be its first tasks.
 
@@ -310,7 +376,10 @@ Accepted when: at a Muttrah City view, the draw breakdown's totals match the fra
 every debug mode and pass toggle works in the menu and from the console, a RenderDoc capture reads
 by pass marker, and a variable sweep writes its strip.
 
-### 5. Repeatability and map coverage
+### tools-5 Repeatability and map coverage
+
+State: planned.
+
 
 After render milestone 9; what milestones 1–3 left out.
 
@@ -341,7 +410,10 @@ Accepted when: two shots of the same view are bit-identical, or the report names
 frozen; a fixed-step path gives the same frame N in two runs; the hitch log names the work in a
 frame over `tools.hitchMs`; and a perf map of one map is produced.
 
-### 6. Soldier mode and capture
+### tools-6 Soldier mode and capture
+
+State: planned.
+
 
 - **Soldier mode:** the local server spawns a kit at a view's position and heading, so views can
   show the first-person model (toggled per view) and its shaders. Optionally a vehicle at the view
@@ -359,131 +431,8 @@ Accepted when: a view with soldier mode on shows the first-person model and a ve
 its cockpit, both deterministic under the milestone 1 check; `view.capture` writes a capture
 unattended; and a settings matrix run produces one report per profile.
 
-## Survey
+## Renderer dumps
 
-`tools.survey [NAME]` (render milestone 11, task 1; `tools(survey)`) writes
-`<outputDir>/<map>/survey/<NAME>.txt`, NAME defaulting to the held view's name (or `camera`);
-`tools.lastSurvey` gives the result. The request waits for the next frame: an occlusion query wraps
-that frame's water flush (`RSMTWater`), and once its result is in, the renderer
-(`RendDX9/ToolsSurvey.cpp`) writes the whole report in one go. Idle, it costs one flag test at the
-water flush and one after Present. Run it once at each reference view: the level sections repeat,
-and the water area is the view's own.
-
-One line per fact, tagged by section:
-- `[camera]`: whether the camera is under water (then the fog constants hold the water fog).
-- `[sky]`: dome template, texture and cloud textures, lighting colour and blend, the effect's
-  current technique, and an 8x8 grid of the dome texture's mean colours (top row first).
-- `[fog]`: the console fog colour, start, end and base decoded from the `FogRange` constant, and
-  the water fog.
-- `[light]`: sun direction, elevation (`asin(-y)`) and azimuth; static and dynamic sun, sky,
-  specular, ambient, high/low, effect and tree colours.
-- `[terrain]`: file and patch heights, colormap formats, the colormaps' mean colour (a level at most
-  16 wide, averaged over patches).
-- `[water]`: the four water techniques, the water env map (and whether it is the level's
-  `Envmaps/EnvMap0`), and water's share of the screen's samples.
-- `[envmaps]`: the env-map system's switches, maps (position, texture) and templates.
-- `[bundled]`, `[static]`: loaded templates, and materials grouped by technique, alpha mode, state
-  flags (normal, env, colour-map gloss, alpha test, cockpit) or combo bits, with the range of
-  specular power, static gloss and reflectivity and example diffuse textures.
-- `[normalmaps]`: per normal map (first 40), the mean length of the decoded normal per mip level
-  from the first level at most 256 wide; lengths that fall with the level mean the mips were not
-  renormalized.
-- `[effects]`: per compiled effect (legacy and Ra caches), the pixel and vertex sampler registers
-  its shaders use (from their constant tables), cube samplers and cube texture parameters; then
-  how many effects use each pixel sampler.
-
-Textures are read from their managed copies (DXT1–5, A8R8G8B8, X8R8G8B8); default-pool textures
-and other formats are reported unread.
-
-## Atmosphere
-
-`tools.atmosphere [NAME]` (render milestone 11, task 2; `tools(atmosphere)`) writes
-`<outputDir>/<map>/atmosphere/<NAME>.txt` at the console call, NAME as for `tools.survey`, from
-`RendDX9/ToolsAtmosphere.cpp`: the atmosphere's fit and its tables as drawn, for reading without
-the debug menu. Fails before the first fit.
-
-- `[fit]`: fit time, reference height, fog end; the authored horizon over the model's (not
-  applied); sunlight above the atmosphere; the zenith model and the horizon target against the
-  model; ground albedo; haze density and albedo. `[atlas]`: its format and the
-  vertex texture fetch check.
-- Per table (`transmittance`, `multiscatter`, `skyview`, `perspective`): size; per channel min,
-  max, mean and the count of non-finite values; a PNG `<NAME>-<table>.png` with rgb scaled to the
-  table's maximum (the scale is in the line); samples on a grid, each row's and column's meaning
-  given.
-- `[perspective]`: also `<NAME>-perspective-transmittance.png`, and per slice its distance and,
-  at four tiles (screen centre, top centre, left and right of the middle row), in-scatter rgb |
-  transmittance.
-
-- `[skycube]` (render milestone 11, task 7): live or not, build time, the irradiance's sky scale
-  and its upward value, the 7 `RaSkySH` rows; per mip each face's mean rgb (and bad texels); a PNG
-  `<NAME>-skycube.png` (faces +x −x +y −y +z −z across, mips down, upscaled, rgb scaled to its
-  maximum); irradiance / pi at 8 normals from `RaSkySH` against a cosine integral of the top mip,
-  with their ratio. `[brdf]`: the split-sum table's statistics, `<NAME>-brdf.png` and a grid.
-- `[cloudlight]` (render milestone 12, task 1): the clouds' light table's statistics and
-  `<NAME>-cloudlight.png`; per altitude (0.75–11.25 km), at x −245, −35 and +245 km, the sun's
-  irradiance, the sky's radiance from above and the ground's from below.
-
-The managed tables are locked where they are; the atlas is read back from its render target.
-
-## Exposure
-
-`tools.exposure [NAME]` (render milestone 13; `tools(exposure)`) writes
-`<outputDir>/<map>/exposure/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
-`RendDX9/ToolsAtmosphere.cpp`: the HDR post as the last frame left it. Fails before it has run.
-
-- `[settings]`: the `renderer.exposure*` and `bloomStrength` values, the adaptation rates
-  and the key. `[frame]`: frames run, whether the last ran (or thermals skipped it), its dt and
-  whether it snapped, the scene's size.
-- `[state]`: adapted and metered EV (and luminance), the exposure as a multiplier and in stops.
-- `[histogram]`: each non-empty bin's low EV, weight, share and cumulative share.
-- `[meter]`: the 64 x 32 log2 luminances' range and mean, and a sparse grid of them.
-- `[bloom]`: level 0 after the up chain, statistics and `<NAME>-bloom.png`.
-
-## Sun
-
-`tools.sun [NAME]` (render milestone 14; `tools(sun)`) writes `<outputDir>/<map>/sun/<NAME>.txt`
-at the console call, NAME as for `tools.atmosphere`, from `RendDX9/SunStatic.cpp`: the sun's static
-layers as last drawn. Fails before they are drawn.
-
-- `[settings]`, `[sun]`: the `renderer.sunStatic*` values, the sun they were drawn for.
-- `[RaSunStatic i]`: the drawn rows (the per-frame offsets and flag excluded).
-- `[static]`: the light depth's range, the share of texels with a caster, `<NAME>-static.png`
-  (1024 wide, white = none). `[height]`: the shadow height's range, `<NAME>-height.png`.
-
-## Water
-
-`tools.water [NAME]` (render milestone 23, task 2; `tools(water)`) writes
-`<outputDir>/<map>/water/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
-`RendDX9/WaterOpen.cpp`: the open-water map as last baked and its fetch table. Fails before the
-first bake; while a re-bake runs (a level load, a changed sea or current) it writes the last one.
-
-- `[map]`: its size, the texel, the sea level, the wind it was baked for, whether it is bound.
-  `[bake]`: the water's share of the map, the edge runs taken as open sea, the bake's time.
-- `[fetch]`: the water's share by effective fetch (under 100 m to open sea).
-- `[table e]`: per entry its fetch, the three cascades' amplitudes, the height and whitecap ratios.
-- `<NAME>-distance.png`: the signed distance (grey the shore, white 256 m out, black 256 m inland);
-  `<NAME>-fetch.png`: log2 of the fetch over water (16 m black, 64 km white), land black. North up.
-- With a current (task 7): `[flow]` the solve, `[obstacles]` the water texels rocks and piers stand
-  in, `[standing]` the flowing water's share by Froude number, where its standing waves break and
-  the mean foam carried. `<NAME>-flow.png` the speed (white twice the mean), `<NAME>-flowfoam.png`
-  the foam carried, `<NAME>-obstacles.png` the share of each texel's section closed (grey open
-  water, white closed), `<NAME>-potential.png` the flow's potential in bands 1/64 apart.
-
-## Clouds
-
-`tools.clouds [NAME]` (render milestone 12, task 2; `tools(clouds)`) writes
-`<outputDir>/<map>/clouds/<NAME>.txt` at the console call, NAME as for `tools.atmosphere`, from
-`RendDX9/ToolsAtmosphere.cpp`: the sky clouds' live volumes. Fails before the first set is live
-(about 25 frames after the atmosphere's fit).
-
-- `[clouds]`: preset, coverage, the weather's life time, the slab, LWC and droplet size; the
-  noise's and the weather's build time, frames per build, builds so far.
-- `[weather]`: statistics and `<NAME>-weather.png`. `[shape]`, `[detail]`: the noise volumes'
-  slices, `<NAME>-shape.png`, `<NAME>-detail.png`.
-- `[field]`: per slice its height, the share of texels over 0.02, the mean and the maximum; from
-  above, the share of the sky whose column optical depth (RaCloud.fxh's extinction) is over 1 and
-  over 10, its mean and maximum; `<NAME>-field-columns.png` (each column's maximum) and
-  `<NAME>-field-slices.png` (every 4th slice). `[coarse]`: field texels above their block's bound
-  (0 expected).
-- `[light]`: per slice the mean sun (last octave), sky and ground visibility, and the darkest sun;
-  `<NAME>-light.png` (every 4th slice, sun and sky visibility).
+The `tools.*` dumps that write a renderer subsystem's state to a file (`tools.survey`,
+`tools.atmosphere`, `tools.exposure`, `tools.sun`, `tools.water`, `tools.clouds`), as built:
+[tools-dumps.md](tools-dumps.md). All console names: [console.md](../console.md).

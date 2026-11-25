@@ -20,7 +20,9 @@ BF2Editor already uses it). Player-facing UI (the front-end menu) moves to RmlUi
 
 Order and state: [PLAN.md](../PLAN.md#ui).
 
-### 1. ImGui layer
+### ui-1 ImGui layer
+
+State: accepted.
 
 `RendDX9/UiLayer.cpp`; the game image's side is `RendMisc/IRendererUi.h` and
 `BF2Engine::filterGameInput`.
@@ -51,13 +53,17 @@ Order and state: [PLAN.md](../PLAN.md#ui).
   switch vehicle seats.
 - **Not written:** no `imgui.ini` or log next to the game.
 
-### 2. Sun shadow tuning (lane `render`)
+### ui-2 Sun shadow tuning (lane `render`)
+
+State: accepted.
 
 The values render milestone 5 was accepted with became console variables with the same defaults,
 tuned live from the Shadows tab. Each carries its range and a help line for the debug menu. They
 are listed in [shadows.md](../render/shadows.md#sun-shadows).
 
-### 3. Debug menu and performance overlay
+### ui-3 Debug menu and performance overlay
+
+State: accepted.
 
 `RendDX9/UiDebug.cpp`. The game image tells the UI the mod directory, map and game mode through
 `IUiHost` (`IRendererUi::uiSetHost`, from `BF2Engine`).
@@ -76,7 +82,7 @@ are listed in [shadows.md](../render/shadows.md#sun-shadows).
 - **Shadows:** the `renderer.sunShadow*` variables.
 - **Atmosphere** (render milestone 11): the haze variables, the fit against its targets (authored horizon over the model's, not applied), the atlas format's vertex fetch check, and
   the four tables drawn opaque and read as data (linear, no exposure). The same, as files:
-  `tools.atmosphere` ([tools.md](tools.md#atmosphere)).
+  `tools.atmosphere` ([tools.md](tools-dumps.md#atmosphere)).
 - **Renderer:** every other `renderer.*` set/get property, with a filter.
 - **Settings:** the overlay, the console height, the menu key, and the paths of the two files.
 
@@ -114,7 +120,9 @@ left alone.
 
 DXVK's HUD is off in the launch environment.
 
-### 4. Console frontend
+### ui-4 Console frontend
+
+State: accepted.
 
 `RendDX9/UiConsole.cpp`. Replaces the retail drop-down console's drawing (`Renderer::slot_0x58`)
 and typing with an ImGui window over the same backend: BF2.exe's `io::Console` and the console

@@ -18,7 +18,8 @@ state of all of them are in [PLAN.md](../PLAN.md#render), what is active now in
 | Document | Subsystem | Milestones |
 |---|---|---|
 | This one | The frame in draw order, GPU pass timers, reversed-Z, anti-aliasing | 1, 2, 4, 8 |
-| [contract.md](contract.md) | The shader contract (numbered contracts), the shader audit | 6 |
+| [contract.md](contract.md) | The shader contract as it stands (samplers, registers, techniques, semantics), the shader audit | 6 |
+| [contract-versions.md](contract-versions.md) | What each contract version added | — |
 | [submission.md](submission.md) | Draw submission, instancing, contribution culling, the shader pipeline, the effect cache | 9, 15 |
 | [shadows.md](shadows.md) | Sun cascades, the static sun and the run-time sun term | 5, 14 |
 | [terrain.md](terrain.md) | Terrain in one pass, hex-tiled detail textures | 10, 19 |
@@ -50,7 +51,26 @@ draws through. `Renderer::renderFrame` (`BF2Render.cpp`) runs the per-frame upda
 passes it a `FrameInputs` (time, the `renderer.draw*` switches, the object drawer and weather
 managers), then draws the overlays and presents.
 
-In draw order, for the main world view:
+In draw order, for the main world view (the numbers are the items below):
+
+```mermaid
+flowchart LR
+  subgraph msaa["4x float scene"]
+    direction TB
+    C["2 Sun cascades<br/>atlas on s13"] --> P["3 Depth prepass<br/>linear depth to s15"]
+    P --> W["4 World passes<br/>depth EQUAL"]
+    W --> T["5 Sky, near clouds, fog,<br/>decals, water"]
+    T --> F["6 First person"]
+  end
+  subgraph single["Single-sample scene"]
+    direction TB
+    R["7 Resolve,<br/>depth rebuild"] --> X["8 World transparents,<br/>weather, glow"]
+    X --> B["10 Bloom, exposure,<br/>grade"]
+  end
+  F --> R
+  B --> H["HUD on the back buffer,<br/>Present"]
+```
+
 
 1. **Scene target.** From frame prepare to resolve, the scene draws into an `A16B16G16R16F`
    surface (4x MSAA where the back buffer has it) that stands in for the back buffer

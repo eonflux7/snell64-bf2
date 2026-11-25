@@ -4,7 +4,7 @@ Part of [the renderer as built](README.md).
 
 ## Sun shadows
 
-`SunShadows.cpp`. The cascades replace retail's per-caster dynamic shadows, which are gone (owner).
+`SunShadows.cpp`. The cascades replace retail's per-caster dynamic shadows, which are gone (D-35).
 Casters come from a **submission context**: each mesh type's normal submission
 takes its cull volume and queue target from a pass context, so the shadow pass re-runs submission
 against the cascade volume into a caster list (`rendererShadowCasters`). Camera queues are not
@@ -87,7 +87,7 @@ Planned by the owner, 2026-11-23; reviewed and replanned the same day. The sun t
 time everywhere; the lightmaps' sun channel (`g`) goes for terrain, roads, static meshes, grass and
 water. Sky visibility and baked point lights stay baked. Lightmaps are not re-baked.
 
-Why: nothing is authored (owner, 2026-11-23). Each round gets its own weather, sun position and
+Why: nothing is authored (D-32). Each round gets its own weather, sun position and
 clouds (the clouds are already randomized), so the level's own sun is just one case among many and
 the baked term, visibility × N.L for that sun, is wrong almost every round. Found on Kashan Desert
 with the sun at 4° (`lightManager.sunDirection`): past the cascades the map keeps its noon light

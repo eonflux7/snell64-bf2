@@ -31,7 +31,7 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    ([21](../milestones/render-21-grade.md), task 6). The key is 0.42, calibrated, not 0.18: Muttrah City's reference views meter −1.0 to
    −1.3 EV, and 0.42 (−1.25 EV) shows them at milestone 11's accepted look (0 stops). The ceiling
    is what keeps night dark (task 5). `renderer.exposureBias` adds stops over it: −0.3 since
-   milestone 21 (owner, 2026-11-23: Muttrah City's day read washed out at 0).
+   milestone 21 (D-29).
    Particle emissives read the state per vertex (`RaExposureParticle`, `RaExposureState`) and
    divide by the exposure, so an emissive tint reaches the tonemap at its authored value, as
    retail showed it, by day and by night; one frame late (the state is written at the frame's end).
@@ -49,13 +49,13 @@ a target of its own, unrolled by hand (no shader loops: they came out wrong unde
    ceiling: at +4 stops its terrain draws at about 25/255 (2.2 encode at 0 stops: 8/255; retail
    about 30/255, reached at +4.5, where the scene starts to read as an overcast dusk). The toe is
    not changed. Accepted at +4.
-6. **Compressed (Karis) resolve: dropped** (owner, 2026-11-22). The owner sees no aliasing at
+6. **Compressed (Karis) resolve: dropped** (D-17). The owner sees no aliasing at
    bright edges with auto-exposure and bloom on. It would have meant every scene pixel shader
    writing compressed colour through an engine-owned register flag, an expansion pass at the
    resolve, and every pass blending before the resolve (decals, particles, water, first-person
    transparents, additive light passes) blending compressed values.
 7. **Judged by eye** and accepted (owner, 2026-11-23); no GPU timing.
 
-`tools.exposure` ([tools.md](../lanes/tools.md#exposure)) dumps the state, histogram, meter and bloom.
-On acceptance the A/B switches `renderer.exposure`, `renderer.encodeSrgb` and `renderer.bloom`
-were deleted (bloom always on, owner 2026-11-23); `bloomStrength` and the `exposure*` limits stay.
+`tools.exposure` ([tools.md](../lanes/tools-dumps.md#exposure)) dumps the state, histogram, meter and bloom.
+The A/B switches were deleted on acceptance: `renderer.exposure`, `renderer.encodeSrgb`, `renderer.bloom`
+(bloom always on, owner 2026-11-23); `bloomStrength` and the `exposure*` limits stay.

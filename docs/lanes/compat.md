@@ -32,7 +32,7 @@ literals (K), SquadManager console registration (M), per-mod shader cache (L), c
 
 ## Missing
 
-Parked (owner, 2026-11-19) while the renderer roadmap runs; offline play works without these.
+Parked (D-3) while the renderer roadmap runs; offline play works without these.
 
 - rhooks' client features beyond dummy HUD variables: FCS/rangefinder, bleeding and pain effects,
   thermal-imaging signalling, crouch toggle, ability bar, spawn block, black screen.

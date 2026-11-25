@@ -10,7 +10,7 @@ light come from one physical model under the level's authored sun; glossy surfac
 reflect it. No switch is left: the retail dome, fog curve (except where noted), flat sky light and
 environment maps are gone from the lit path.
 
-**One light, physical** (owner, 2026-11-21). The sun at the ground is the one every lit surface
+**One light, physical** (D-8). The sun at the ground is the one every lit surface
 takes: `Lightmanager.staticSunColor` decoded as the shaders decode it (colour^2.2 x 2^2.2), the
 anchor the lightmaps were baked under. Everything else is physical under it, with no per-level gain:
 the sky, the sun disc, the haze's light, the sky cube and the sky irradiance. The frame grade's
@@ -24,8 +24,8 @@ for PR's fog end (0.5–2 km) would turn the sky into haze:
   elevation, clamped to at least 0.1 per channel (low suns, night layers).
 - *Ground haze* (replaced by [milestone 18](#18-atmosphere-rework)'s aerosol): density from a visibility, the same on every level (`renderer.hazeVisibility`,
   8 km: a level ray at the reference height keeps 2 % contrast there, 3.912 / V per metre), albedo
-  from the authored fog colour, density falling with height (`renderer.hazeFalloff`, 1200 m).
-  Realistic, mostly in the distance (owner, 2026-11-22); it was optical depth 1 at fog end (400 m
+  from the authored fog colour, density falling with height (`renderer.hazeFalloff`, 1200 m; both variables deleted).
+  Realistic, mostly in the distance (D-13); it was optical depth 1 at fog end (400 m
   falloff), 2.7 km of visibility on Muttrah City's 700 m. Exponential in optical depth throughout,
   past fog end too; retail's fog start is not used.
 - *Tables,* built on the CPU by the code the fit evaluates, in managed textures that survive device
@@ -56,7 +56,7 @@ disc capped for the MSAA resolve; under water the water's fog colour. The painte
 layers and the flare sprite are not drawn; the flare's occlusion query still runs (nothing reads it
 now). Nothing draws the sky before the first fit.
 
-**View distance** (owner, 2026-11-20). Fog end stays each level's gameplay limit; what changed is how
+**View distance** (D-6). Fog end stays each level's gameplay limit; what changed is how
 it looks and that it is the same in every direction.
 - Objects are cut at the radial distance from the camera, not the flat far plane (retail's corners
   reached 30–40 % further): the last 15 % dithered out on a 4x4 Bayer threshold
@@ -100,8 +100,7 @@ draws on Muttrah City); the atmosphere 0.1–0.2 ms, water's reflections 0.04 ms
 
 Left, outside the milestone:
 - Stars and the night sky: the night layer (The Falklands, `gpm_cq 32`) loads and lights as before,
-  but the painted dome's stars and night clouds are gone (owner, 2026-11-22: fine until milestone
-  12).
+  but the painted dome's stars and night clouds are gone (D-12).
 - Light shafts (dropped for now, owner 2026-11-21); thermals and under water keep their own looks.
 - Point lights, baked and dynamic, not checked against the new sun.
 - Decals' sky is not occluded (the hemi map holds only the ground's sky visibility); first-person
