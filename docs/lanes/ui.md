@@ -1,12 +1,15 @@
 # In-game UI
 
-The `ui` lane: in-game UI this fork owns, built on Dear ImGui (1.92.9, vendored in
-`Code/BF2/External/imgui` with its DX9 and Win32 backends; BF2Editor already uses it). Rules:
+The `ui` lane: in-game UI this fork owns. Developer UI (debug menu, overlay, console) is built on
+Dear ImGui (1.92.9, vendored in `Code/BF2/External/imgui` with its DX9 and Win32 backends;
+BF2Editor already uses it). Player-facing UI (the front-end menu) moves to RmlUi:
+[milestones/ui-menu.md](../milestones/ui-menu.md), proposed. Rules:
 [AGENTS.md](../../AGENTS.md#lanes).
 
 - Fork UI replaces the retail UI it supersedes. Once a milestone is accepted, the retail path is
-  deleted, not kept beside it.
-- Hidden UI costs nothing: no ImGui frame, no draw, no input capture, no timer queries.
+  deleted, not kept beside it; where one retail piece spans several milestones (the Flash menu,
+  one movie), it stays selectable until the last of them is accepted and goes in one change.
+- Hidden UI costs nothing: no UI frame, no draw, no input capture, no timer queries.
 - The dedicated server never creates the layer. The console backend is unaffected by this lane.
 - UI never owns a setting. Anything a widget changes is a console variable, so it can also be set
   from scripts, `BF2_DEVCMD_FILE` and config files, and saved.

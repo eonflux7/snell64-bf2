@@ -8,7 +8,7 @@ live only in its document in [milestones/](milestones/); the row here gives the 
 |---|---|---|---|
 | `render` | Milestones 1–11, 13–16, 18 and 19 accepted | 21, 22, 23 in progress; 12, 17 paused ([below](#open-milestones)) | [render/](render/README.md) |
 | `tools` | Milestone 1 tasks 1–5, milestone 3 (cut) built | Paused; the rest when a render task needs it | [tools.md](lanes/tools.md#milestones) |
-| `ui` | Milestones 1–4 accepted | — | [ui.md](lanes/ui.md) |
+| `ui` | Milestones 1–4 accepted | 5–11 (front-end menu on RmlUi) proposed, awaiting the owner's decisions | [ui.md](lanes/ui.md), [ui-menu.md](milestones/ui-menu.md) |
 | `perf` (load) | Trace, caches, prefetch, worker compiles; flags retired | — | [perf-load.md](lanes/perf-load.md#state) |
 | `perf` (frame) | `/O2` plugins, `tailField` table; per-draw cost done by render milestone 9 | Parked | [perf-frame.md](lanes/perf-frame.md#state) |
 | `compat` | See the list | Parked (owner, 2026-11-19); rhooks client features when resumed | [compat.md](lanes/compat.md#missing) |

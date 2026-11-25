@@ -2,7 +2,7 @@
 
 What each lane does next: its milestones, their state and their order. An open milestone's design
 and tasks are in its own document under [milestones/](milestones/) (`render`) or in its lane's
-document under [lanes/](lanes/) (`tools`, `ui`); what is active now is in [STATUS.md](STATUS.md).
+document under [lanes/](lanes/) (`tools`, `ui` 1–4; `ui` 5–11 share [milestones/ui-menu.md](milestones/ui-menu.md)); what is active now is in [STATUS.md](STATUS.md).
 When the owner accepts a milestone, its row here says so, with its commits.
 
 ## `render`
@@ -68,7 +68,8 @@ fixed-step clock, path editing in the Views tab, the hitch log and the perf map 
 
 ## `ui`
 
-Design: [lanes/ui.md](lanes/ui.md#milestones).
+Design: [lanes/ui.md](lanes/ui.md#milestones); milestones 5–11 (the front-end menu on RmlUi):
+[milestones/ui-menu.md](milestones/ui-menu.md).
 
 | Milestone | Commit scope | Status |
 |---|---|---|
@@ -76,6 +77,13 @@ Design: [lanes/ui.md](lanes/ui.md#milestones).
 | 2. Sun shadow tuning as console variables (lane `render`) | `render(csm)` | Accepted (`2e605f93`) |
 | 3. Debug menu and performance overlay | `ui(debug)` | Accepted (`ae0ee355`, `d9086de0`, `4b10dea9`; tabs and console polish `134889d5`) |
 | 4. Console frontend | `ui(console)` | Accepted (`cfc56237`); retail drawing deleted |
+| 5. RmlUi foundations: libraries, scripting, draw device, menu driver | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
+| 6. Menu service boundary (`MenuHost`, `Menu/Api`) | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
+| 7. Main menu and options on RmlUi | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
+| 8. Multiplayer: server browser, join, local and co-op games, demos | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
+| 9. Between rounds: loading, end of round, Escape menu | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
+| 10. The mod's menu on the new stack (private content) | — | Proposed ([design](milestones/ui-menu.md)) |
+| 11. Flash removed | `ui(menu)` | Proposed ([design](milestones/ui-menu.md)) |
 
 ## `perf`, `compat`, `fix`
 

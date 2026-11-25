@@ -21,7 +21,7 @@ Every change belongs to exactly one lane.
 | `perf` | Load and frame time: threading, caching, avoiding repeated work, cheaper algorithms | Changes what work costs, never what it produces: the loaded state matches the old path's, and frames draw the same |
 | `build` | Toolchain, CMake/Ninja, build scripts, ABI checks | Never changes runtime behaviour |
 | `dev` | Diagnostics and developer hooks (traces, autohost, file monitor) | Off by default; when unset, behaviour and cost are unchanged |
-| `ui` | In-game UI on Dear ImGui: debug menu, performance overlay, console | Replaces the retail UI it supersedes. Hidden UI costs nothing. Never owns a setting: widgets change console variables. PR-specific content is read from files outside this tree |
+| `ui` | In-game UI: player-facing UI (the front-end menu) on RmlUi, developer UI (debug menu, performance overlay, console) on Dear ImGui | Replaces the retail UI it supersedes; a retail piece spanning several milestones (the Flash menu) is deleted with the last of them. Hidden UI costs nothing. Never owns a setting: widgets change console variables. PR-specific content is read from files outside this tree |
 | `tools` | The in-game test harness: views, camera paths, unattended runs, benchmarks, renderer inspection | Console first: every action is a console command or variable, results are files. Idle costs nothing. View files and debug shading modes live outside this tree. A new renderer feature gets a `tools.*` dump to check it by; agents do not drive the ImGui menu |
 
 A change that seems to need two lanes is two commits. A `fix` found during other work (for example
@@ -33,8 +33,9 @@ the StateManager MRT slot overflow, found in `render` work) is committed on its 
 order and state are in `docs/PLAN.md`. Several milestones may be open at once (in progress or
 paused). An open `render` milestone has its own document, `docs/milestones/render-<n>-<name>.md`:
 design, tasks with their state, checks; that is the only place its task state is kept, and
-`docs/STATUS.md` lists the open milestones with one line each. (`tools` and `ui` keep their
-milestones in their lane documents for now.) Outside the lane's own documents, name the lane:
+`docs/STATUS.md` lists the open milestones with one line each. `ui` milestones 5–11 (the
+front-end menu on RmlUi) share one such document, `docs/milestones/ui-menu.md`; `tools` and `ui`
+1–4 keep their milestones in their lane documents. Outside the lane's own documents, name the lane:
 "render milestone 9", "tools milestone 1". When the owner accepts a milestone, its flag and any
 replaced path are deleted, its document is folded into the subsystem's document under
 `docs/render/`, rewritten as built, and deleted; its row in `PLAN.md` says accepted, with its
@@ -137,7 +138,7 @@ the same comment. A marker is a pointer, not a justification.
 |---|---|
 | `docs/STATUS.md` | An index: where each lane stands, the open milestones (one line each), what awaits the owner's look, open issues |
 | `docs/PLAN.md` | What comes next: each lane's milestones, their state and their order |
-| `docs/milestones/` | One document per open `render` milestone: design, tasks and their state, checks |
+| `docs/milestones/` | One document per open `render` milestone, and `ui-menu.md` for `ui` milestones 5–11: design, tasks and their state, checks |
 | `docs/render/` | The renderer as built, one document per subsystem (`README.md` indexes them: the frame, the shader contract, submission, shadows, terrain, atmosphere, water, post, particles) |
 | `docs/lanes/<lane>.md` | One per other lane (`tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
 | `docs/archive/` | OpenBF2's documentation, inherited |
