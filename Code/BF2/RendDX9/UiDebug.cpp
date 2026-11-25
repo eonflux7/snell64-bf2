@@ -134,7 +134,7 @@ void uiSaveSettings()
     std::FILE* out = path.empty() ? 0 : std::fopen(path.c_str(), "w");
     if (!out)
         return;
-    std::fprintf(out, "rem Written by the Snell64 debug menu.\n");
+    std::fprintf(out, "rem Written by the snell64 debug menu.\n");
     std::fprintf(out, "renderer.uiOverlay %d\n", g_overlay ? 1 : 0);
     std::fprintf(out, "renderer.uiConsoleHeight %g\n", uiLayerGetConsoleHeight());
     std::fprintf(out, "renderer.uiMenuKey %d\n", uiLayerGetMenuKey());
@@ -1412,7 +1412,7 @@ void uiDebugDrawMenu()
     ImGui::SetNextWindowSize(ImVec2(640.0f * uiScale(), viewport->WorkSize.y * 0.72f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f * uiScale(), 300.0f * uiScale()),
                                         ImVec2(FLT_MAX, FLT_MAX));
-    if (!ImGui::Begin("Snell64", 0, ImGuiWindowFlags_NoCollapse))
+    if (!ImGui::Begin("snell64", 0, ImGuiWindowFlags_NoCollapse))
     {
         ImGui::End();
         return;
