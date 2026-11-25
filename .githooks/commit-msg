@@ -1,0 +1,3 @@
+#!/bin/sh
+# The `Task:`/`Milestone:` trailer: tools/docs.py.
+exec python3 "$(git rev-parse --show-toplevel)/tools/docs.py" hook commit-msg "$1"

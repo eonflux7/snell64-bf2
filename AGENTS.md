@@ -29,17 +29,21 @@ the StateManager MRT slot overflow, found in `render` work) is committed on its 
 
 ## Milestones
 
-`render`, `ui` and `tools` plan their work as numbered **milestones**, broken into **tasks**; their
-order and state are in `docs/PLAN.md`. Several milestones may be open at once (in progress or
-paused). An open `render` milestone has its own document, `docs/milestones/render-<n>-<name>.md`:
-design, tasks with their state, checks; that is the only place its task state is kept, and
-`docs/STATUS.md` lists the open milestones with one line each. `ui` milestones 5–11 (the
-front-end menu on RmlUi) share one such document, `docs/milestones/ui-menu.md`; `tools` and `ui`
-1–4 keep their milestones in their lane documents. Outside the lane's own documents, name the lane:
-"render milestone 9", "tools milestone 1". When the owner accepts a milestone, its flag and any
-replaced path are deleted, its document is folded into the subsystem's document under
-`docs/render/`, rewritten as built, and deleted; its row in `PLAN.md` says accepted, with its
-commits, and its row leaves `STATUS.md`. Commit messages before 2026-11-19 say "step" for milestone.
+`render`, `ui` and `tools` plan their work as numbered **milestones**, broken into **tasks**, each
+with an ID: `render-23` the milestone, `render-23.7` its task. IDs are never renumbered or reused
+(a cut task keeps its heading; a task that splits keeps its number for the first part); the rules
+and states are in `docs/GLOSSARY.md`. Use the ID everywhere: docs, commits, chat. Order and state
+are in `docs/PLAN.md`. Several milestones may be open at once (in progress or paused).
+
+An open `render` milestone has its own document, `docs/milestones/render-<n>-<name>.md`: front
+matter (its state), design, tasks as headings with a `State:` line, checks. That is the only place
+its task state is kept; `docs/STATUS.md`'s open milestones table is generated from it. `ui-5` to
+`ui-11` (the front-end menu on RmlUi) share `docs/milestones/ui-menu.md`; `tools` and `ui-1` to
+`ui-4` keep their milestones in their lane documents, as headings. On the owner's acceptance follow
+`.claude/skills/accept-milestone/SKILL.md`: the switch and replaced path deleted, the document
+folded into the subsystem's under `docs/render/` and deleted, the `PLAN.md` row accepted with its
+commits. Commit messages before 2026-11-25 name milestones in words ("render milestone 9"), and
+before 2026-11-19 "step"; `tools/docs.py log <id>` finds both.
 
 ## Repositories and what is public
 
@@ -88,8 +92,12 @@ commits, and its row leaves `STATUS.md`. Commit messages before 2026-11-19 say "
 
 <why; what was tested and how; the flag it sits behind, if any>
 
+Task: render-23.7
 Co-Authored-By: ...
 ```
+
+The `Task:` (or `Milestone:`) trailer names the work by ID; `render`, `ui` and `tools` commits that
+belong to a milestone carry one (the `commit-msg` hook warns).
 
 Examples: `render(csm): blend between cascades`, `perf(effects): compile on worker threads`,
 `fix(ai): guard getIsland(-1) on x64`, `compat(console): SquadManager.listSquads rows`,
@@ -113,6 +121,8 @@ the same comment. A marker is a pointer, not a justification.
 - `[RENDER]`, `[UI]`, `[TOOLS]` lane code hooked into retail code; new files of these lanes say so
   once in their header instead.
 - `[BUILD]` in build files, where a choice differs from OpenBF2's build.
+- `[AB <milestone>]` (`[AB render-23]`) at a temporary A/B switch's declaration: `tools/docs.py
+  check` fails once that milestone is accepted while the marker is still there.
 
 ## Flags
 
@@ -122,8 +132,8 @@ the same comment. A marker is a pointer, not a justification.
   debug menu can all set them.
 - Every environment flag and build option this project adds is listed in `docs/lanes/dev.md`.
 - `render`: a milestone in development may keep the old path selectable, by a temporary console
-  variable (an environment flag only where the switch cannot happen at run time). On acceptance the
-  switch and the old path are deleted in the same change.
+  variable (an environment flag only where the switch cannot happen at run time), marked
+  `[AB <milestone>]`. On acceptance the switch and the old path are deleted in the same change.
 - `perf`: a change to order, threading or caching has a flag forcing the old path (serial, uncached,
   in the old order) until the owner accepts it, then goes as for `render`. A swap that returns the
   same result (a lookup in place of a scan) needs no flag, only the in-game check.
@@ -132,23 +142,33 @@ the same comment. A marker is a pointer, not a justification.
 
 ## Documentation
 
-`docs/` records the current state; commit messages record history.
+`docs/` records the current state; commit messages record history. How to write it, with the
+templates: `docs/WRITING.md`. IDs, states and terms: `docs/GLOSSARY.md`.
 
 | Document | What it records |
 |---|---|
-| `docs/STATUS.md` | An index: where each lane stands, the open milestones (one line each), what awaits the owner's look, open issues |
+| `docs/STATUS.md` | An index: where each lane stands, the open milestones (generated), what awaits the owner's look, the owner's open questions (`Q-n`), open issues |
 | `docs/PLAN.md` | What comes next: each lane's milestones, their state and their order |
-| `docs/milestones/` | One document per open `render` milestone, and `ui-menu.md` for `ui` milestones 5–11: design, tasks and their state, checks |
-| `docs/render/` | The renderer as built, one document per subsystem (`README.md` indexes them: the frame, the shader contract, submission, shadows, terrain, atmosphere, water, post, particles) |
+| `docs/DECISIONS.md` | The owner's rulings, one row each (`D-n`), named elsewhere by ID |
+| `docs/milestones/` | One document per open `render` milestone, and `ui-menu.md` for `ui-5` to `ui-11`: design, tasks and their state, checks |
+| `docs/render/` | The renderer as built, one document per subsystem (`README.md` indexes them); `contract.md` what the shaders may rely on now, `contract-versions.md` what each version added |
 | `docs/lanes/<lane>.md` | One per other lane (`tools`, `ui`, `compat`, `fix`, `dev`; `perf` as `perf-load` and `perf-frame`): design, what is built, measurements. `dev.md` also lists every flag and build option |
+| `docs/console.md` | Every console name the renderer and the tools have, generated from the code |
+| `docs/docmap.txt` | Which documents describe which code (the pre-commit hook warns when code changes without them) |
 | `docs/archive/` | OpenBF2's documentation, inherited |
 
 - Read `docs/STATUS.md` first, then only the document it links to for the task (`grep -n '^#'
-  FILE` gives the outline). Do not read whole documents by default.
+  FILE` gives the outline; `tools/docs.py find <id>` finds an ID). Do not read whole documents by
+  default.
 - `STATUS.md` holds state, not history: a milestone is one row, a finished task one line in its
-  document, its facts in the design, the story in the commit message.
+  document, its facts in the design, the story in the commit message. An owner's decision is a
+  `DECISIONS.md` row; a question for the owner a `Q-n` heading in `STATUS.md`.
 - Update the relevant document in the same commit as the change it describes. Each fact lives in
-  one place; elsewhere, link to it.
+  one place; elsewhere, link to it or name its ID.
+- `tools/docs.py gen` rewrites the generated parts; `tools/docs.py check` checks links, IDs,
+  states, the contract version, the flags, console names, A/B markers and sizes. The hooks run
+  both checks and a privacy scan of added lines: `git config core.hooksPath .githooks` once per
+  clone.
 - `docs/archive/` holds reconstruction notes and evidence that source comments cite. It is
   reference, not policy and not current state. Do not read or search it unless a task needs that
   evidence; `.ignore` keeps it out of ripgrep searches.

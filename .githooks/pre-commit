@@ -1,0 +1,4 @@
+#!/bin/sh
+# Docs checks and the privacy scan of added lines: tools/docs.py. Enable once per clone:
+#   git config core.hooksPath .githooks
+exec python3 "$(git rev-parse --show-toplevel)/tools/docs.py" hook pre-commit

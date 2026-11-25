@@ -1557,7 +1557,7 @@ float getWaterCaustics() { return rendererWaterCaustics(); }
 void setWaterCaustics(float value) { rendererSetWaterCaustics(clampf(value, 0.0f, 4.0f)); }
 BF2_CONSOLE_PROPERTY_FN_RANGED_T(waterCaustics, float, true, getWaterCaustics(), setWaterCaustics, 0.0f, 4.0f,
                                  kRendererConsoleTag)
-// [RENDER] render milestone 23 task 2's A/B switch, until acceptance: the open-water map bound.
+// [RENDER] [AB render-23] render-23.2's A/B switch, until acceptance: the open-water map bound.
 bool getWaterOpen() { return rendererWaterOpen(); }
 void setWaterOpen(bool value) { rendererWaterOpen() = value; }
 BF2_CONSOLE_PROPERTY_FN(waterOpen, bool, true, getWaterOpen(), setWaterOpen, kRendererConsoleTag)

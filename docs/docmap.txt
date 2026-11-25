@@ -1,0 +1,33 @@
+# Which documents describe which code. `tools/docs.py hook pre-commit` warns when a commit changes
+# code matching a pattern on the left without touching one of the documents on its right (or an
+# open milestone's document). A warning, not a block: a pure refactor needs no document.
+# Format: <git path glob> <doc> [<doc> ...]
+
+Code/BF2/RendDX9/RendDX9Base.h        docs/render/contract.md docs/render/contract-versions.md docs/render/README.md
+Code/BF2/RendDX9/Frame.*              docs/render/README.md
+Code/BF2/RendDX9/RendDX9Draw.cpp      docs/render/README.md
+Code/BF2/RendDX9/GpuTimers.*          docs/render/README.md docs/lanes/dev.md
+Code/BF2/RendDX9/DrawStats.*          docs/lanes/dev.md docs/lanes/perf-frame.md
+Code/BF2/RendDX9/Submit.*             docs/render/submission.md
+Code/BF2/RendDX9/RenderQueues.cpp     docs/render/submission.md
+Code/BF2/RendDX9/StateManager.cpp     docs/render/submission.md
+Code/BF2/RendDX9/ShaderManager*       docs/render/submission.md
+Code/BF2/RendDX9/FxCompiler.*         docs/render/submission.md docs/lanes/perf-load.md
+Code/BF2/RendDX9/Ra/*                 docs/render/submission.md docs/render/contract.md
+Code/BF2/RendDX9/SunShadows.cpp       docs/render/shadows.md
+Code/BF2/RendDX9/SunStatic.cpp        docs/render/shadows.md
+Code/BF2/RendDX9/Atmosphere.cpp       docs/render/atmosphere.md
+Code/BF2/RendDX9/SkyCube.cpp          docs/render/atmosphere.md
+Code/BF2/RendDX9/Weather.cpp          docs/render/atmosphere.md
+Code/BF2/RendDX9/Clouds.cpp           docs/render/atmosphere.md
+Code/BF2/RendDX9/Water*.cpp           docs/render/water.md
+Code/BF2/RendDX9/HdrPost.cpp          docs/render/post.md
+Code/BF2/RendDX9/Grade.cpp            docs/render/post.md
+Code/BF2/RendDX9/RendererConsole.cpp  docs/console.md
+Code/BF2/RendDX9/Tools*               docs/lanes/tools.md docs/lanes/tools-dumps.md
+Code/BF2/RendDX9/Ui*                  docs/lanes/ui.md
+Code/BF2/Game/Tools/*                 docs/lanes/tools.md docs/console.md
+Code/BF2/Geom/Terrain*                docs/render/terrain.md
+Code/BF2/Geom/FarGround*              docs/render/terrain.md
+Code/BF2/Menu/*                       docs/lanes/ui.md
+Code/Build/*                          docs/lanes/fix.md Code/Build/README.md

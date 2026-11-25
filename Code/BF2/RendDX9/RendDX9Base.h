@@ -807,7 +807,7 @@ void rendererWaterOpenTable(const float table[kWaterOpenTableRows][kWaterOpenTab
 void rendererWaterOpenFrame(bool automatic, double windX, double windZ);
 bool rendererWaterOpenWind(double& x, double& z);
 float rendererWaterOpenBind();
-bool& rendererWaterOpen();   // renderer.waterOpen, milestone 23's A/B switch (1)
+bool& rendererWaterOpen();   // renderer.waterOpen, [AB render-23] (1)
 // Task 7, contract 45: beside the shore map (columns 2 kWaterOpenSide on) the flow map, rg the
 // rivers' depth-averaged velocity (world x, z) over its mean speed, which the table's constants
 // texel carries in w (m/s; 0 still water). renderer.waterFlowTo the bearing the rivers run toward
@@ -1081,7 +1081,7 @@ struct HdrPostInfo
 };
 HdrPostInfo rendererHdrPostInfo();
 // [RENDER] The frame grade's look (Grade.cpp, render milestone 21): renderer.gradeCurve (0 PBR
-// Neutral, 1 the GT curve; the A/B until acceptance), gradeContrast, gradeSaturation,
+// Neutral, 1 the GT curve; [AB render-21] until acceptance), gradeContrast, gradeSaturation,
 // gradeHighlightShift, gradeToe, gradeShoulder, gradeTemperature (K), gradeTint; per range (task 2)
 // gradeShadowTint, gradeMidTint, gradeHighlightTint, gradeShadowSaturation, gradeHighlightSaturation; gradeNight (task 4). Bound as RaGradeLook
 // on the FSQuadDrawer effect each frame (from rendererHdrPost).
