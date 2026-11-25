@@ -1,4 +1,4 @@
-# Agent instructions: Snell64 (snell64-bf2)
+# Agent instructions: snell64 (snell64-bf2)
 
 The policy for every coding agent working on this repository; `CLAUDE.md` imports it.
 If guidance conflicts, the owner's current request wins, then this file, then `docs/`.
