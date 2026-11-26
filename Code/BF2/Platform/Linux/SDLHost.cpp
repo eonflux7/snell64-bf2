@@ -248,11 +248,25 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
         event.characters.assign(chars.begin(), chars.end());
         dispatch([&](IHostEventListener& listener) { listener.onText(event); });
     }
-    // [CHOSEN, not recovered] issue #36 native host. Pointer motion is merged per event pump, as
-    // Windows merges pending WM_MOUSEMOVE messages. The menu queues one sample per motion event
-    // and hands the movie one sample per frame, so an unmerged 1000 Hz mouse delays menu clicks
-    // by seconds. The merged event keeps the latest position and the summed relative counts, and
-    // any other event flushes it first, so button, key and focus events keep their order.
+    // [CHOSEN, not recovered] issue #36 native host. While the pointer is not captured (the menus),
+    // motion is merged per event pump, as Windows merges pending WM_MOUSEMOVE messages. The menu
+    // queues one sample per motion event and hands the movie one sample per frame, so an unmerged
+    // 1000 Hz mouse delays menu clicks by seconds. The merged event keeps the latest position and
+    // the summed relative counts, and any other event flushes it first, so button, key and focus
+    // events keep their order.
+    // While the pointer is captured (mouse look) every motion event is passed on by itself. The
+    // mouse device takes its relative counts from these events and hands them to the simulation
+    // ticks by time stamp (NativeMouseDevice::updateSamples), so merging would move a frame's
+    // motion into its last tick. Captured motion never reaches the menu
+    // (WindowMessageSource::onMouseMove), so there is nothing to merge it for.
+    void sendMotion(const SDL_MouseMotionEvent& motion)
+    {
+        HostMouseMoveEvent translated{motion.xrel, motion.yrel, motion.x, motion.y, false, captured(),
+                                      static_cast<unsigned>(motion.timestamp / 1000000)};
+        position(translated.x, translated.y);
+        translated.insideView = translated.x >= 0 && translated.y >= 0 && translated.x < width && translated.y < height;
+        dispatch([&](IHostEventListener& listener) { listener.onMouseMove(translated); });
+    }
     void queueMotion(const SDL_MouseMotionEvent& motion)
     {
         if (!motionPending) {
@@ -271,12 +285,8 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
     {
         if (!motionPending) return;
         motionPending = false;
-        const SDL_MouseMotionEvent& motion = pendingMotion;
-        HostMouseMoveEvent translated{motion.xrel, motion.yrel, motion.x, motion.y, false, captured(),
-                                      static_cast<unsigned>(motion.timestamp / 1000000)};
-        position(translated.x, translated.y);
-        translated.insideView = translated.x >= 0 && translated.y >= 0 && translated.x < width && translated.y < height;
-        dispatch([&](IHostEventListener& listener) { listener.onMouseMove(translated); });
+        const SDL_MouseMotionEvent motion = pendingMotion;
+        sendMotion(motion);
     }
     void event(const SDL_Event& event)
     {
@@ -284,11 +294,15 @@ struct ClientHost::Impl : inputscript::IInputScriptSink
             event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_MOUSE_MOTION ||
             event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP ||
             event.type == SDL_EVENT_MOUSE_WHEEL)) return;
-        if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        if (event.type == SDL_EVENT_MOUSE_MOTION && !captured()) {
             queueMotion(event.motion);
             return;
         }
         flushMotion();
+        if (event.type == SDL_EVENT_MOUSE_MOTION) {
+            sendMotion(event.motion);
+            return;
+        }
         const unsigned time = static_cast<unsigned>(event.common.timestamp / 1000000);
         switch (event.type) {
         case SDL_EVENT_QUIT: ClientHost::instance().requestQuit(); break;
